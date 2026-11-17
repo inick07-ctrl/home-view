@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Cpath d=%27M8 1 1 7h2v8h4v-5h2v5h4V7h2z%27 fill=%27%23e0a95a%27/%3E%3C/svg%3E">
+<title>3D Viewer — Home View</title>
+<meta name="description" content="Interactive 3D home model: orbit, top-down, roof toggle and walk-through.">
+<style>
+  :root{--bg:rgba(20,24,28,.82);--fg:#f3f1ec;--acc:#e0a95a}
+  html,body{margin:0;height:100%;overflow:hidden;background:#cfe3f2;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;touch-action:none;-webkit-user-select:none;user-select:none}
+  #c{position:fixed;inset:0;display:block}
+  #hud{position:fixed;left:12px;top:12px;z-index:5;background:var(--bg);color:var(--fg);border-radius:12px;padding:10px 12px;max-width:min(360px,calc(100vw - 110px));box-shadow:0 4px 18px rgba(0,0,0,.25)}
+  #hud h1{font-size:16px;margin:0 0 2px;font-weight:650;letter-spacing:.2px}
+  #hud .sub{font-size:12px;opacity:.75;margin-bottom:8px}
+  .btns{display:flex;flex-wrap:wrap;gap:6px}
+  .btns button{font:inherit;font-size:12.5px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:var(--fg);padding:6px 9px;border-radius:8px;cursor:pointer}
+  .btns button:hover{background:rgba(255,255,255,.18)}
+  .btns button.on{background:var(--acc);color:#1d1d1d;border-color:var(--acc)}
+  #help{font-size:12px;opacity:.85;margin-top:8px;line-height:1.35}
+  #hud.collapsed .btns,#hud.collapsed #help,#hud.collapsed .sub{display:none}
+  #toggleHud{position:absolute;right:8px;top:6px;background:none;border:0;color:var(--fg);font-size:16px;cursor:pointer;opacity:.8}
+  #north{position:fixed;right:14px;top:14px;z-index:5;width:64px;height:64px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 18px rgba(0,0,0,.25)}
+  #north svg{width:54px;height:54px;transition:none}
+  .label{color:#1f2328;background:rgba(255,255,255,.88);border:1px solid rgba(0,0,0,.12);padding:2px 6px;border-radius:6px;font-size:12px;font-weight:600;text-align:center;white-space:nowrap;pointer-events:none;line-height:1.2}
+  .label small{display:block;font-weight:500;font-size:10.5px;opacity:.75}
+  .label.minor{font-size:10px;font-weight:500;opacity:.85;padding:1px 4px}
+  #pad{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:6;display:none;grid-template-columns:repeat(3,58px);grid-template-rows:repeat(2,58px);gap:6px}
+  #pad button{background:var(--bg);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:12px;font-size:22px;touch-action:none}
+  #pad .sp{visibility:hidden}
+  #walkmsg{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;background:var(--bg);color:var(--fg);padding:14px 18px;border-radius:12px;font-size:14px;text-align:center;display:none;cursor:pointer;max-width:80vw}
+  #cross{position:fixed;left:50%;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;z-index:4;display:none;pointer-events:none}
+  #cross:before,#cross:after{content:"";position:absolute;background:rgba(255,255,255,.9);box-shadow:0 0 2px #000}
+  #cross:before{left:4px;top:0;width:2px;height:10px}#cross:after{top:4px;left:0;height:2px;width:10px}
+  #err{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:#222;color:#eee;z-index:20;padding:20px;text-align:center}
+  @media (max-width:600px){#hud{padding:8px 10px}#hud .sub{display:none}#help{font-size:11px}.label{font-size:10px;padding:1px 4px}.label small{font-size:9px}.label.minor{display:none}#hud h1{font-size:14px}.btns button{font-size:12px;padding:6px 8px}#north{width:52px;height:52px}#north svg{width:44px;height:44px}}
+  #topbar{position:fixed;left:0;right:0;top:0;z-index:7;display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(20,24,28,.86);color:#f3f1ec;box-shadow:0 2px 12px rgba(0,0,0,.25)}
+  #topbar .brand{font-weight:700;font-size:15px;white-space:nowrap;color:inherit;text-decoration:none;overflow:hidden;text-overflow:ellipsis;max-width:40vw}
+  #topbar .back{color:#f3f1ec;text-decoration:none;font-size:13px;font-weight:600;white-space:nowrap;border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:6px 12px;background:rgba(255,255,255,.08)}
+  #tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+  #tabs button{font:inherit;font-size:13px;font-weight:600;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#f3f1ec;padding:6px 14px;border-radius:999px;cursor:pointer;white-space:nowrap}
+  #tabs button.on{background:var(--acc);border-color:var(--acc);color:#1d1d1d}
+  #hud{top:58px !important}
+  #north{top:60px !important}
+  @media (max-width:420px){#topbar .brand{display:none}}
+  @media (max-width:600px){#topbar .brand{display:none}#topbar{padding:6px 8px;flex-wrap:wrap}#topbar .back{font-size:12px;padding:5px 10px}#tabs:empty{display:none}#tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;width:100%;overflow:visible}#tabs button{font-size:12px;padding:5px 4px;text-align:center}#hud{top:calc(var(--tbh,52px) + 6px) !important}#north{top:calc(var(--tbh,52px) + 8px) !important}}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="topbar"><a id="back" class="back" href="/">←</a><a class="brand" href="/" id="brandName">Home View</a><nav id="tabs" aria-label="Examples"></nav></div>
+<div id="hud">
+  <button id="toggleHud" title="Collapse">▾</button>
+  <h1 id="mtitle">Loading…</h1>
+  <div class="sub" id="msub"></div>
+  <div class="btns">
+    <button id="bOrbit" class="on">3D overview</button>
+    <button id="bTop">Top-down view</button>
+    <button id="bWalk">Walk-through</button>
+    <button id="bRoof">Roof</button>
+    <button id="bLabels" class="on">Room names</button>
+    <button id="bCut">Cutaway walls</button>
+    <button id="bPlan">Plan overlay</button>
+  </div>
+  <div id="help"></div>
+</div>
+<div id="north" title="North"><svg viewBox="-30 -30 60 60"><g id="narrow"><polygon points="0,-24 8,4 0,-2 -8,4" fill="#e0574f"/><polygon points="0,24 8,4 0,-2 -8,4" fill="#ddd" opacity=".7"/><text x="0" y="-8" font-size="0" fill="#fff">N</text></g><text id="nlabel" x="0" y="5" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">N</text></svg></div>
+<div id="pad"><button class="sp"></button><button data-k="f">▲</button><button class="sp"></button><button data-k="l">◀</button><button data-k="b">▼</button><button data-k="r">▶</button></div>
+<div id="walkmsg">Click to look around<br><small>Mouse to look · W A S D / arrows to move · Shift to run · Esc to release</small></div>
+<div id="cross"></div>
+<div id="err"></div>
+<script type="module" src="/viewer/engine.js"></script>
+</body>
+</html>

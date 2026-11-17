@@ -1,0 +1,24 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#14191e"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Cpath d=%27M8 1 1 7h2v8h4v-5h2v5h4V7h2z%27 fill=%27%23e0a95a%27/%3E%3C/svg%3E"><link rel="stylesheet" href="/css/site.css">
+<title>Example homes — Home View</title>
+<meta name="description" content="Example home plans you can explore in interactive 3D on Home View.">
+</head><body>
+<main>
+  <h1>Example homes</h1>
+  <p class="muted">Six Smith home plans built as interactive 3D models. Open one to orbit, view the plan from above, take the roof off or walk through the rooms.</p>
+  <div class="grid" id="list" style="margin-top:16px"></div>
+  <div class="card" style="margin-top:22px"><h2>Make your own</h2><p class="muted">Create a free account to keep plans and photos for your own home projects, add a 3D model and share it with a link.</p><a class="btn primary" href="/#signup" id="cta">Create an account</a></div>
+</main>
+<footer>Home View</footer>
+<script type="module">
+import { $, esc, me, header } from '/js/common.js';
+import REGISTRY from '/viewer/models/registry.js';
+const user = await me(); header(user, 'examples');
+if (user) { $('#cta').href = '/dashboard'; $('#cta').textContent = 'Go to my projects'; }
+const list = $('#list');
+for (const r of REGISTRY) {
+  const a = document.createElement('a'); a.className = 'card pcard'; a.href = '/viewer?ex=' + r.id;
+  a.innerHTML = `<div class="thumb"><img loading="lazy" alt="" src="/img/${r.id}.jpg"></div><div class="title">${esc(r.title || r.name)}</div><div class="muted" style="font-size:13px">${esc(r.blurb || '')}</div><span class="badge acc" style="align-self:flex-start">Open in 3D</span>`;
+  list.appendChild(a);
+}
+</script>
+</body></html>

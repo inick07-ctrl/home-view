@@ -1,0 +1,51 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#14191e"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Cpath d=%27M8 1 1 7h2v8h4v-5h2v5h4V7h2z%27 fill=%27%23e0a95a%27/%3E%3C/svg%3E"><link rel="stylesheet" href="/css/site.css">
+<title>My projects — Home View</title>
+</head><body>
+<main>
+  <div class="row"><div><h1>My projects</h1><div class="muted" id="who"></div></div><div class="spacer"></div></div>
+  <form class="card row" id="newForm" style="margin:16px 0">
+    <input id="newName" placeholder="New project name, e.g. Lake cabin" maxlength="120" style="flex:1;min-width:200px" required>
+    <button class="btn primary" type="submit">+ New project</button>
+  </form>
+  <div class="err" id="err"></div>
+  <div class="grid" id="list"><p class="muted">Loading…</p></div>
+  <details class="card" style="margin-top:40px"><summary class="muted" style="cursor:pointer">Account</summary>
+    <p class="muted">Deleting your account permanently removes all of your projects and uploads.</p>
+    <div class="row"><input type="password" id="delPw" placeholder="Password to confirm" autocomplete="current-password" style="max-width:260px"><button class="btn danger" id="delAcct">Delete my account</button></div>
+    <div class="err" id="delErr"></div>
+  </details>
+</main>
+<script type="module">
+import { $, esc, api, me, header, fmtDate } from '/js/common.js';
+const user = await me();
+if (!user) location.replace('/?next=/dashboard');
+header(user, 'dashboard');
+$('#who').textContent = user.email;
+async function load() {
+  const { projects } = await api('projects');
+  const list = $('#list');
+  if (!projects.length) { list.innerHTML = '<div class="card"><h2>No projects yet</h2><p class="muted">Create your first project above, then add floor plans, photos or a 3D model. Want to see what it looks like? <a href="/examples">Browse the examples</a>.</p></div>'; return; }
+  list.innerHTML = '';
+  for (const p of projects) {
+    const img = p.files.find(f => f.kind === 'image' && f.contentType.startsWith('image/'));
+    const hasModel = p.files.some(f => f.kind === 'model');
+    const a = document.createElement('a'); a.className = 'card pcard'; a.href = '/project?id=' + encodeURIComponent(p.id);
+    a.innerHTML = `<div class="thumb">${img ? `<img loading="lazy" alt="" src="/api/projects/${encodeURIComponent(p.id)}/files/${encodeURIComponent(img.id)}">` : (hasModel ? '3D model' : 'No images yet')}</div>
+      <div class="title">${esc(p.name)}</div>
+      <div class="row" style="gap:6px">${hasModel ? '<span class="badge acc">3D</span>' : ''}<span class="badge">${p.files.filter(f => f.kind === 'image').length} images</span>${p.shareToken ? '<span class="badge acc">Shared</span>' : '<span class="badge">Private</span>'}<span class="spacer"></span><span class="muted" style="font-size:12px">${fmtDate(p.updatedAt)}</span></div>`;
+    list.appendChild(a);
+  }
+}
+load().catch(e => { $('#err').textContent = e.message; });
+$('#newForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try { const { project } = await api('projects', { method: 'POST', body: { name: $('#newName').value } }); location.href = '/project?id=' + encodeURIComponent(project.id); }
+  catch (err) { $('#err').textContent = err.message; }
+});
+$('#delAcct').addEventListener('click', async () => {
+  if (!confirm('Permanently delete your account and every project?')) return;
+  try { await api('account/delete', { method: 'POST', body: { password: $('#delPw').value } }); location.href = '/'; }
+  catch (err) { $('#delErr').textContent = err.message; }
+});
+</script>
+</body></html>

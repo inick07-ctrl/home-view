@@ -1,0 +1,60 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#14191e"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Cpath d=%27M8 1 1 7h2v8h4v-5h2v5h4V7h2z%27 fill=%27%23e0a95a%27/%3E%3C/svg%3E"><link rel="stylesheet" href="/css/site.css">
+<title>Home View — your home projects in 3D</title>
+<meta name="description" content="Home View: keep your home plans, renders and photos together and explore them in interactive 3D.">
+</head><body>
+<main>
+  <section class="hero">
+    <div>
+      <h1>Your home projects, in one place and in 3D.</h1>
+      <p class="lead">Create a free account to keep floor plans, renders and photos for each home project. Add a 3D model to orbit it, take the roof off and walk through the rooms. Share a read-only link when you're ready.</p>
+      <div class="row" style="margin-top:16px"><a class="btn primary" href="#signup" data-tab="signup">Create an account</a><a class="btn" href="/examples">See example homes in 3D</a></div>
+    </div>
+    <div class="card" id="auth">
+      <div class="tabs2"><button class="pill on" data-tab="login">Log in</button><button class="pill" data-tab="signup">Create account</button></div>
+      <form id="authForm" autocomplete="on">
+        <label for="email">Email</label><input id="email" type="email" autocomplete="email" required>
+        <label for="password">Password</label><input id="password" type="password" autocomplete="current-password" minlength="8" required>
+        <div id="pwHint" class="muted" style="font-size:12.5px;margin-top:6px;display:none">At least 8 characters.</div>
+        <div class="err" id="authErr"></div>
+        <button class="btn primary" id="authBtn" style="width:100%;margin-top:6px" type="submit">Log in</button>
+      </form>
+    </div>
+  </section>
+  <section style="margin-top:36px">
+    <a href="/examples" class="hero-shot"><div class="shot card" style="padding:0;aspect-ratio:21/9;background-image:url(/img/hero.jpg)"></div></a>
+    <div class="grid" style="margin-top:16px">
+      <div class="card"><h2>📐 Plans & photos</h2><p class="muted">Upload floor plans, renders and site photos to each project. Everything is private to you by default.</p></div>
+      <div class="card"><h2>🏠 Interactive 3D</h2><p class="muted">3D overview, top-down plan, roof on/off, cutaway walls and a first-person walk-through, on desktop or phone.</p></div>
+      <div class="card"><h2>🔗 Share a link</h2><p class="muted">Turn on a share link to give anyone a read-only view of one project. Turn it off any time.</p></div>
+    </div>
+  </section>
+</main>
+<footer>Home View</footer>
+<script type="module">
+import { $, api, me, header } from '/js/common.js';
+const next = new URLSearchParams(location.search).get('next');
+const dest = next && next.startsWith('/') && !next.startsWith('//') ? next : '/dashboard';
+const user = await me();
+if (user) { location.replace(dest); } else header(null);
+let tab = 'login';
+function setTab(t) {
+  tab = t;
+  document.querySelectorAll('.tabs2 [data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  $('#authBtn').textContent = t === 'login' ? 'Log in' : 'Create account';
+  $('#password').autocomplete = t === 'login' ? 'current-password' : 'new-password';
+  $('#pwHint').style.display = t === 'signup' ? 'block' : 'none';
+  $('#authErr').textContent = '';
+}
+document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', e => { e.preventDefault(); setTab(b.dataset.tab); $('#email').focus(); }));
+const fromHash = () => { if (location.hash === '#signup') setTab('signup'); else if (location.hash === '#login') setTab('login'); };
+addEventListener('hashchange', fromHash); fromHash();
+$('#authForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = $('#authBtn'); btn.disabled = true; $('#authErr').textContent = '';
+  try {
+    await api(tab === 'login' ? 'auth/login' : 'auth/signup', { method: 'POST', body: { email: $('#email').value, password: $('#password').value } });
+    location.href = dest;
+  } catch (err) { $('#authErr').textContent = err.message; btn.disabled = false; }
+});
+</script>
+</body></html>

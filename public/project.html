@@ -1,0 +1,110 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#14191e"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Cpath d=%27M8 1 1 7h2v8h4v-5h2v5h4V7h2z%27 fill=%27%23e0a95a%27/%3E%3C/svg%3E"><link rel="stylesheet" href="/css/site.css">
+<title>Project — Home View</title>
+</head><body>
+<main>
+  <a class="muted" href="/dashboard" style="text-decoration:none;font-size:14px">← My projects</a>
+  <div class="row" style="margin:6px 0 14px"><input id="name" maxlength="120" aria-label="Project name" style="font-size:22px;font-weight:700;background:transparent;border-color:transparent;padding:6px 8px;flex:1;min-width:220px"><span class="muted" id="saved" style="font-size:13px"></span></div>
+  <div class="err" id="err"></div>
+  <div class="cols">
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <section class="card" id="modelCard">
+        <div class="row"><h2 style="margin:0">3D model</h2><span class="spacer"></span><a class="btn primary" id="open3d" style="display:none">Open in 3D ↗</a></div>
+        <div id="modelInfo" style="margin-top:10px"></div>
+        <div class="row" style="margin-top:10px"><label class="btn small" style="margin:0">Upload a 3D model<input type="file" id="modelFile" accept=".glb,.gltf,.json" hidden></label><button class="btn small danger" id="modelDel" style="display:none">Remove model</button></div>
+        <p class="muted" style="font-size:12.5px;margin:8px 0 0">Accepted: <b>.glb</b> / <b>.gltf</b> (export from SketchUp, Blender, Revit, etc.) or a Home View <b>.json</b> plan model (<a href="/viewer/models/template-smith-02.json" download>download an example</a>).</p>
+      </section>
+      <section class="card">
+        <h2>Images</h2>
+        <div class="drop" id="drop">Drop floor plans, renders or photos here, or <u>choose files</u><input type="file" id="imgFile" accept="image/*,application/pdf" multiple hidden></div>
+        <div id="upStatus" class="muted" style="font-size:13px;margin:8px 0"></div>
+        <div class="gallery" id="gallery"></div>
+      </section>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <section class="card">
+        <div class="row"><h2 style="margin:0">Share link</h2><span class="spacer"></span><label class="switch" style="margin:0"><input type="checkbox" id="share"><span></span></label></div>
+        <p class="muted" id="shareHelp" style="font-size:13.5px">Off: only you can see this project.</p>
+        <div id="shareBox" style="display:none"><div class="row"><input id="shareUrl" readonly style="flex:1;font-size:13px"><button class="btn small" id="copy">Copy</button></div><a id="shareOpen" target="_blank" rel="noopener" style="font-size:13px;display:inline-block;margin-top:6px">Open read-only view ↗</a></div>
+      </section>
+      <section class="card">
+        <h2>Notes</h2>
+        <textarea id="notes" rows="9" maxlength="20000" placeholder="Lot details, builder contacts, ideas, to-dos…"></textarea>
+        <div class="row" style="margin-top:8px"><span class="muted" id="notesSaved" style="font-size:13px"></span><span class="spacer"></span><button class="btn small" id="saveNotes">Save notes</button></div>
+      </section>
+      <button class="btn danger" id="delProj">Delete project</button>
+    </div>
+  </div>
+</main>
+<script type="module">
+import { $, esc, api, me, header, toast, fmtSize, renderGallery } from '/js/common.js';
+import { upload } from '/js/blob-client.js';
+const id = new URLSearchParams(location.search).get('id');
+const user = await me();
+if (!user) location.replace('/?next=' + encodeURIComponent(location.pathname + location.search));
+header(user, 'dashboard');
+let P = null;
+const enc = encodeURIComponent;
+const fileUrl = (f) => `/api/projects/${enc(P.id)}/files/${enc(f.id)}`;
+function render() {
+  document.title = P.name + ' — Home View';
+  if (document.activeElement !== $('#name')) $('#name').value = P.name;
+  const model = P.files.find(f => f.kind === 'model');
+  $('#open3d').style.display = model ? '' : 'none';
+  $('#open3d').href = '/viewer?p=' + enc(P.id);
+  $('#modelDel').style.display = model ? '' : 'none';
+  $('#modelInfo').innerHTML = model
+    ? `<div class="row"><span class="badge acc">${esc(model.format.toUpperCase())}</span><span>${esc(model.name)}</span><span class="muted" style="font-size:12.5px">${fmtSize(model.size)}</span></div>`
+    : '<div class="notice">No 3D model yet. Your images are shown as a gallery below. Upload a 3D model any time to explore this project in 3D.</div>';
+  renderGallery($('#gallery'), P, fileUrl, { onDelete: async (f) => {
+    if (!confirm('Delete ' + f.name + '?')) return;
+    try { P = (await api(`projects/${enc(P.id)}/files/${enc(f.id)}`, { method: 'DELETE' })).project; render(); } catch (e) { toast(e.message); }
+  } });
+  $('#share').checked = !!P.shareToken;
+  $('#shareBox').style.display = P.shareToken ? '' : 'none';
+  $('#shareHelp').textContent = P.shareToken ? 'On: anyone with this link can view (read-only) this project\'s images, notes and 3D model.' : 'Off: only you can see this project.';
+  if (P.shareToken) { const u = location.origin + '/s/' + P.shareToken; $('#shareUrl').value = u; $('#shareOpen').href = u; }
+}
+try { P = (await api('projects/' + enc(id))).project; $('#notes').value = P.notes; render(); }
+catch (e) { $('#err').textContent = e.status === 404 ? 'Project not found.' : e.message; throw e; }
+
+async function patch(body) { P = (await api('projects/' + enc(P.id), { method: 'PATCH', body })).project; render(); }
+$('#name').addEventListener('change', async () => { try { await patch({ name: $('#name').value }); $('#saved').textContent = 'Saved'; setTimeout(() => $('#saved').textContent = '', 1500); } catch (e) { toast(e.message); } });
+$('#name').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+let notesDirty = false;
+$('#notes').addEventListener('input', () => { notesDirty = true; $('#notesSaved').textContent = 'Unsaved changes'; });
+async function saveNotes() { if (!notesDirty) return; try { await patch({ notes: $('#notes').value }); notesDirty = false; $('#notesSaved').textContent = 'Saved'; } catch (e) { toast(e.message); } }
+$('#saveNotes').onclick = saveNotes; $('#notes').addEventListener('blur', saveNotes);
+addEventListener('beforeunload', e => { if (notesDirty) { e.preventDefault(); } });
+$('#share').addEventListener('change', async (e) => { try { await patch({ share: e.target.checked }); toast(e.target.checked ? 'Share link on' : 'Share link off'); } catch (err) { toast(err.message); render(); } });
+$('#copy').onclick = async () => { try { await navigator.clipboard.writeText($('#shareUrl').value); toast('Link copied'); } catch { $('#shareUrl').select(); } };
+$('#delProj').onclick = async () => { if (!confirm('Delete "' + P.name + '" and all its files?')) return; await api('projects/' + enc(P.id), { method: 'DELETE' }); location.href = '/dashboard'; };
+
+const safeName = (n) => n.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+/, '').slice(-80) || 'file';
+async function uploadOne(file, kind) {
+  const contentType = kind === 'model' ? ({ glb: 'model/gltf-binary', gltf: 'model/gltf+json', json: 'application/json' }[file.name.split('.').pop().toLowerCase()] || file.type) : file.type;
+  const blob = await upload(`files/${user.id}/${P.id}/${safeName(file.name)}`, file, {
+    access: 'private', handleUploadUrl: '/api/upload', clientPayload: JSON.stringify({ pid: P.id, kind }), contentType,
+    multipart: file.size > 8 * 1024 * 1024,
+  });
+  P = (await api(`projects/${enc(P.id)}/files`, { method: 'POST', body: { pathname: blob.pathname, name: file.name, kind } })).project;
+  render();
+}
+async function uploadMany(files, kind) {
+  const st = $('#upStatus'); let done = 0;
+  for (const f of files) {
+    if (f.size > 50 * 1024 * 1024) { toast(f.name + ' is over 50 MB'); continue; }
+    st.textContent = `Uploading ${f.name}… (${done + 1}/${files.length})`;
+    try { await uploadOne(f, kind); done++; } catch (e) { toast('Upload failed: ' + e.message, 4000); console.error(e); }
+  }
+  st.textContent = done ? `Uploaded ${done} file${done > 1 ? 's' : ''}.` : '';
+}
+const drop = $('#drop'), imgIn = $('#imgFile');
+drop.onclick = () => imgIn.click();
+imgIn.onchange = () => { uploadMany([...imgIn.files], 'image'); imgIn.value = ''; };
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); uploadMany([...e.dataTransfer.files].filter(f => /^image\/|pdf/.test(f.type)), 'image'); });
+$('#modelFile').onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; $('#modelInfo').innerHTML = '<span class="muted">Uploading ' + esc(f.name) + '…</span>'; await uploadMany([f], 'model'); render(); };
+$('#modelDel').onclick = async () => { const m = P.files.find(f => f.kind === 'model'); if (!m || !confirm('Remove the 3D model?')) return; P = (await api(`projects/${enc(P.id)}/files/${enc(m.id)}`, { method: 'DELETE' })).project; render(); };
+</script>
+</body></html>
