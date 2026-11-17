@@ -8,7 +8,7 @@ Keep your home projects (floor plans, renders, photos, notes) in one place and e
 - Public **Examples** page with the Smith 01–06 home models.
 
 ## Stack
-- Static pages in `public/` (no build step); three.js viewer in `public/viewer/`.
+- Static pages in `public/` (no build step); three.js viewer in `public/3d/`.
 - One Vercel Function, `api/router.js`, for the JSON API.
 - Storage: a **private Vercel Blob** store holds both the JSON records (`db/…`) and uploads (`files/…`).
 

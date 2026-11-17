@@ -11,7 +11,7 @@
 <footer>Home View</footer>
 <script type="module">
 import { $, esc, me, header } from '/js/common.js';
-import REGISTRY from '/viewer/models/registry.js';
+import REGISTRY from '/3d/models/registry.js';
 const user = await me(); header(user, 'examples');
 if (user) { $('#cta').href = '/dashboard'; $('#cta').textContent = 'Go to my projects'; }
 const list = $('#list');

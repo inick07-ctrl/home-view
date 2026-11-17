@@ -1,5 +1,9 @@
 // Tiny JSON "database" on top of a private Vercel Blob store.
-import { put, get, del, list, head } from '@vercel/blob';
+import * as real from '@vercel/blob';
+import * as local from './local-blob.js';
+// LOCAL_BLOB_DIR switches to a filesystem stand-in for local development only.
+const B = process.env.LOCAL_BLOB_DIR ? local : real;
+const { put, get, del, list, head } = B;
 
 const OPT = { access: 'private' };
 
