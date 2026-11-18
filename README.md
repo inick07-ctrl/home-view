@@ -7,7 +7,7 @@ Keep your home projects (floor plans, renders, photos, notes) in one place and e
 - Sign up / log in with email + password (bcrypt hashes, signed httpOnly session cookie).
 - Private projects with image uploads and an optional 3D model (.glb / .gltf, or a Home View .json plan model).
 - Optional read-only share link per project (`/s/<token>`).
-- Public **Examples** page with the Smith 01–06 home models.
+- Public **Examples** page with the Smith 01–07 home models.
 
 ## Stack
 - Static pages in `public/` (no build step); three.js viewer in `public/3d/`.
