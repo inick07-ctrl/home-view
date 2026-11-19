@@ -157,7 +157,7 @@ export default {
     // utility, closet
     k.block(68.4, 49, 76.9, 50.6, 0, 3, '#f4f4f4'); k.block(78, 49.2, 90.8, 50.6, 0, 7, '#6b4a2f');
     // garage: two cars, closed overhead door
-    k.car(68, 54, 84, 60.5, '#2b3a4a'); k.car(68, 64.5, 84, 71, '#9aa3ab');
+    k.car(68, 54, 84, 60.5, '#8a8680', 'golf-r', 'e'); k.car(68, 64.5, 84, 71, '#161616', 'lexus-gx', 'e');
     k.block(87.25, 53.3, 87.5, 71.3, 0, 8, '#2a2b2d');
   },
 };

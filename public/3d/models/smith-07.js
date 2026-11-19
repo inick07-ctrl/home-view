@@ -132,7 +132,7 @@ export default {
     k.block(46, 5, 56, 8, 0, 2.5, '#6b4a2f');
     for (const x of [20, 23, 40, 43]) { k.block(x, 49.6, x + 1.6, 51.2, 1.2, 1.5, BK); k.block(x, 51, x + 1.6, 51.2, 1.5, 3.3, BK); }
     // garage: three cars nosed toward the side-load doors (closed)
-    k.car(70, 14.5, 87, 21.5, '#2b3a4a'); k.car(70, 25.5, 87, 32.5, '#9aa3ab'); k.car(70, 36.5, 87, 43.5, '#6d6f72');
+    k.car(70, 14.5, 87, 21.5, '#8a8680', 'golf-r', 'e'); k.car(70, 25.5, 87, 32.5, '#161616', 'lexus-gx', 'e'); k.car(70, 36.5, 87, 43.5, '#0a0a0a', 'g63', 'e');
     for (const [a, b] of [[13.5, 22.5], [24.5, 33.5], [35.5, 44.5]]) k.block(90.05, a, 90.3, b, 0, 8, '#2a2b2d');
   },
 };

@@ -143,7 +143,7 @@ export default {
     k.block(64.6, 41.5, 67.4, 44.3, 0, 5, '#b8bcc0'); k.block(64.6, 38, 67, 40.4, 0, 5.5, '#d9dde0');
     // garage: chest freezers on the kitchen wall, pickup + SUV
     k.block(64.3, 28.6, 66.4, 35.2, 0, 3, '#e9e9e9');
-    k.car(80, 6.5, 99, 12.5, '#2b3a4a'); k.car(81, 30, 99, 36, '#6d6f72');
+    k.car(80, 6.5, 99, 12.5, '#8a8680', 'golf-r', 'e'); k.car(81, 30, 99, 36, '#161616', 'lexus-gx', 'e');
     // steel overhead doors (closed), workbench
     k.block(104.05, 4.8, 104.3, 20.3, 0, 12, '#d9d6cf'); k.block(104.05, 26.8, 104.3, 42.3, 0, 12, '#d9d6cf');
     k.block(86, 44.7, 100, 46.7, 0, 3.2, '#6b4a2f');

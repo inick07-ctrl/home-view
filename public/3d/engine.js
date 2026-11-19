@@ -25,7 +25,8 @@ labelRenderer.setSize(innerWidth, innerHeight);
 Object.assign(labelRenderer.domElement.style, { position: 'fixed', inset: '0', pointerEvents: 'none', zIndex: 3 });
 document.body.appendChild(labelRenderer.domElement);
 
-scene.add(new THREE.HemisphereLight('#ffffff', '#c9c1b2', 0.95));
+const hemi = new THREE.HemisphereLight('#ffffff', '#c9c1b2', 0.95);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight('#fff3df', 1.6);
 sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0006;
 scene.add(sun, sun.target);
@@ -52,9 +53,71 @@ const TEX = {
   brick: canvasTex((g, s) => { g.fillStyle = '#9a958e'; g.fillRect(0, 0, s, s); const rows = 16; for (let y = 0; y < rows; y++) for (let x = 0; x < 5; x++) { const v = 120 + rnd(x * 31 + y * 7) * 45; g.fillStyle = `rgb(${v},${v - 3},${v - 8})`; g.fillRect(x * s / 4 - (y % 2) * s / 8 + 1.5, y * s / rows + 1.5, s / 4 - 3, s / rows - 3); } }),
   metal: canvasTex((g, s) => { g.fillStyle = '#1d1e20'; g.fillRect(0, 0, s, s); for (let i = 0; i < 4; i++) { g.fillStyle = 'rgba(255,255,255,.10)'; g.fillRect(i * s / 4, 0, 3, s); g.fillStyle = 'rgba(0,0,0,.5)'; g.fillRect(i * s / 4 + 3, 0, 2, s); } }),
   shingle: canvasTex((g, s) => { g.fillStyle = '#4b5159'; g.fillRect(0, 0, s, s); for (let y = 0; y < 8; y++) { g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(0, y * s / 8, s, 2); for (let x = 0; x < 4; x++) g.fillRect(x * s / 4 + (y % 2) * s / 8, y * s / 8, 2, s / 8); } }),
+  // English Country: dark-stained board walls, beamed plank ceilings, irregular flagstone, limewash plaster
+  darkWood: canvasTex((g, s) => {
+    const n = 7;
+    for (let i = 0; i < n; i++) {
+      const v = 28 + rnd(i + 3) * 18;
+      g.fillStyle = `rgb(${v + 8},${v - 2},${v - 8})`;
+      g.fillRect(i * s / n, 0, s / n, s);
+      g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(i * s / n, 0, 2, s);
+      g.fillStyle = 'rgba(80,60,40,.18)'; g.fillRect(i * s / n + 3, 0, 2, s);
+      for (let k = 0; k < 8; k++) {
+        g.fillStyle = `rgba(${20 + rnd(i * 9 + k) * 40},18,10,.12)`;
+        g.fillRect(i * s / n + rnd(i + k) * s / n, rnd(k + 4) * s, 1, 12 + rnd(k) * 20);
+      }
+    }
+  }, 512),
+  plankCeiling: canvasTex((g, s) => {
+    const n = 8;
+    for (let i = 0; i < n; i++) {
+      const v = 22 + rnd(i + 11) * 14;
+      g.fillStyle = `rgb(${v + 6},${v},${v - 4})`;
+      g.fillRect(0, i * s / n, s, s / n);
+      g.fillStyle = 'rgba(0,0,0,.5)'; g.fillRect(0, i * s / n, s, 2);
+      g.fillStyle = 'rgba(90,70,50,.12)'; g.fillRect(0, i * s / n + 3, s, 1.5);
+    }
+  }, 512),
+  slate: canvasTex((g, s) => {
+    g.fillStyle = '#2a2c2e'; g.fillRect(0, 0, s, s);
+    const stones = [
+      [0, 0, 0.42, 0.38], [0.43, 0, 1, 0.28], [0.43, 0.29, 0.72, 0.58], [0.73, 0.29, 1, 0.62],
+      [0, 0.39, 0.28, 0.7], [0.29, 0.39, 0.62, 0.78], [0, 0.71, 0.35, 1], [0.36, 0.79, 0.7, 1],
+      [0.63, 0.59, 1, 1], [0.71, 0, 1, 0.28],
+    ];
+    for (let i = 0; i < stones.length; i++) {
+      const [x0, y0, x1, y1] = stones[i];
+      const v = 48 + rnd(i + 21) * 32;
+      const r = v + 4, gv = v, b = v - 6;
+      g.fillStyle = `rgb(${r},${gv},${b})`;
+      const pad = 2;
+      g.fillRect(x0 * s + pad, y0 * s + pad, (x1 - x0) * s - pad * 2, (y1 - y0) * s - pad * 2);
+      g.strokeStyle = 'rgba(10,10,12,.55)'; g.lineWidth = 2;
+      g.strokeRect(x0 * s + pad, y0 * s + pad, (x1 - x0) * s - pad * 2, (y1 - y0) * s - pad * 2);
+      g.fillStyle = 'rgba(255,255,255,.06)';
+      g.fillRect(x0 * s + pad + 2, y0 * s + pad + 2, (x1 - x0) * s * 0.35, 3);
+    }
+  }, 512),
+  limewash: canvasTex((g, s) => {
+    g.fillStyle = '#efe6d4'; g.fillRect(0, 0, s, s);
+    for (let i = 0; i < 1800; i++) {
+      const v = 210 + rnd(i) * 30;
+      g.fillStyle = `rgba(${v},${v - 10},${v - 28},${0.04 + rnd(i + 3) * 0.06})`;
+      g.beginPath(); g.arc(rnd(i + 1) * s, rnd(i + 2) * s, 2 + rnd(i + 5) * 8, 0, 6.3); g.fill();
+    }
+  }, 512),
+  oakBeam: canvasTex((g, s) => {
+    const n = 5;
+    for (let i = 0; i < n; i++) {
+      const v = 90 + rnd(i + 8) * 28;
+      g.fillStyle = `rgb(${v + 20},${v - 15},${v - 40})`;
+      g.fillRect(0, i * s / n, s, s / n);
+      g.fillStyle = 'rgba(40,20,8,.35)'; g.fillRect(0, i * s / n, s, 2);
+    }
+  }),
 };
 TEX.grass.repeat.set(90, 90);
-const TEXSCALE = { wood: 6, tile: 4, concrete: 10, porch: 4, gym: 4, stone: 3, terrace: 6, paver: 6, board: 4, brick: 5, metal: 6, shingle: 4 };
+const TEXSCALE = { wood: 6, tile: 4, concrete: 10, porch: 4, gym: 4, stone: 3, terrace: 6, paver: 6, board: 4, brick: 5, metal: 6, shingle: 4, darkWood: 5, plankCeiling: 6, slate: 8, limewash: 8, oakBeam: 3 };
 const MAT = {};
 for (const k of ['wood', 'tile', 'concrete', 'porch', 'gym', 'stone', 'terrace', 'paver']) MAT[k] = new THREE.MeshLambertMaterial({ map: TEX[k] });
 MAT.brick = new THREE.MeshStandardMaterial({ map: TEX.brick, roughness: .95 });
@@ -63,6 +126,28 @@ MAT.glass = new THREE.MeshStandardMaterial({ color: '#9fd0ee', roughness: .1, me
 MAT.water = new THREE.MeshStandardMaterial({ color: '#36b3d9', roughness: .08, metalness: .15, transparent: true, opacity: .88, emissive: '#0b4f66', emissiveIntensity: .25 });
 MAT.slab = new THREE.MeshLambertMaterial({ color: '#9a9a96' });
 MAT.ceiling = new THREE.MeshLambertMaterial({ color: '#faf8f3', side: THREE.DoubleSide });
+MAT.darkWood = new THREE.MeshStandardMaterial({ map: TEX.darkWood, roughness: .82, color: '#ffffff' });
+MAT.plankCeiling = new THREE.MeshStandardMaterial({ map: TEX.plankCeiling, roughness: .78, side: THREE.DoubleSide });
+MAT.slate = new THREE.MeshStandardMaterial({ map: TEX.slate, roughness: .38, metalness: .12, color: '#ffffff' });
+MAT.limewash = new THREE.MeshStandardMaterial({ map: TEX.limewash, roughness: .95, color: '#ffffff' });
+MAT.oakBeam = new THREE.MeshStandardMaterial({ map: TEX.oakBeam, roughness: .7, color: '#ffffff' });
+MAT.darkFrame = new THREE.MeshStandardMaterial({ color: '#1a1612', roughness: .7 });
+
+const STYLES = {
+  default: { id: 'default', name: 'Default' },
+  'english-country': {
+    id: 'english-country', name: 'English Country',
+    floors: { wood: 'slate', tile: 'slate', gym: 'slate', stone: 'slate' },
+    intWalls: 'darkWood', ceiling: 'plankCeiling',
+    hemi: 0.62, hemiColor: '#ffe3b8', groundColor: '#6a5a48',
+    sun: 1.15, sunColor: '#ffd4a0', bg: '#d7cfc2',
+    fogNear: 180, fogFar: 520,
+    amber: '#ffb45a',
+  },
+};
+let currentStyle = 'default';
+let loadedModel = null;
+
 
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), new THREE.MeshLambertMaterial({ map: TEX.grass }));
 ground.rotation.x = -Math.PI / 2; ground.position.y = -0.6; ground.receiveShadow = true; scene.add(ground);
@@ -98,15 +183,105 @@ function mesh(geos, mat, cast = true) {
   const m = new THREE.Mesh(mergeGeometries(geos), mat); m.castShadow = cast; m.receiveShadow = true; return m;
 }
 
+
+function applyEnglishCountry(kit, st, H, WS) {
+  const amber = st.amber || '#ffb45a';
+  // heavy exposed oak beams just under each flat ceiling
+  for (const r of (M.ceilings || [])) {
+    const x0 = r[0], y0 = r[1], x1 = r[2], y1 = r[3], h = (r[4] || H) - 0.35;
+    const alongX = (x1 - x0) >= (y1 - y0);
+    const span = alongX ? (x1 - x0) : (y1 - y0);
+    const nBeams = Math.max(2, Math.round(span / 6));
+    for (let i = 1; i < nBeams; i++) {
+      const t = i / nBeams;
+      if (alongX) kit.block(x0 + t * (x1 - x0) - 0.3, y0 + 0.2, x0 + t * (x1 - x0) + 0.3, y1 - 0.2, h - 0.45, h, 'oakBeam');
+      else kit.block(x0 + 0.2, y0 + t * (y1 - y0) - 0.3, x1 - 0.2, y0 + t * (y1 - y0) + 0.3, h - 0.45, h, 'oakBeam');
+    }
+  }
+  // limewash plaster panels on living/bedroom walls to balance the dark wood
+  const limeRooms = /^(Family|Dining|Primary Suite|Bedroom 2|Bedroom 3|Office)/i;
+  for (const room of M.rooms) {
+    const [name, , , a, b, c, d, o = {}] = room;
+    if (o.outside || !limeRooms.test(name || '')) continue;
+    const inset = 0.12, h0 = 3.2, h1 = Math.min(9.5, (o.vaulted ? 12 : (H || 10)) - 0.4);
+    // panels on the longer pair of walls
+    if ((c - a) >= (d - b)) {
+      kit.block(a + 0.4, b + inset, c - 0.4, b + inset + 0.05, h0, h1, 'limewash');
+      kit.block(a + 0.4, d - inset - 0.05, c - 0.4, d - inset, h0, h1, 'limewash');
+    } else {
+      kit.block(a + inset, b + 0.4, a + inset + 0.05, d - 0.4, h0, h1, 'limewash');
+      kit.block(c - inset - 0.05, b + 0.4, c - inset, d - 0.4, h0, h1, 'limewash');
+    }
+  }
+  // dark frames around windows
+  for (const w of (WS?.win || [])) {
+    const x0 = w[0], y0 = w[1], x1 = w[2], y1 = w[3], sill = w[4] ?? 3, head = w[5] ?? 7;
+    const vert = (x1 - x0) < (y1 - y0);
+    const t = 0.12;
+    if (vert) {
+      kit.block(x0 - t, y0, x1 + t, y0 + t, sill - t, head + t, '#1a1612');
+      kit.block(x0 - t, y1 - t, x1 + t, y1, sill - t, head + t, '#1a1612');
+      kit.block(x0 - t, y0, x1 + t, y1, sill - t, sill + t, '#1a1612');
+      kit.block(x0 - t, y0, x1 + t, y1, head - t, head + t, '#1a1612');
+    } else {
+      kit.block(x0, y0 - t, x0 + t, y1 + t, sill - t, head + t, '#1a1612');
+      kit.block(x1 - t, y0 - t, x1, y1 + t, sill - t, head + t, '#1a1612');
+      kit.block(x0, y0 - t, x1, y1 + t, sill - t, sill + t, '#1a1612');
+      kit.block(x0, y0 - t, x1, y1 + t, head - t, head + t, '#1a1612');
+    }
+  }
+  // warm amber pendants in main rooms + a few sconces, plus actual point lights
+  // a couple of brighter work lights in the garage so Nick's cars read clearly
+  for (const room of M.rooms) {
+    const [name, , , a, b, c, d, o = {}] = room;
+    if (!/^Bay /.test(name || '')) continue;
+    const light = new THREE.PointLight('#fff3e0', 1.6, 24, 2);
+    light.position.set(Wx((a + c) / 2), 8.5, Wz((b + d) / 2));
+    root.add(light);
+  }
+  const pendantRooms = /^(Family|Dining|Kitchen|Entry|Family Foyer|Office|Primary Suite|Hall)$/i;
+  for (const room of M.rooms) {
+    const [name, , , a, b, c, d, o = {}] = room;
+    if (o.outside || !pendantRooms.test(name || '')) continue;
+    const cx = (a + c) / 2, cy = (b + d) / 2;
+    const ch = /Kitchen|Dining/.test(name) ? 14 : (/Family$/.test(name) ? 12 : 10);
+    const ph = ch - 2.4;
+    kit.block(cx - 0.15, cy - 0.15, cx + 0.15, cy + 0.15, ph + 0.6, ch - 0.2, '#2a2218');
+    kit.block(cx - 0.45, cy - 0.45, cx + 0.45, cy + 0.45, ph, ph + 0.55, '#5a3a18', { r: .4, m: .2 });
+    const light = new THREE.PointLight(amber, 1.15, 22, 2);
+    light.position.set(Wx(cx), ph, Wz(cy));
+    light.castShadow = false;
+    root.add(light);
+  }
+  // wall sconces near a few doorways (foyer / hall / entry)
+  const sconceAt = (x, y, h = 5.6) => {
+    kit.block(x - 0.18, y - 0.18, x + 0.18, y + 0.18, h, h + 0.7, '#c8a050', { r: .35, m: .3 });
+    const sl = new THREE.PointLight(amber, 0.55, 10, 2);
+    sl.position.set(Wx(x), h + 0.3, Wz(y));
+    root.add(sl);
+  };
+  for (const r of M.rooms) {
+    const [name, , , a, b, c, d, o = {}] = r;
+    if (o.outside || !/Foyer|Entry|Hall$/.test(name || '')) continue;
+    sconceAt((a + c) / 2, b + 0.5);
+    sconceAt((a + c) / 2, d - 0.5);
+  }
+}
+
 function buildModel(model) {
   if (root) {
     root.traverse(o => { if (o.element?.parentNode) o.element.parentNode.removeChild(o.element); if (o.geometry) o.geometry.dispose(); });
     scene.remove(root);
   }
-  M = model; root = new THREE.Group(); scene.add(root);
+  M = model; loadedModel = model; root = new THREE.Group(); scene.add(root);
   solids = [];
   const mats = M.materials || {};
   const H = M.wallH || 9;
+  const st = STYLES[currentStyle] || STYLES.default;
+  hemi.intensity = st.hemi ?? 0.95; hemi.color.set(st.hemiColor || '#ffffff'); hemi.groundColor.set(st.groundColor || '#c9c1b2');
+  sun.intensity = st.sun ?? 1.6; sun.color.set(st.sunColor || '#fff3df');
+  const bg = st.bg || '#cfe3f2'; scene.background.set(bg);
+  if (scene.fog) { scene.fog.color.set(bg); scene.fog.near = st.fogNear || 260; scene.fog.far = st.fogFar || 560; }
   // bounds from rooms
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   for (const r of M.rooms) { x0 = Math.min(x0, r[3]); y0 = Math.min(y0, r[4]); x1 = Math.max(x1, r[5]); y1 = Math.max(y1, r[6]); }
@@ -116,12 +291,17 @@ function buildModel(model) {
   Object.assign(sun.shadow.camera, { left: -R, right: R, top: R, bottom: -R, near: 10, far: 400 }); sun.shadow.camera.updateProjectionMatrix();
 
   const extMat = mats.extTex ? MAT[mats.extTex] : new THREE.MeshStandardMaterial({ color: mats.ext || '#ece5d8', roughness: .9 });
-  const intMat = new THREE.MeshStandardMaterial({ color: mats.int || '#f8f6f1', roughness: .95 });
+  const intMat = (st.intWalls && MAT[st.intWalls]) ? MAT[st.intWalls] : new THREE.MeshStandardMaterial({ color: mats.int || '#f8f6f1', roughness: .95 });
 
   // slabs + floors
   root.add(mesh((M.slabs || []).map(r => boxRect(...r, -0.6, -0.01)), MAT.slab, false));
   const byType = {};
-  for (const r of M.rooms) { const [, , type, a, b, c, d, o = {}] = r; if (!o.noFloor) (byType[type] ||= []).push(planeRect(a, b, c, d, 0.02, TEXSCALE[type] || 4)); }
+  for (const r of M.rooms) {
+    const [, , type, a, b, c, d, o = {}] = r;
+    if (o.noFloor) continue;
+    const ft = (st.floors && st.floors[type]) || type;
+    (byType[ft] ||= []).push(planeRect(a, b, c, d, 0.02, TEXSCALE[ft] || TEXSCALE[type] || 4));
+  }
   for (const [type, geos] of Object.entries(byType)) root.add(mesh(geos, MAT[type] || MAT.wood, false));
 
   // footprint for exterior-skin side detection
@@ -201,22 +381,146 @@ function buildModel(model) {
       if (head === 'w') { kit.block(a, b, a + P, d, 1.9, 2.2, '#ffffff'); kit.block(a - T, b - .1, a, d + .1, 0, 3.6, '#7a5a3a'); }
       if (head === 'e') { kit.block(c - P, b, c, d, 1.9, 2.2, '#ffffff'); kit.block(c, b - .1, c + T, d + .1, 0, 3.6, '#7a5a3a'); }
     },
-    car(a, b, c, d, color) {
-      const alongX = (c - a) >= (d - b), L = alongX ? c - a : d - b, Wd = alongX ? d - b : c - a;
-      const r = (s0, s1, t0, t1) => alongX ? [a + s0 * L, b + t0 * Wd, a + s1 * L, b + t1 * Wd] : [a + t0 * Wd, b + s0 * L, a + t1 * Wd, b + s1 * L];
-      kit.block(...r(0, 1, .03, .97), 0.6, 3.3, color, { m: .3, r: .35 });
-      kit.block(...r(.25, .68, .1, .9), 3.3, 4.9, '#9fc4dc', { m: .2, r: .2 });
-      for (const [s, t] of [[.12, 0], [.75, 0], [.12, .93], [.75, .93]]) kit.block(...r(s, s + .1, t, t + .07), 0, 1.6, '#151515');
+    firewood(a, b, c, d, h = 6.5) {
+      const alongX = (c - a) >= (d - b);
+      const long = alongX ? (c - a) : (d - b);
+      const n = Math.max(4, Math.round(long / 0.55));
+      const logC = ['#5a3a28', '#6a4a32', '#4a3020', '#7a5a3c', '#3d2818'];
+      for (let i = 0; i < n; i++) {
+        for (let z = 0; z < Math.max(4, Math.floor(h / 0.55)); z++) {
+          const o = (z % 2) * 0.15;
+          const t0 = (i + o) / n, t1 = Math.min(1, (i + 0.85 + o) / n);
+          const col = logC[(i * 5 + z) % logC.length];
+          if (alongX) kit.block(a + t0 * (c - a), b, a + t1 * (c - a), d, 0.15 + z * 0.55, 0.6 + z * 0.55, col);
+          else kit.block(a, b + t0 * (d - b), c, b + t1 * (d - b), 0.15 + z * 0.55, 0.6 + z * 0.55, col);
+        }
+      }
+      // niche frame
+      kit.block(a - 0.08, b - 0.08, c + 0.08, b, 0, h, '#2a221c');
+      kit.block(a - 0.08, d, c + 0.08, d + 0.08, 0, h, '#2a221c');
+    },
+    zDoor(a, b, c, d, face = 'n') {
+      const horiz = (c - a) >= (d - b);
+      const WD = '#3a2a1c', IR = '#2a1c12';
+      kit.block(a, b, c, d, 0, 7, WD, { r: .85 });
+      // Z brace + ledges
+      if (horiz) {
+        const mid = (b + d) / 2;
+        kit.block(a + 0.1, b + 0.05, c - 0.1, b + 0.22, 0.05, 6.9, IR);
+        kit.block(a + 0.1, d - 0.22, c - 0.1, d - 0.05, 0.05, 6.9, IR);
+        kit.block(a + 0.1, mid - 0.08, c - 0.1, mid + 0.08, 0.05, 6.9, IR);
+        kit.block(a + 0.15, b + 0.15, a + 0.32, d - 0.15, 0.08, 6.85, IR);
+      } else {
+        const mid = (a + c) / 2;
+        kit.block(a + 0.05, b + 0.1, a + 0.22, d - 0.1, 0.05, 6.9, IR);
+        kit.block(c - 0.22, b + 0.1, c - 0.05, d - 0.1, 0.05, 6.9, IR);
+        kit.block(mid - 0.08, b + 0.1, mid + 0.08, d - 0.1, 0.05, 6.9, IR);
+        kit.block(a + 0.15, b + 0.15, c - 0.15, b + 0.32, 0.08, 6.85, IR);
+      }
+    },
+    car(a, b, c, d, color, type = 'generic', face) {
+      const alongX = (c - a) >= (d - b), L = alongX ? (c - a) : (d - b), Wd = alongX ? (d - b) : (c - a);
+      const nose = (face === 'e' || face === 'w' || face === 'n' || face === 's') ? face : (alongX ? 'e' : 's');
+      const r = (s0, s1, t0, t1) => {
+        if (nose === 'w') return [a + s0 * L, b + t0 * Wd, a + s1 * L, b + t1 * Wd];
+        if (nose === 'e') return [c - s1 * L, b + t0 * Wd, c - s0 * L, b + t1 * Wd];
+        if (nose === 'n') return [a + t0 * Wd, b + s0 * L, a + t1 * Wd, b + s1 * L];
+        return [a + t0 * Wd, d - s1 * L, a + t1 * Wd, d - s0 * L];
+      };
+      const mid = (s, t) => { const q = r(s, s, t, t); return [(q[0] + q[2]) / 2, (q[1] + q[3]) / 2]; };
+      const addCyl = (s, t, rad, len, ax, col, o = {}) => {
+        const [x, y] = mid(s, t);
+        const g = new THREE.CylinderGeometry(rad, rad, len, o.seg || 16);
+        if (ax === 'x') g.rotateZ(Math.PI / 2);
+        else if (ax === 'z') g.rotateX(Math.PI / 2);
+        g.translate(Wx(x), o.h || rad, Wz(y));
+        const m = new THREE.Mesh(g, getMat(col, { m: o.m ?? 0.2, r: o.r ?? 0.4 }));
+        m.castShadow = m.receiveShadow = true; furn.add(m);
+      };
+      const wheelAx = (nose === 'e' || nose === 'w') ? 'z' : 'x';
+      const typeKey = type || 'generic';
+      if (typeKey === 'golf-r') {
+        const body = '#8a8680', glass = '#7ea0b8', bronze = '#6e4f2a', dark = '#1a1a1a';
+        kit.block(...r(0.02, 0.98, 0.06, 0.94), 0.55, 2.15, body, { m: .55, r: .35 });
+        kit.block(...r(0.08, 0.55, 0.10, 0.90), 2.15, 2.55, body, { m: .55, r: .35 }); // hood
+        kit.block(...r(0.36, 0.92, 0.10, 0.90), 2.15, 4.55, body, { m: .5, r: .38 }); // cabin / hatch
+        kit.block(...r(0.40, 0.86, 0.14, 0.86), 2.55, 4.45, glass, { m: .2, r: .12 });
+        kit.block(...r(0.88, 0.98, 0.18, 0.82), 2.15, 3.6, glass, { m: .2, r: .12 }); // rear hatch glass
+        kit.block(...r(0.00, 0.06, 0.18, 0.82), 1.15, 1.85, '#cfc8b8', { m: .3, r: .4 }); // grille
+        kit.block(...r(-0.01, 0.02, 0.22, 0.38), 1.35, 1.85, '#f4f0d8');
+        kit.block(...r(-0.01, 0.02, 0.62, 0.78), 1.35, 1.85, '#f4f0d8');
+        kit.block(...r(0.94, 1.0, 0.18, 0.38), 1.6, 2.15, '#a03030'); // tails
+        kit.block(...r(0.94, 1.0, 0.62, 0.82), 1.6, 2.15, '#a03030');
+        for (const [ws, wt] of [[0.18, 0.0], [0.72, 0.0], [0.18, 0.90], [0.72, 0.90]]) {
+          addCyl(ws, wt + 0.05, 0.72, 0.38, wheelAx, bronze, { h: 0.72, m: .4, r: .35 });
+          addCyl(ws, wt + 0.05, 0.28, 0.40, wheelAx, dark, { h: 0.72, m: .2, r: .6 });
+        }
+      } else if (typeKey === 'lexus-gx') {
+        const body = color || '#161616', glass = '#5a6a72', blk = '#0d0d0d';
+        kit.block(...r(0.02, 0.98, 0.05, 0.95), 0.85, 3.15, body, { m: .15, r: .72 }); // matte/satin
+        kit.block(...r(0.10, 0.55, 0.08, 0.92), 3.15, 3.55, body, { m: .15, r: .72 });
+        kit.block(...r(0.38, 0.95, 0.08, 0.92), 3.15, 5.85, body, { m: .15, r: .72 });
+        kit.block(...r(0.42, 0.88, 0.14, 0.86), 3.55, 5.7, glass, { m: .15, r: .15 });
+        // spindle grille (wide at bottom, pinched mid) + roof rack
+        kit.block(...r(0.00, 0.07, 0.22, 0.78), 1.15, 2.15, blk, { m: .2, r: .5 });
+        kit.block(...r(0.00, 0.07, 0.30, 0.70), 2.15, 2.85, blk, { m: .2, r: .5 });
+        kit.block(...r(-0.01, 0.03, 0.18, 0.36), 1.7, 2.4, '#e8e4d4');
+        kit.block(...r(-0.01, 0.03, 0.64, 0.82), 1.7, 2.4, '#e8e4d4');
+        kit.block(...r(0.42, 0.90, 0.12, 0.18), 5.9, 6.25, blk);
+        kit.block(...r(0.42, 0.90, 0.82, 0.88), 5.9, 6.25, blk);
+        kit.block(...r(0.42, 0.48, 0.12, 0.88), 5.9, 6.2, blk);
+        kit.block(...r(0.84, 0.90, 0.12, 0.88), 5.9, 6.2, blk);
+        for (const [ws, wt] of [[0.20, 0.0], [0.78, 0.0], [0.20, 0.90], [0.78, 0.90]]) {
+          addCyl(ws, wt + 0.05, 0.85, 0.42, wheelAx, blk, { h: 0.85, m: .15, r: .5 });
+          addCyl(ws, wt + 0.05, 0.32, 0.44, wheelAx, '#222', { h: 0.85, m: .1, r: .6 });
+        }
+      } else if (typeKey === 'g63') {
+        const body = color || '#0a0a0a', glass = '#4a5560', chrome = '#c8c8cc', blk = '#050505', red = '#c01010';
+        // boxy upright body, gloss black
+        kit.block(...r(0.01, 0.99, 0.04, 0.96), 0.95, 3.35, body, { m: .75, r: .18 });
+        kit.block(...r(0.12, 0.50, 0.06, 0.94), 3.35, 3.7, body, { m: .75, r: .18 });
+        kit.block(...r(0.32, 0.98, 0.06, 0.94), 3.35, 6.35, body, { m: .75, r: .18 }); // almost-vertical cabin
+        kit.block(...r(0.38, 0.92, 0.12, 0.88), 3.7, 6.2, glass, { m: .2, r: .1 });
+        // Panamericana vertical-slat grille + big star
+        kit.block(...r(0.00, 0.06, 0.20, 0.80), 1.35, 2.85, blk, { m: .4, r: .4 });
+        for (let i = 0; i < 7; i++) {
+          const t0 = 0.24 + i * 0.075, t1 = t0 + 0.03;
+          kit.block(...r(0.00, 0.055, t0, t1), 1.45, 2.75, chrome, { m: .8, r: .25 });
+        }
+        kit.block(...r(-0.01, 0.04, 0.44, 0.56), 1.85, 2.45, chrome, { m: .85, r: .2 }); // star disc
+        // round halo headlights
+        addCyl(0.01, 0.22, 0.42, 0.12, (wheelAx === 'z' ? 'x' : 'z'), '#e8f4ff', { h: 2.15, m: .1, r: .15, seg: 20 });
+        addCyl(0.01, 0.78, 0.42, 0.12, (wheelAx === 'z' ? 'x' : 'z'), '#e8f4ff', { h: 2.15, m: .1, r: .15, seg: 20 });
+        addCyl(0.01, 0.22, 0.18, 0.13, (wheelAx === 'z' ? 'x' : 'z'), '#f8fbff', { h: 2.15, m: .1, r: .1, seg: 16 });
+        addCyl(0.01, 0.78, 0.18, 0.13, (wheelAx === 'z' ? 'x' : 'z'), '#f8fbff', { h: 2.15, m: .1, r: .1, seg: 16 });
+        // chrome side trim + side steps
+        kit.block(...r(0.15, 0.85, 0.02, 0.06), 2.35, 2.55, chrome, { m: .8, r: .25 });
+        kit.block(...r(0.15, 0.85, 0.94, 0.98), 2.35, 2.55, chrome, { m: .8, r: .25 });
+        kit.block(...r(0.18, 0.80, -0.04, 0.04), 0.95, 1.2, chrome, { m: .7, r: .3 });
+        kit.block(...r(0.18, 0.80, 0.96, 1.04), 0.95, 1.2, chrome, { m: .7, r: .3 });
+        for (const [ws, wt] of [[0.22, 0.0], [0.78, 0.0], [0.22, 0.90], [0.78, 0.90]]) {
+          addCyl(ws, wt + 0.05, 0.88, 0.44, wheelAx, blk, { h: 0.88, m: .4, r: .35 });
+          addCyl(ws, wt + 0.05, 0.34, 0.46, wheelAx, '#1a1a1a', { h: 0.88, m: .2, r: .5 });
+          // red brake calipers
+          const [wx, wy] = mid(ws, wt + 0.05);
+          kit.block(wx - 0.18, wy - 0.18, wx + 0.18, wy + 0.18, 0.55, 1.15, red, { m: .2, r: .4 });
+        }
+      } else {
+        kit.block(...r(0, 1, .03, .97), 0.6, 3.3, color, { m: .3, r: .35 });
+        kit.block(...r(.25, .68, .1, .9), 3.3, 4.9, '#9fc4dc', { m: .2, r: .2 });
+        for (const [ws, wt] of [[.12, 0], [.75, 0], [.12, .93], [.75, .93]]) kit.block(...r(ws, ws + .1, wt, wt + .07), 0, 1.6, '#151515');
+      }
     },
   };
   if (typeof M.furnish === 'function') M.furnish(kit);
   else if (Array.isArray(M.furnish)) { // JSON models: a list of [method, ...args] calls on the kit
     for (const op of M.furnish) {
-      if (!Array.isArray(op) || !['block', 'plane', 'water', 'bed', 'car'].includes(op[0])) continue;
+      if (!Array.isArray(op) || !['block', 'plane', 'water', 'bed', 'car', 'firewood', 'zDoor'].includes(op[0])) continue;
       const args = op.slice(1).map(v => (typeof v === 'number' || typeof v === 'string' || (v && typeof v === 'object' && !Array.isArray(v))) ? v : undefined);
       try { kit[op[0]](...args); } catch (e) { console.warn('skipped furnish op', op, e); }
     }
   }
+  if (currentStyle === 'english-country') applyEnglishCountry(kit, st, H, WS);
 
   // roofs
   roof = new THREE.Group(); roof.visible = roofOn; root.add(roof);
@@ -292,7 +596,7 @@ function buildModel(model) {
     });
   }
   // flat ceilings for 9' rooms (visible with the roof on; vaulted rooms show the roof underside)
-  ceilings = mesh((M.ceilings || []).map(r => { const g = planeRect(r[0], r[1], r[2], r[3], r[4] || H, 4); return g; }), MAT.ceiling, false);
+  ceilings = mesh((M.ceilings || []).map(r => { const g = planeRect(r[0], r[1], r[2], r[3], r[4] || H, 4); return g; }), (st.ceiling && MAT[st.ceiling]) || MAT.ceiling, false);
   if (ceilings) { ceilings.visible = roofOn; root.add(ceilings); }
 
   // labels
@@ -519,9 +823,10 @@ function resolveAsset(src) {
   return src;
 }
 function setModelUi(engine, hasRoof = true) {
-  for (const id of ['bLabels', 'bCut', 'bPlan']) $(id).style.display = engine ? '' : 'none';
-  $('bRoof').style.display = engine || hasRoof ? '' : 'none';
-  if (engine) $('bPlan').style.display = M.planImage ? '' : 'none';
+  for (const id of ['bLabels', 'bCut', 'bPlan']) if ($(id)) $(id).style.display = engine ? '' : 'none';
+  if ($('bRoof')) $('bRoof').style.display = engine || hasRoof ? '' : 'none';
+  if (engine && $('bPlan')) $('bPlan').style.display = M.planImage ? '' : 'none';
+  if ($('styleWrap')) $('styleWrap').style.display = engine ? '' : 'none';
 }
 function showError(msg) { const er = $('err'); er.style.display = 'flex'; er.textContent = msg; }
 
@@ -549,6 +854,8 @@ async function loadExample(id) {
   if (currentId !== entry.id) return;
   if (mode === 'walk') exitWalk();
   disposeRoot();
+  currentStyle = (mod.default && mod.default.defaultStyle) || 'default';
+  syncStyleUi();
   buildModel(mod.default);
   setMode('orbit', true);
   window.app.current = entry.id;
@@ -593,8 +900,30 @@ function loop() {
   renderer.render(scene, camera); labelRenderer.render(scene, camera);
   requestAnimationFrame(loop);
 }
+function syncStyleUi() {
+  const sel = $('bStyle'), wrap = $('styleWrap');
+  if (!sel) return;
+  sel.value = STYLES[currentStyle] ? currentStyle : 'default';
+  if (wrap) wrap.style.display = loadedModel || currentStyle ? '' : 'none';
+}
+function setStyle(id) {
+  if (!STYLES[id]) id = 'default';
+  if (id === currentStyle) return;
+  currentStyle = id;
+  syncStyleUi();
+  if (!loadedModel) return;
+  const keep = mode, keepRoof = roofOn, keepLabels = labelsOn, keepCut = cutOn, keepPlan = planOn;
+  const walkPos = mode === 'walk' ? player.clone() : null, walkYaw = yaw, walkPitch = pitch;
+  if (mode === 'walk') exitWalk();
+  buildModel(loadedModel);
+  setMode(keep, true);
+  if (keep === 'walk' && walkPos) { player.copy(walkPos); yaw = walkYaw; pitch = walkPitch; }
+  setRoof(keepRoof); setLabels(keepLabels); setCut(keepCut); setPlan(keepPlan);
+}
+if ($('bStyle')) $('bStyle').addEventListener('change', e => setStyle(e.target.value));
+
 window.app = {
-  loadExample, scene, setMode, setRoof, setLabels, setCut, setPlan, camera, orbit, player,
+  loadExample, scene, setMode, setRoof, setLabels, setCut, setPlan, setStyle, camera, orbit, player,
   setLook: (y, p) => { yaw = y; pitch = p; }, setPlayer: (fx, fy) => player.set(Wx(fx), Wz(fy)), current: null,
 };
 if (SRC.kind === 'example') await loadExample(params.get('ex') || REGISTRY[0].id);

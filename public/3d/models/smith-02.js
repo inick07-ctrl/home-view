@@ -153,7 +153,7 @@ export default {
     k.block(71, 56, 76, 59.5, 0, 1.3, '#6b4a2f');
     k.block(62.6, 55.6, 65.4, 61.9, 0, 22, 'brick', { solid: true }); k.block(65.2, 57, 65.9, 60.5, 0.5, 3.5, '#1a1a1a');
     // garage cars (pickup, SUV, pickup) + bedroom porch posts
-    k.car(86.5, 54.8, 105, 60.6, '#e9e9e9'); k.car(88, 63.6, 104.5, 69.2, '#2b3a4a'); k.car(86.5, 73.2, 105, 79, '#6d6f72');
+    k.car(86.5, 54.8, 105, 60.6, '#8a8680', 'golf-r', 'e'); k.car(88, 63.6, 104.5, 69.2, '#161616', 'lexus-gx', 'e'); k.car(86.5, 73.2, 105, 79, '#0a0a0a', 'g63', 'e');
     // wood garage doors (closed), as in the exterior rendering
     k.block(77.7, 83.25, 93.5, 83.45, 0, 8, '#9b6a3e'); k.block(95.7, 83.25, 104.5, 83.45, 0, 8, '#9b6a3e');
     for (const x of [13.8, 41]) k.block(x - .35, 56.6, x + .35, 57.3, 0, 9, '#1e1f21', { solid: true });
