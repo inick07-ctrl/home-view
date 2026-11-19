@@ -27,6 +27,8 @@ document.body.appendChild(labelRenderer.domElement);
 
 const hemi = new THREE.HemisphereLight('#ffffff', '#c9c1b2', 0.95);
 scene.add(hemi);
+const amb = new THREE.AmbientLight('#ffffff', 0);
+scene.add(amb);
 const sun = new THREE.DirectionalLight('#fff3df', 1.6);
 sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0006;
 scene.add(sun, sun.target);
@@ -53,71 +55,71 @@ const TEX = {
   brick: canvasTex((g, s) => { g.fillStyle = '#9a958e'; g.fillRect(0, 0, s, s); const rows = 16; for (let y = 0; y < rows; y++) for (let x = 0; x < 5; x++) { const v = 120 + rnd(x * 31 + y * 7) * 45; g.fillStyle = `rgb(${v},${v - 3},${v - 8})`; g.fillRect(x * s / 4 - (y % 2) * s / 8 + 1.5, y * s / rows + 1.5, s / 4 - 3, s / rows - 3); } }),
   metal: canvasTex((g, s) => { g.fillStyle = '#1d1e20'; g.fillRect(0, 0, s, s); for (let i = 0; i < 4; i++) { g.fillStyle = 'rgba(255,255,255,.10)'; g.fillRect(i * s / 4, 0, 3, s); g.fillStyle = 'rgba(0,0,0,.5)'; g.fillRect(i * s / 4 + 3, 0, 2, s); } }),
   shingle: canvasTex((g, s) => { g.fillStyle = '#4b5159'; g.fillRect(0, 0, s, s); for (let y = 0; y < 8; y++) { g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(0, y * s / 8, s, 2); for (let x = 0; x < 4; x++) g.fillRect(x * s / 4 + (y % 2) * s / 8, y * s / 8, 2, s / 8); } }),
-  // English Country: dark-stained board walls, beamed plank ceilings, irregular flagstone, limewash plaster
-  darkWood: canvasTex((g, s) => {
-    const n = 7;
-    for (let i = 0; i < n; i++) {
-      const v = 28 + rnd(i + 3) * 18;
-      g.fillStyle = `rgb(${v + 8},${v - 2},${v - 8})`;
-      g.fillRect(i * s / n, 0, s / n, s);
-      g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(i * s / n, 0, 2, s);
-      g.fillStyle = 'rgba(80,60,40,.18)'; g.fillRect(i * s / n + 3, 0, 2, s);
-      for (let k = 0; k < 8; k++) {
-        g.fillStyle = `rgba(${20 + rnd(i * 9 + k) * 40},18,10,.12)`;
-        g.fillRect(i * s / n + rnd(i + k) * s / n, rnd(k + 4) * s, 1, 12 + rnd(k) * 20);
-      }
+  // English Country (bright, airy): cream limewash walls, pale plaster ceilings,
+  // light oak board accents, honey/cream flagstone, pale limestone
+  limewash: canvasTex((g, s) => {
+    g.fillStyle = '#f7f3e8'; g.fillRect(0, 0, s, s);
+    for (let i = 0; i < 1600; i++) {
+      const v = 236 + rnd(i) * 16;
+      g.fillStyle = `rgba(${v},${v - 6},${v - 18},${0.03 + rnd(i + 3) * 0.05})`;
+      g.beginPath(); g.arc(rnd(i + 1) * s, rnd(i + 2) * s, 2 + rnd(i + 5) * 10, 0, 6.3); g.fill();
     }
   }, 512),
-  plankCeiling: canvasTex((g, s) => {
-    const n = 8;
+  palePlaster: canvasTex((g, s) => {
+    g.fillStyle = '#faf7f0'; g.fillRect(0, 0, s, s);
+    for (let i = 0; i < 900; i++) {
+      const v = 242 + rnd(i + 9) * 12;
+      g.fillStyle = `rgba(${v},${v - 3},${v - 10},${0.025 + rnd(i + 2) * 0.04})`;
+      g.beginPath(); g.arc(rnd(i + 4) * s, rnd(i + 6) * s, 3 + rnd(i) * 12, 0, 6.3); g.fill();
+    }
+  }, 512),
+  lightOak: canvasTex((g, s) => {
+    const n = 7;
     for (let i = 0; i < n; i++) {
-      const v = 22 + rnd(i + 11) * 14;
-      g.fillStyle = `rgb(${v + 6},${v},${v - 4})`;
-      g.fillRect(0, i * s / n, s, s / n);
-      g.fillStyle = 'rgba(0,0,0,.5)'; g.fillRect(0, i * s / n, s, 2);
-      g.fillStyle = 'rgba(90,70,50,.12)'; g.fillRect(0, i * s / n + 3, s, 1.5);
+      const v = 208 + rnd(i + 3) * 20;
+      g.fillStyle = `rgb(${v + 16},${v - 4},${v - 42})`;
+      g.fillRect(i * s / n, 0, s / n, s);
+      g.fillStyle = 'rgba(150,125,90,.28)'; g.fillRect(i * s / n, 0, 2, s);
+      g.fillStyle = 'rgba(255,250,240,.18)'; g.fillRect(i * s / n + 3, 0, 2, s);
     }
   }, 512),
   slate: canvasTex((g, s) => {
-    g.fillStyle = '#2a2c2e'; g.fillRect(0, 0, s, s);
+    g.fillStyle = '#e4dccf'; g.fillRect(0, 0, s, s);
     const stones = [
       [0, 0, 0.42, 0.38], [0.43, 0, 1, 0.28], [0.43, 0.29, 0.72, 0.58], [0.73, 0.29, 1, 0.62],
       [0, 0.39, 0.28, 0.7], [0.29, 0.39, 0.62, 0.78], [0, 0.71, 0.35, 1], [0.36, 0.79, 0.7, 1],
       [0.63, 0.59, 1, 1], [0.71, 0, 1, 0.28],
     ];
+    const palettes = [
+      [228, 214, 186], [234, 224, 206], [214, 212, 204], [236, 220, 190], [208, 202, 192],
+    ];
     for (let i = 0; i < stones.length; i++) {
       const [x0, y0, x1, y1] = stones[i];
-      const v = 48 + rnd(i + 21) * 32;
-      const r = v + 4, gv = v, b = v - 6;
-      g.fillStyle = `rgb(${r},${gv},${b})`;
+      const [pr, pgv, pb] = palettes[i % palettes.length];
+      const j = rnd(i + 21) * 14 - 7;
+      g.fillStyle = `rgb(${pr + j},${pgv + j * 0.8},${pb + j * 0.5})`;
       const pad = 2;
       g.fillRect(x0 * s + pad, y0 * s + pad, (x1 - x0) * s - pad * 2, (y1 - y0) * s - pad * 2);
-      g.strokeStyle = 'rgba(10,10,12,.55)'; g.lineWidth = 2;
+      g.strokeStyle = 'rgba(170,158,140,.4)'; g.lineWidth = 2;
       g.strokeRect(x0 * s + pad, y0 * s + pad, (x1 - x0) * s - pad * 2, (y1 - y0) * s - pad * 2);
-      g.fillStyle = 'rgba(255,255,255,.06)';
-      g.fillRect(x0 * s + pad + 2, y0 * s + pad + 2, (x1 - x0) * s * 0.35, 3);
+      g.fillStyle = 'rgba(255,255,255,.16)';
+      g.fillRect(x0 * s + pad + 2, y0 * s + pad + 2, (x1 - x0) * s * 0.4, 3);
     }
   }, 512),
-  limewash: canvasTex((g, s) => {
-    g.fillStyle = '#efe6d4'; g.fillRect(0, 0, s, s);
-    for (let i = 0; i < 1800; i++) {
-      const v = 210 + rnd(i) * 30;
-      g.fillStyle = `rgba(${v},${v - 10},${v - 28},${0.04 + rnd(i + 3) * 0.06})`;
-      g.beginPath(); g.arc(rnd(i + 1) * s, rnd(i + 2) * s, 2 + rnd(i + 5) * 8, 0, 6.3); g.fill();
+  lightStone: canvasTex((g, s) => {
+    g.fillStyle = '#e8e0d2'; g.fillRect(0, 0, s, s);
+    g.strokeStyle = 'rgba(180,170,150,.35)'; g.lineWidth = 2;
+    g.strokeRect(1, 1, s - 2, s - 2);
+    g.beginPath(); g.moveTo(s / 2, 0); g.lineTo(s / 2, s / 2); g.moveTo(0, s / 2); g.lineTo(s, s / 2); g.stroke();
+    for (let i = 0; i < 400; i++) {
+      const v = 220 + rnd(i) * 25;
+      g.fillStyle = `rgba(${v},${v - 8},${v - 20},.08)`;
+      g.fillRect(rnd(i + 1) * s, rnd(i + 2) * s, 3, 3);
     }
-  }, 512),
-  oakBeam: canvasTex((g, s) => {
-    const n = 5;
-    for (let i = 0; i < n; i++) {
-      const v = 90 + rnd(i + 8) * 28;
-      g.fillStyle = `rgb(${v + 20},${v - 15},${v - 40})`;
-      g.fillRect(0, i * s / n, s, s / n);
-      g.fillStyle = 'rgba(40,20,8,.35)'; g.fillRect(0, i * s / n, s, 2);
-    }
-  }),
+  }, 256),
 };
 TEX.grass.repeat.set(90, 90);
-const TEXSCALE = { wood: 6, tile: 4, concrete: 10, porch: 4, gym: 4, stone: 3, terrace: 6, paver: 6, board: 4, brick: 5, metal: 6, shingle: 4, darkWood: 5, plankCeiling: 6, slate: 8, limewash: 8, oakBeam: 3 };
+const TEXSCALE = { wood: 6, tile: 4, concrete: 10, porch: 4, gym: 4, stone: 3, terrace: 6, paver: 6, board: 4, brick: 5, metal: 6, shingle: 4, limewash: 8, palePlaster: 10, lightOak: 5, slate: 8, lightStone: 3 };
 const MAT = {};
 for (const k of ['wood', 'tile', 'concrete', 'porch', 'gym', 'stone', 'terrace', 'paver']) MAT[k] = new THREE.MeshLambertMaterial({ map: TEX[k] });
 MAT.brick = new THREE.MeshStandardMaterial({ map: TEX.brick, roughness: .95 });
@@ -126,23 +128,25 @@ MAT.glass = new THREE.MeshStandardMaterial({ color: '#9fd0ee', roughness: .1, me
 MAT.water = new THREE.MeshStandardMaterial({ color: '#36b3d9', roughness: .08, metalness: .15, transparent: true, opacity: .88, emissive: '#0b4f66', emissiveIntensity: .25 });
 MAT.slab = new THREE.MeshLambertMaterial({ color: '#9a9a96' });
 MAT.ceiling = new THREE.MeshLambertMaterial({ color: '#faf8f3', side: THREE.DoubleSide });
-MAT.darkWood = new THREE.MeshStandardMaterial({ map: TEX.darkWood, roughness: .82, color: '#ffffff' });
-MAT.plankCeiling = new THREE.MeshStandardMaterial({ map: TEX.plankCeiling, roughness: .78, side: THREE.DoubleSide });
-MAT.slate = new THREE.MeshStandardMaterial({ map: TEX.slate, roughness: .38, metalness: .12, color: '#ffffff' });
 MAT.limewash = new THREE.MeshStandardMaterial({ map: TEX.limewash, roughness: .95, color: '#ffffff' });
-MAT.oakBeam = new THREE.MeshStandardMaterial({ map: TEX.oakBeam, roughness: .7, color: '#ffffff' });
-MAT.darkFrame = new THREE.MeshStandardMaterial({ color: '#1a1612', roughness: .7 });
+MAT.palePlaster = new THREE.MeshStandardMaterial({ map: TEX.palePlaster, roughness: .96, color: '#ffffff', side: THREE.DoubleSide });
+MAT.lightOak = new THREE.MeshStandardMaterial({ map: TEX.lightOak, roughness: .8, color: '#ffffff' });
+MAT.slate = new THREE.MeshStandardMaterial({ map: TEX.slate, roughness: .5, metalness: .04, color: '#ffffff' });
+MAT.lightStone = new THREE.MeshStandardMaterial({ map: TEX.lightStone, roughness: .88, color: '#ffffff' });
+MAT.softFrame = new THREE.MeshStandardMaterial({ color: '#8c927c', roughness: .75 });
 
 const STYLES = {
   default: { id: 'default', name: 'Default' },
   'english-country': {
     id: 'english-country', name: 'English Country',
     floors: { wood: 'slate', tile: 'slate', gym: 'slate', stone: 'slate' },
-    intWalls: 'darkWood', ceiling: 'plankCeiling',
-    hemi: 0.62, hemiColor: '#ffe3b8', groundColor: '#6a5a48',
-    sun: 1.15, sunColor: '#ffd4a0', bg: '#d7cfc2',
-    fogNear: 180, fogFar: 520,
-    amber: '#ffb45a',
+    intWalls: 'limewash', ceiling: 'palePlaster',
+    ambient: 0.55, ambColor: '#fff8f0',
+    hemi: 1.5, hemiColor: '#fff8f0', groundColor: '#d5ccba',
+    sun: 2.2, sunColor: '#fff6e4', bg: '#e8eef4',
+    fogNear: 280, fogFar: 620,
+    amber: '#ffd9a0',
+    frame: '#8c927c',
   },
 };
 let currentStyle = 'default';
@@ -185,57 +189,57 @@ function mesh(geos, mat, cast = true) {
 
 
 function applyEnglishCountry(kit, st, H, WS) {
-  const amber = st.amber || '#ffb45a';
-  // heavy exposed oak beams just under each flat ceiling
-  for (const r of (M.ceilings || [])) {
-    const x0 = r[0], y0 = r[1], x1 = r[2], y1 = r[3], h = (r[4] || H) - 0.35;
-    const alongX = (x1 - x0) >= (y1 - y0);
-    const span = alongX ? (x1 - x0) : (y1 - y0);
-    const nBeams = Math.max(2, Math.round(span / 6));
-    for (let i = 1; i < nBeams; i++) {
-      const t = i / nBeams;
-      if (alongX) kit.block(x0 + t * (x1 - x0) - 0.3, y0 + 0.2, x0 + t * (x1 - x0) + 0.3, y1 - 0.2, h - 0.45, h, 'oakBeam');
-      else kit.block(x0 + 0.2, y0 + t * (y1 - y0) - 0.3, x1 - 0.2, y0 + t * (y1 - y0) + 0.3, h - 0.45, h, 'oakBeam');
-    }
-  }
-  // limewash plaster panels on living/bedroom walls to balance the dark wood
-  const limeRooms = /^(Family|Dining|Primary Suite|Bedroom 2|Bedroom 3|Office)/i;
+  const amber = st.amber || '#ffd9a0';
+  const frame = st.frame || '#8c927c';
+  const inside = (x, y) => M.rooms.some(r => !(r[7]?.outside) && x > r[3] && x < r[5] && y > r[4] && y < r[6]);
+  // light oak wainscot and chair-rail accents on hall / foyer / mudroom walls
+  const accentRooms = /^(Entry|Family Foyer|Foyer|Hall|Mudroom|Utility)/i;
   for (const room of M.rooms) {
     const [name, , , a, b, c, d, o = {}] = room;
-    if (o.outside || !limeRooms.test(name || '')) continue;
-    const inset = 0.12, h0 = 3.2, h1 = Math.min(9.5, (o.vaulted ? 12 : (H || 10)) - 0.4);
-    // panels on the longer pair of walls
+    if (o.outside || !accentRooms.test(name || '')) continue;
+    const inset = 0.1, rail = 3.15;
     if ((c - a) >= (d - b)) {
-      kit.block(a + 0.4, b + inset, c - 0.4, b + inset + 0.05, h0, h1, 'limewash');
-      kit.block(a + 0.4, d - inset - 0.05, c - 0.4, d - inset, h0, h1, 'limewash');
+      kit.block(a + 0.35, b + inset, c - 0.35, b + inset + 0.06, 0, rail, 'lightOak');
+      kit.block(a + 0.35, d - inset - 0.06, c - 0.35, d - inset, 0, rail, 'lightOak');
+      kit.block(a + 0.35, b + inset, c - 0.35, b + inset + 0.08, rail, rail + 0.12, 'lightOak');
+      kit.block(a + 0.35, d - inset - 0.08, c - 0.35, d - inset, rail, rail + 0.12, 'lightOak');
     } else {
-      kit.block(a + inset, b + 0.4, a + inset + 0.05, d - 0.4, h0, h1, 'limewash');
-      kit.block(c - inset - 0.05, b + 0.4, c - inset, d - 0.4, h0, h1, 'limewash');
+      kit.block(a + inset, b + 0.35, a + inset + 0.06, d - 0.35, 0, rail, 'lightOak');
+      kit.block(c - inset - 0.06, b + 0.35, c - inset, d - 0.35, 0, rail, 'lightOak');
+      kit.block(a + inset, b + 0.35, a + inset + 0.08, d - 0.35, rail, rail + 0.12, 'lightOak');
+      kit.block(c - inset - 0.08, b + 0.35, c - inset, d - 0.35, rail, rail + 0.12, 'lightOak');
     }
   }
-  // dark frames around windows
+  // soft sage / warm-gray window frames + daylight spilling in
   for (const w of (WS?.win || [])) {
     const x0 = w[0], y0 = w[1], x1 = w[2], y1 = w[3], sill = w[4] ?? 3, head = w[5] ?? 7;
     const vert = (x1 - x0) < (y1 - y0);
     const t = 0.12;
     if (vert) {
-      kit.block(x0 - t, y0, x1 + t, y0 + t, sill - t, head + t, '#1a1612');
-      kit.block(x0 - t, y1 - t, x1 + t, y1, sill - t, head + t, '#1a1612');
-      kit.block(x0 - t, y0, x1 + t, y1, sill - t, sill + t, '#1a1612');
-      kit.block(x0 - t, y0, x1 + t, y1, head - t, head + t, '#1a1612');
+      kit.block(x0 - t, y0, x1 + t, y0 + t, sill - t, head + t, frame);
+      kit.block(x0 - t, y1 - t, x1 + t, y1, sill - t, head + t, frame);
+      kit.block(x0 - t, y0, x1 + t, y1, sill - t, sill + t, frame);
+      kit.block(x0 - t, y0, x1 + t, y1, head - t, head + t, frame);
     } else {
-      kit.block(x0, y0 - t, x0 + t, y1 + t, sill - t, head + t, '#1a1612');
-      kit.block(x1 - t, y0 - t, x1, y1 + t, sill - t, head + t, '#1a1612');
-      kit.block(x0, y0 - t, x1, y1 + t, sill - t, sill + t, '#1a1612');
-      kit.block(x0, y0 - t, x1, y1 + t, head - t, head + t, '#1a1612');
+      kit.block(x0, y0 - t, x0 + t, y1 + t, sill - t, head + t, frame);
+      kit.block(x1 - t, y0 - t, x1, y1 + t, sill - t, head + t, frame);
+      kit.block(x0, y0 - t, x1, y1 + t, sill - t, sill + t, frame);
+      kit.block(x0, y0 - t, x1, y1 + t, head - t, head + t, frame);
     }
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, ch = (sill + head) / 2;
+    let lx = cx, ly = cy;
+    if (vert) lx = inside(cx - 0.8, cy) ? cx - 0.45 : cx + 0.45;
+    else ly = inside(cx, cy - 0.8) ? cy - 0.45 : cy + 0.45;
+    const dl = new THREE.PointLight('#fff6e8', 1.35, 16, 2);
+    dl.position.set(Wx(lx), ch, Wz(ly));
+    dl.castShadow = false;
+    root.add(dl);
   }
-  // warm amber pendants in main rooms + a few sconces, plus actual point lights
   // a couple of brighter work lights in the garage so Nick's cars read clearly
   for (const room of M.rooms) {
     const [name, , , a, b, c, d, o = {}] = room;
     if (!/^Bay /.test(name || '')) continue;
-    const light = new THREE.PointLight('#fff3e0', 1.6, 24, 2);
+    const light = new THREE.PointLight('#fff3e0', 1.8, 24, 2);
     light.position.set(Wx((a + c) / 2), 8.5, Wz((b + d) / 2));
     root.add(light);
   }
@@ -246,17 +250,17 @@ function applyEnglishCountry(kit, st, H, WS) {
     const cx = (a + c) / 2, cy = (b + d) / 2;
     const ch = /Kitchen|Dining/.test(name) ? 14 : (/Family$/.test(name) ? 12 : 10);
     const ph = ch - 2.4;
-    kit.block(cx - 0.15, cy - 0.15, cx + 0.15, cy + 0.15, ph + 0.6, ch - 0.2, '#2a2218');
-    kit.block(cx - 0.45, cy - 0.45, cx + 0.45, cy + 0.45, ph, ph + 0.55, '#5a3a18', { r: .4, m: .2 });
-    const light = new THREE.PointLight(amber, 1.15, 22, 2);
+    kit.block(cx - 0.15, cy - 0.15, cx + 0.15, cy + 0.15, ph + 0.6, ch - 0.2, '#c4b08a');
+    kit.block(cx - 0.45, cy - 0.45, cx + 0.45, cy + 0.45, ph, ph + 0.55, '#d4b07a', { r: .45, m: .15 });
+    const light = new THREE.PointLight(amber, 0.9, 22, 2);
     light.position.set(Wx(cx), ph, Wz(cy));
     light.castShadow = false;
     root.add(light);
   }
   // wall sconces near a few doorways (foyer / hall / entry)
   const sconceAt = (x, y, h = 5.6) => {
-    kit.block(x - 0.18, y - 0.18, x + 0.18, y + 0.18, h, h + 0.7, '#c8a050', { r: .35, m: .3 });
-    const sl = new THREE.PointLight(amber, 0.55, 10, 2);
+    kit.block(x - 0.18, y - 0.18, x + 0.18, y + 0.18, h, h + 0.7, '#e0c788', { r: .4, m: .2 });
+    const sl = new THREE.PointLight(amber, 0.45, 10, 2);
     sl.position.set(Wx(x), h + 0.3, Wz(y));
     root.add(sl);
   };
@@ -279,7 +283,15 @@ function buildModel(model) {
   const H = M.wallH || 9;
   const st = STYLES[currentStyle] || STYLES.default;
   hemi.intensity = st.hemi ?? 0.95; hemi.color.set(st.hemiColor || '#ffffff'); hemi.groundColor.set(st.groundColor || '#c9c1b2');
+  amb.intensity = st.ambient ?? 0; amb.color.set(st.ambColor || '#ffffff');
   sun.intensity = st.sun ?? 1.6; sun.color.set(st.sunColor || '#fff3df');
+  if (currentStyle === 'english-country') {
+    MAT.glass.color.set('#cfe6f6'); MAT.glass.opacity = 0.3;
+    MAT.glass.emissive.set('#fff3d2'); MAT.glass.emissiveIntensity = 0.4;
+  } else {
+    MAT.glass.color.set('#9fd0ee'); MAT.glass.opacity = 0.45;
+    MAT.glass.emissive.set('#000000'); MAT.glass.emissiveIntensity = 0;
+  }
   const bg = st.bg || '#cfe3f2'; scene.background.set(bg);
   if (scene.fog) { scene.fog.color.set(bg); scene.fog.near = st.fogNear || 260; scene.fog.far = st.fogFar || 560; }
   // bounds from rooms
@@ -353,6 +365,7 @@ function buildModel(model) {
   const furn = new THREE.Group(); root.add(furn);
   const colorMats = {};
   const getMat = (c, o = {}) => {
+    if (currentStyle === 'english-country' && c === 'stone') c = 'lightStone';
     if (MAT[c]) return MAT[c];
     const key = c + (o.m ?? 0) + (o.r ?? .8);
     return colorMats[key] ||= new THREE.MeshStandardMaterial({ color: c, roughness: o.r ?? .8, metalness: o.m ?? 0 });
@@ -396,12 +409,12 @@ function buildModel(model) {
         }
       }
       // niche frame
-      kit.block(a - 0.08, b - 0.08, c + 0.08, b, 0, h, '#2a221c');
-      kit.block(a - 0.08, d, c + 0.08, d + 0.08, 0, h, '#2a221c');
+      kit.block(a - 0.08, b - 0.08, c + 0.08, b, 0, h, 'lightOak');
+      kit.block(a - 0.08, d, c + 0.08, d + 0.08, 0, h, 'lightOak');
     },
     zDoor(a, b, c, d, face = 'n') {
       const horiz = (c - a) >= (d - b);
-      const WD = '#3a2a1c', IR = '#2a1c12';
+      const WD = '#d2c0a0', IR = '#b9a07c';
       kit.block(a, b, c, d, 0, 7, WD, { r: .85 });
       // Z brace + ledges
       if (horiz) {
