@@ -1012,7 +1012,7 @@ function loop() {
     for (const f of fires) {
       const flick = 0.82 + 0.18 * Math.sin(t * 11 + f.t0) + 0.1 * Math.sin(t * 27 + 1.4);
       f.light.intensity = f.base * flick;
-      if (f.ember) f.ember.material.emissiveIntensity = 1.1 + 0.5 * flick;
+      if (f.ember) (f.ember.material || f.ember).emissiveIntensity = 1.1 + 0.5 * flick;
       for (const fl of f.flames) {
         const k = 0.84 + 0.22 * Math.sin(t * (8.5 + fl.phase) + fl.phase);
         fl.mesh.scale.y = k;
