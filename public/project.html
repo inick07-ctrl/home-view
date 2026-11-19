@@ -49,12 +49,18 @@ function render() {
   document.title = P.name + ' — Home View';
   if (document.activeElement !== $('#name')) $('#name').value = P.name;
   const model = P.files.find(f => f.kind === 'model');
-  $('#open3d').style.display = model ? '' : 'none';
+  const canOpen = !!(model || P.exampleId);
+  $('#open3d').style.display = canOpen ? '' : 'none';
   $('#open3d').href = '/viewer?p=' + enc(P.id);
   $('#modelDel').style.display = model ? '' : 'none';
-  $('#modelInfo').innerHTML = model
-    ? `<div class="row"><span class="badge acc">${esc(model.format.toUpperCase())}</span><span>${esc(model.name)}</span><span class="muted" style="font-size:12.5px">${fmtSize(model.size)}</span></div>`
-    : '<div class="notice">No 3D model yet. Your images are shown as a gallery below. Upload a 3D model any time to explore this project in 3D.</div>';
+  if (model) {
+    $('#modelInfo').innerHTML = `<div class="row"><span class="badge acc">${esc(model.format.toUpperCase())}</span><span>${esc(model.name)}</span><span class="muted" style="font-size:12.5px">${fmtSize(model.size)}</span></div>`;
+  } else if (P.exampleId) {
+    const exLabel = P.exampleId.replace(/\b\w/g, c => c.toUpperCase()).replace(/-/g, ' ');
+    $('#modelInfo').innerHTML = `<div class="row" style="align-items:flex-start;gap:12px"><img alt="" src="/img/${enc(P.exampleId)}.jpg" style="width:140px;border-radius:8px;flex-shrink:0"><div>Saved from the <a href="/viewer?ex=${enc(P.exampleId)}">${esc(exLabel)}</a> example. The interactive 3D model, floor plan and interior style stay in sync with that example. You can still add your own photos or notes, or upload a different 3D model to replace it.</div></div>`;
+  } else {
+    $('#modelInfo').innerHTML = '<div class="notice">No 3D model yet. Your images are shown as a gallery below. Upload a 3D model any time to explore this project in 3D.</div>';
+  }
   renderGallery($('#gallery'), P, fileUrl, { onDelete: async (f) => {
     if (!confirm('Delete ' + f.name + '?')) return;
     try { P = (await api(`projects/${enc(P.id)}/files/${enc(f.id)}`, { method: 'DELETE' })).project; render(); } catch (e) { toast(e.message); }

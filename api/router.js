@@ -5,6 +5,7 @@ import {
   makeSessionCookie, clearSessionCookie,
 } from '../server/auth.js';
 import { readJSON, writeJSON, writeJSONIfAbsent, remove, listAll, headBlob, streamBlob } from '../server/store.js';
+import { getExample } from '../server/examples.js';
 
 export const config = { maxDuration: 30 };
 
@@ -54,6 +55,7 @@ function publicProject(p, { owner = false } = {}) {
     id: p.id, name: p.name, notes: p.notes || '', createdAt: p.createdAt, updatedAt: p.updatedAt,
     files: (p.files || []).map(publicFile),
   };
+  if (p.exampleId) out.exampleId = p.exampleId;
   if (owner) out.shareToken = p.shareToken || null;
   return out;
 }
@@ -153,6 +155,28 @@ const routes = {
     const p = { id: newId(9), owner: user.id, name: cleanText(name, 120).trim() || 'Untitled project', notes: cleanText(notes, 20000), files: [], shareToken: null, createdAt: now, updatedAt: now };
     await writeJSON(projPath(user.id, p.id), p);
     send(res, 201, { project: publicProject(p, { owner: true }) });
+  },
+  'POST projects/from-example': async (req, res) => {
+    requireJson(req);
+    const user = await requireUser(req);
+    const { exampleId } = await readBody(req);
+    const ex = getExample(exampleId);
+    if (!ex) throw bad('Unknown example');
+    const metas = await listAll(`db/projects/${user.id}/`);
+    const existing = (await Promise.all(metas.map(m => readJSON(m.pathname)))).filter(Boolean);
+    const already = existing.find(p => p.exampleId === ex.id);
+    if (already) {
+      send(res, 200, { project: publicProject(already, { owner: true }), alreadySaved: true });
+      return;
+    }
+    if (metas.length >= 50) throw bad('Project limit reached (50)');
+    const now = new Date().toISOString();
+    const p = {
+      id: newId(9), owner: user.id, name: ex.name, notes: '', files: [],
+      shareToken: null, exampleId: ex.id, createdAt: now, updatedAt: now,
+    };
+    await writeJSON(projPath(user.id, p.id), p);
+    send(res, 201, { project: publicProject(p, { owner: true }), alreadySaved: false });
   },
   'GET projects/:id': async (req, res, { id }) => {
     const user = await requireUser(req);

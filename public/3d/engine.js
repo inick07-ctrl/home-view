@@ -947,6 +947,19 @@ async function loadProjectModel() {
   const p = data.project; projectFiles = p.files || [];
   const model = projectFiles.find(f => f.kind === 'model');
   $('brandName').textContent = p.name;
+  if (p.exampleId && !model) {
+    const entry = REGISTRY.find(r => r.id === p.exampleId);
+    if (!entry) return showError('This saved example is no longer available.');
+    const mod = await entry.load();
+    if (mode === 'walk') exitWalk();
+    disposeRoot();
+    currentStyle = (mod.default && mod.default.defaultStyle) || 'default';
+    syncStyleUi();
+    buildModel(mod.default);
+    setMode('orbit', true);
+    window.app.current = entry.id;
+    return;
+  }
   if (!model) return showError('This project has no 3D model yet. Add one from the project page.');
   const fr = await fetch(`${assetBase}/files/${model.id}`, { credentials: 'same-origin' });
   if (!fr.ok) return showError('Could not download the 3D model file.');
