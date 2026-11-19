@@ -1,10 +1,17 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#14191e"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Cpath d=%27M8 1 1 7h2v8h4v-5h2v5h4V7h2z%27 fill=%27%23e0a95a%27/%3E%3C/svg%3E"><link rel="stylesheet" href="/css/site.css">
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b1524"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Cpath d=%27M8 1 1 7h2v8h4v-5h2v5h4V7h2z%27 fill=%27%23e0a95a%27/%3E%3C/svg%3E"><link rel="stylesheet" href="/css/site.css">
 <title>Home View — your home projects in 3D</title>
 <meta name="description" content="Home View: keep your home plans, renders and photos together and explore them in interactive 3D.">
 </head><body>
-<main>
-  <section class="hero">
-    <div>
+<section class="hero-band">
+  <picture class="hero-media" aria-hidden="true">
+    <source media="(max-width: 700px)" type="image/webp" srcset="/img/hero-3d-sm.webp">
+    <source type="image/webp" srcset="/img/hero-3d.webp">
+    <source media="(max-width: 700px)" srcset="/img/hero-3d-sm.jpg">
+    <img src="/img/hero-3d.jpg" alt="" width="1280" height="720" decoding="async" fetchpriority="high">
+  </picture>
+  <div class="hero-shade" aria-hidden="true"></div>
+  <div class="hero-inner">
+    <div class="hero-copy">
       <h1>Your home projects, in one place and in 3D.</h1>
       <p class="lead">Create a free account to keep floor plans, renders and photos for each home project. Add a 3D model to orbit it, take the roof off and walk through the rooms. Share a read-only link when you're ready.</p>
       <div class="row" style="margin-top:16px"><a class="btn primary" href="#signup" data-tab="signup">Create an account</a><a class="btn" href="/examples">See example homes in 3D</a></div>
@@ -19,10 +26,11 @@
         <button class="btn primary" id="authBtn" style="width:100%;margin-top:6px" type="submit">Log in</button>
       </form>
     </div>
-  </section>
-  <section style="margin-top:36px">
-    <a href="/examples" class="hero-shot"><div class="shot card" style="padding:0;aspect-ratio:21/9;background-image:url(/img/hero.jpg)"></div></a>
-    <div class="grid" style="margin-top:16px">
+  </div>
+</section>
+<main>
+  <section>
+    <div class="grid">
       <div class="card"><h2>📐 Plans & photos</h2><p class="muted">Upload floor plans, renders and site photos to each project. Everything is private to you by default.</p></div>
       <div class="card"><h2>🏠 Interactive 3D</h2><p class="muted">3D overview, top-down plan, roof on/off, cutaway walls and a first-person walk-through, on desktop or phone.</p></div>
       <div class="card"><h2>🔗 Share a link</h2><p class="muted">Turn on a share link to give anyone a read-only view of one project. Turn it off any time.</p></div>

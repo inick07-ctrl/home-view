@@ -9,7 +9,7 @@ process.env.LOCAL_BLOB_DIR ||= path.join(root, '.localblob');
 process.env.SESSION_SECRET ||= crypto.randomBytes(32).toString('hex');
 const { default: handler } = await import('../api/router.js');
 const local = await import('../server/local-blob.js');
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml' };
 const STUB = `export async function upload(pathname, file, o) {
   const r = await fetch('/__dev/upload?pathname=' + encodeURIComponent(pathname) + '&ct=' + encodeURIComponent(o.contentType || file.type), { method: 'PUT', body: file });
   if (!r.ok) throw new Error('dev upload failed'); return r.json(); }`;

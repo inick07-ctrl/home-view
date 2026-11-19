@@ -10,8 +10,11 @@ import { getExample } from '../server/examples.js';
 export const config = { maxDuration: 30 };
 
 const MAX_UPLOAD = 50 * 1024 * 1024;
+const SITE_MAX_UPLOAD = 25 * 1024 * 1024;
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'image/heic', 'image/heif', 'application/pdf'];
+const SITE_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MODEL_TYPES = ['application/json', 'model/gltf-binary', 'model/gltf+json', 'application/octet-stream'];
+const SITE_KINDS = ['pano', 'ground'];
 
 const projPath = (uid, pid) => `db/projects/${uid}/${pid}.json`;
 const sharePath = (t) => `db/shares/${t}.json`;
@@ -50,10 +53,91 @@ async function requireUser(req) {
 
 const publicUser = (u) => ({ id: u.id, email: u.email, createdAt: u.createdAt });
 const publicFile = (f) => ({ id: f.id, name: f.name, kind: f.kind, format: f.format || null, contentType: f.contentType, size: f.size, uploadedAt: f.uploadedAt });
+function clampNum(v, lo, hi, fallback) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(hi, Math.max(lo, n));
+}
+function wrapDeg(v, fallback = 0) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return ((n % 360) + 360) % 360;
+}
+function publicSite(p) {
+  const site = p.site || {};
+  const files = p.files || [];
+  const pano = files.find(f => f.kind === 'pano');
+  const ground = files.find(f => f.kind === 'ground');
+  return {
+    pano: pano ? {
+      fileId: pano.id,
+      yaw: wrapDeg(site.panoYaw, 0),
+      height: clampNum(site.panoHeight, -20, 120, 6),
+    } : null,
+    ground: ground ? {
+      fileId: ground.id,
+      scale: clampNum(site.groundScale, 20, 2000, 200),
+      rot: wrapDeg(site.groundRot, 0),
+      x: clampNum(site.groundX, -2000, 2000, 0),
+      y: clampNum(site.groundY, -2000, 2000, 0),
+    } : null,
+    parcel: site.parcel ? publicParcel(site.parcel) : null,
+  };
+}
+function publicParcel(parcel) {
+  return {
+    rings: parcel.rings,
+    rot: wrapDeg(parcel.rot, 0),
+    x: clampNum(parcel.x, -2000, 2000, 0),
+    y: clampNum(parcel.y, -2000, 2000, 0),
+    anchorLat: Number.isFinite(Number(parcel.anchorLat)) ? Number(parcel.anchorLat) : null,
+    anchorLon: Number.isFinite(Number(parcel.anchorLon)) ? Number(parcel.anchorLon) : null,
+    sourceName: String(parcel.sourceName || '').slice(0, 160),
+  };
+}
+function sanitizeParcel(raw) {
+  if (raw === null) return null;
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.rings)) throw bad('Invalid parcel');
+  if (!raw.rings.length) throw bad('Parcel is missing coordinates');
+  if (raw.rings.length > 20) throw bad('Too many parcel rings');
+  const rings = raw.rings.map(ring => {
+    if (!Array.isArray(ring) || ring.length < 3 || ring.length > 500) throw bad('Each parcel ring needs 3–500 points');
+    const pts = ring.map(pt => {
+      if (!Array.isArray(pt) || pt.length < 2) throw bad('Invalid parcel point');
+      const x = clampNum(pt[0], -50000, 50000, NaN);
+      const y = clampNum(pt[1], -50000, 50000, NaN);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) throw bad('Invalid parcel point');
+      return [x, y];
+    });
+    return pts;
+  });
+  return {
+    rings,
+    rot: wrapDeg(raw.rot, 0),
+    x: clampNum(raw.x, -2000, 2000, 0),
+    y: clampNum(raw.y, -2000, 2000, 0),
+    anchorLat: Number.isFinite(Number(raw.anchorLat)) ? Number(raw.anchorLat) : null,
+    anchorLon: Number.isFinite(Number(raw.anchorLon)) ? Number(raw.anchorLon) : null,
+    sourceName: cleanText(raw.sourceName, 160),
+  };
+}
+function applySitePatch(prev, patch) {
+  if (!patch || typeof patch !== 'object') throw bad('Invalid site settings');
+  const next = { ...(prev || {}) };
+  if (patch.panoYaw !== undefined) next.panoYaw = wrapDeg(patch.panoYaw, 0);
+  if (patch.panoHeight !== undefined) next.panoHeight = clampNum(patch.panoHeight, -20, 120, 6);
+  if (patch.groundScale !== undefined) next.groundScale = clampNum(patch.groundScale, 20, 2000, 200);
+  if (patch.groundRot !== undefined) next.groundRot = wrapDeg(patch.groundRot, 0);
+  if (patch.groundX !== undefined) next.groundX = clampNum(patch.groundX, -2000, 2000, 0);
+  if (patch.groundY !== undefined) next.groundY = clampNum(patch.groundY, -2000, 2000, 0);
+  if (patch.parcel !== undefined) next.parcel = sanitizeParcel(patch.parcel);
+  return next;
+}
 function publicProject(p, { owner = false } = {}) {
   const out = {
     id: p.id, name: p.name, notes: p.notes || '', createdAt: p.createdAt, updatedAt: p.updatedAt,
     files: (p.files || []).map(publicFile),
+    site: publicSite(p),
   };
   if (p.exampleId) out.exampleId = p.exampleId;
   if (owner) out.shareToken = p.shareToken || null;
@@ -195,6 +279,7 @@ const routes = {
     } else if (body.share === false && p.shareToken) {
       await remove(sharePath(p.shareToken)); p.shareToken = null;
     }
+    if (body.site !== undefined) p.site = applySitePatch(p.site, body.site);
     p.updatedAt = new Date().toISOString();
     await writeJSON(projPath(user.id, p.id), p);
     send(res, 200, { project: publicProject(p, { owner: true }) });
@@ -218,8 +303,9 @@ const routes = {
         let cp = {}; try { cp = JSON.parse(clientPayload || '{}'); } catch {}
         const p = await loadOwnProject(user, cp.pid);
         if (!pathname.startsWith(`files/${user.id}/${p.id}/`) || pathname.includes('..')) throw bad('Invalid upload path');
-        const types = cp.kind === 'model' ? MODEL_TYPES : IMAGE_TYPES;
-        return { allowedContentTypes: types, maximumSizeInBytes: MAX_UPLOAD, addRandomSuffix: true, allowOverwrite: false };
+        const isSite = SITE_KINDS.includes(cp.kind);
+        const types = cp.kind === 'model' ? MODEL_TYPES : (isSite ? SITE_IMAGE_TYPES : IMAGE_TYPES);
+        return { allowedContentTypes: types, maximumSizeInBytes: isSite ? SITE_MAX_UPLOAD : MAX_UPLOAD, addRandomSuffix: true, allowOverwrite: false };
       },
     });
     send(res, 200, result);
@@ -231,7 +317,7 @@ const routes = {
     const p = await loadOwnProject(user, id);
     const { pathname, name, kind } = await readBody(req);
     if (typeof pathname !== 'string' || !pathname.startsWith(`files/${user.id}/${p.id}/`) || pathname.includes('..')) throw bad('Invalid file');
-    if (!['image', 'model'].includes(kind)) throw bad('Invalid kind');
+    if (!['image', 'model', 'pano', 'ground'].includes(kind)) throw bad('Invalid kind');
     if ((p.files || []).some(f => f.pathname === pathname)) throw bad('Already added');
     if ((p.files || []).length >= 100) throw bad('File limit reached (100 per project)');
     const meta = await headBlob(pathname);
@@ -244,6 +330,22 @@ const routes = {
       const old = p.files.filter(x => x.kind === 'model');
       await remove(old.map(x => x.pathname));
       p.files = p.files.filter(x => x.kind !== 'model');
+    } else if (SITE_KINDS.includes(kind)) {
+      if (!SITE_IMAGE_TYPES.includes(meta.contentType)) { await remove(pathname); throw bad('Site photos must be a JPG, PNG or WebP image'); }
+      if (meta.size > SITE_MAX_UPLOAD) { await remove(pathname); throw bad('Site photos must be 25 MB or smaller'); }
+      const old = p.files.filter(x => x.kind === kind);
+      await remove(old.map(x => x.pathname));
+      p.files = p.files.filter(x => x.kind !== kind);
+      p.site = p.site || {};
+      if (kind === 'pano') {
+        if (p.site.panoYaw === undefined) p.site.panoYaw = 0;
+        if (p.site.panoHeight === undefined) p.site.panoHeight = 6;
+      } else {
+        if (p.site.groundScale === undefined) p.site.groundScale = 200;
+        if (p.site.groundRot === undefined) p.site.groundRot = 0;
+        if (p.site.groundX === undefined) p.site.groundX = 0;
+        if (p.site.groundY === undefined) p.site.groundY = 0;
+      }
     } else if (!IMAGE_TYPES.includes(meta.contentType)) { await remove(pathname); throw bad('Unsupported image type'); }
     p.files.push(f);
     p.updatedAt = new Date().toISOString();

@@ -18,7 +18,7 @@
   .btns button:hover{background:rgba(255,255,255,.18)}
   .btns button.on{background:var(--acc);color:#1d1d1d;border-color:var(--acc)}
   #help{font-size:12px;opacity:.85;margin-top:8px;line-height:1.35}
-  #hud.collapsed .btns,#hud.collapsed #help,#hud.collapsed .sub{display:none}
+  #hud.collapsed .btns,#hud.collapsed #help,#hud.collapsed .sub,#hud.collapsed #siteHud{display:none}
   #toggleHud{position:absolute;right:8px;top:6px;background:none;border:0;color:var(--fg);font-size:16px;cursor:pointer;opacity:.8}
   #north{position:fixed;right:14px;top:14px;z-index:5;width:64px;height:64px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 18px rgba(0,0,0,.25)}
   #north svg{width:54px;height:54px;transition:none}
@@ -36,6 +36,15 @@
   .stylepick{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--fg);margin-top:2px}
   .stylepick select{font:inherit;font-size:12.5px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:var(--fg);padding:6px 8px;border-radius:8px;cursor:pointer}
   .stylepick select option{color:#1d1d1d}
+  #siteHud{margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.12);font-size:12px}
+  #siteHud[hidden]{display:none !important}
+  #siteHud .site-h{font-weight:650;margin:0 0 6px;font-size:12.5px}
+  #siteHud label{display:flex;justify-content:space-between;gap:8px;margin:6px 0 2px;opacity:.9}
+  #siteHud input[type=range]{width:100%;accent-color:#e0a95a;margin:0}
+  #siteHud input[type=number]{width:100%;font:inherit;font-size:12px;background:rgba(255,255,255,.08);color:inherit;border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:4px 6px}
+  #siteHud .site-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  #siteHud .muted{opacity:.75;font-size:11px;margin:6px 0 0;line-height:1.3}
+
 
   #sf{position:fixed;right:12px;bottom:12px;z-index:5;background:rgba(20,24,28,.78);color:#f4f1ea;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:10px;padding:8px 12px;padding-right:max(12px,env(safe-area-inset-right));padding-bottom:max(8px,env(safe-area-inset-bottom));font-variant-numeric:tabular-nums;pointer-events:none;text-align:right;box-shadow:0 4px 18px rgba(0,0,0,.25);line-height:1.2;display:none}
   #sf .sf-h{font-size:15px;font-weight:650;letter-spacing:.15px}
@@ -84,6 +93,34 @@
         <option value="english-country">English Country</option>
       </select>
     </label>
+  </div>
+  <div id="siteHud" hidden>
+    <div class="site-h">Site photos</div>
+    <div id="panoHud" hidden>
+      <label>Heading <span id="panoYawVal">0°</span></label>
+      <input type="range" id="panoYaw" min="0" max="360" step="1" value="0" aria-label="Panorama heading">
+      <label>Capture height <span id="panoHVal">6 ft</span></label>
+      <input type="range" id="panoHeight" min="-10" max="80" step="0.5" value="6" aria-label="Panorama capture height">
+    </div>
+    <div id="groundHud" hidden>
+      <label>Aerial scale (ft wide) <span id="groundScaleVal">200</span></label>
+      <input type="range" id="groundScale" min="20" max="2000" step="5" value="200" aria-label="Aerial photo width in feet">
+      <label>Aerial rotation <span id="groundRotVal">0°</span></label>
+      <input type="range" id="groundRot" min="0" max="360" step="1" value="0" aria-label="Aerial photo rotation">
+      <div class="site-pair">
+        <div><label for="groundX">East offset (ft)</label><input type="number" id="groundX" step="1" value="0"></div>
+        <div><label for="groundY">South offset (ft)</label><input type="number" id="groundY" step="1" value="0"></div>
+      </div>
+    </div>
+    <div id="parcelHud" hidden>
+      <label>Lot rotation <span id="parcelRotVal">0°</span></label>
+      <input type="range" id="parcelRot" min="0" max="360" step="1" value="0" aria-label="Lot rotation">
+      <div class="site-pair">
+        <div><label for="parcelX">East offset (ft)</label><input type="number" id="parcelX" step="1" value="0"></div>
+        <div><label for="parcelY">South offset (ft)</label><input type="number" id="parcelY" step="1" value="0"></div>
+      </div>
+    </div>
+    <div class="muted">Saved to this project. Line the photos and lot up with the house and the north compass.</div>
   </div>
   <div id="help"></div>
 </div>

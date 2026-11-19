@@ -156,6 +156,248 @@ let loadedModel = null;
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), new THREE.MeshLambertMaterial({ map: TEX.grass }));
 ground.rotation.x = -Math.PI / 2; ground.position.y = -0.6; ground.receiveShadow = true; scene.add(ground);
 
+// ---------- project site photos (optional 360 pano + aerial ground) ----------
+const SITE_DEFAULTS = { panoYaw: 0, panoHeight: 6, groundScale: 200, groundRot: 0, groundX: 0, groundY: 0 };
+const GLASS_DEFAULT = { opacity: 0.45, color: '#9fd0ee' };
+let siteCfg = { ...SITE_DEFAULTS };
+let siteCanEdit = false, sitePanoUrl = null, siteGroundUrl = null;
+let sitePanoTex = null, siteGroundTex = null, sitePanoUrlLoaded = null, siteGroundUrlLoaded = null;
+let panoSphere = null, groundPhoto = null, parcelGroup = null, siteObjUrls = [];
+let siteSaveTimer = 0, sitePending = {}, styleFog = { color: '#cfe3f2', near: 260, far: 560 }, styleBg = '#cfe3f2';
+
+function disposeSiteMesh(mesh) {
+  if (!mesh) return;
+  scene.remove(mesh);
+  mesh.geometry?.dispose();
+  mesh.material?.map?.dispose?.();
+  mesh.material?.dispose?.();
+}
+function clearSiteEnv({ restore = true } = {}) {
+  disposeSiteMesh(panoSphere); panoSphere = null;
+  disposeSiteMesh(groundPhoto); groundPhoto = null;
+  if (parcelGroup) {
+    parcelGroup.traverse(o => { o.geometry?.dispose(); if (o.material) { if (Array.isArray(o.material)) o.material.forEach(m => m.dispose()); else o.material.dispose(); } });
+    scene.remove(parcelGroup); parcelGroup = null;
+  }
+  sitePanoTex = siteGroundTex = null;
+  sitePanoUrlLoaded = siteGroundUrlLoaded = null;
+  for (const u of siteObjUrls) URL.revokeObjectURL(u);
+  siteObjUrls = [];
+  sitePanoUrl = siteGroundUrl = null;
+  siteCanEdit = false;
+  siteCfg = { ...SITE_DEFAULTS };
+  ground.visible = true;
+  ground.position.y = -0.6;
+  if (restore) {
+    MAT.glass.opacity = (currentStyle === 'english-country') ? 0.3 : GLASS_DEFAULT.opacity;
+    scene.background = new THREE.Color(styleBg);
+    if (!scene.fog) scene.fog = new THREE.Fog(styleBg, styleFog.near, styleFog.far);
+    else { scene.fog.color.set(styleBg); scene.fog.near = styleFog.near; scene.fog.far = styleFog.far; }
+  }
+  syncSiteHud();
+}
+async function textureFromUrl(url) {
+  const r = await fetch(url, { credentials: 'same-origin' });
+  if (!r.ok) throw new Error('Could not load site photo');
+  const obj = URL.createObjectURL(await r.blob());
+  siteObjUrls.push(obj);
+  const tex = await new Promise((res, rej) => {
+    new THREE.TextureLoader().load(obj, t => res(t), undefined, () => rej(new Error('Could not decode site photo')));
+  });
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  tex.needsUpdate = true;
+  return tex;
+}
+function applySiteEnv() {
+  const hasPano = !!(sitePanoTex || (panoSphere && sitePanoUrl));
+  if (sitePanoTex) {
+    if (!panoSphere) {
+      const mat = new THREE.MeshBasicMaterial({ map: sitePanoTex, side: THREE.BackSide, depthWrite: false, fog: false });
+      panoSphere = new THREE.Mesh(new THREE.SphereGeometry(750, 64, 40), mat);
+      panoSphere.renderOrder = -10;
+      panoSphere.frustumCulled = false;
+      scene.add(panoSphere);
+    } else if (panoSphere.material.map !== sitePanoTex) {
+      panoSphere.material.map = sitePanoTex;
+      panoSphere.material.needsUpdate = true;
+    }
+    // yaw=0: center of the equirectangular photo faces model north (-Z). See heading slider.
+    panoSphere.rotation.y = Math.PI / 2 + THREE.MathUtils.degToRad(siteCfg.panoYaw || 0);
+    panoSphere.position.set(0, siteCfg.panoHeight ?? 6, 0);
+    scene.background = new THREE.Color('#0a1220');
+    scene.fog = null;
+    MAT.glass.opacity = Math.min(MAT.glass.opacity, 0.22);
+  } else if (panoSphere) {
+    disposeSiteMesh(panoSphere); panoSphere = null;
+    MAT.glass.opacity = (currentStyle === 'english-country') ? 0.3 : GLASS_DEFAULT.opacity;
+    scene.background = new THREE.Color(styleBg);
+    if (!scene.fog) scene.fog = new THREE.Fog(styleBg, styleFog.near, styleFog.far);
+    else { scene.fog.color.set(styleBg); scene.fog.near = styleFog.near; scene.fog.far = styleFog.far; }
+  }
+  if (siteGroundTex) {
+    const img = siteGroundTex.image;
+    const aspect = (img && img.height && img.width) ? (img.height / img.width) : 1;
+    const w = siteCfg.groundScale || 200, d = w * aspect;
+    if (groundPhoto) {
+      groundPhoto.geometry.dispose();
+      groundPhoto.geometry = new THREE.PlaneGeometry(w, d);
+    } else {
+      const mat = new THREE.MeshLambertMaterial({ map: siteGroundTex, side: THREE.DoubleSide });
+      groundPhoto = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+      groundPhoto.receiveShadow = true;
+      scene.add(groundPhoto);
+    }
+    // North-up aerial: image top → model north. Slider adds rotation.
+    groundPhoto.rotation.set(-Math.PI / 2, 0, Math.PI + THREE.MathUtils.degToRad(siteCfg.groundRot || 0), 'XYZ');
+    groundPhoto.position.set(siteCfg.groundX || 0, -0.6, siteCfg.groundY || 0);
+    ground.position.y = -0.85;
+    ground.visible = true;
+  } else {
+    if (groundPhoto) { disposeSiteMesh(groundPhoto); groundPhoto = null; }
+    ground.position.y = -0.6;
+    ground.visible = true;
+  }
+  applyParcelLines();
+  syncSiteHud();
+}
+function applyParcelLines() {
+  if (parcelGroup) {
+    parcelGroup.traverse(o => { o.geometry?.dispose(); if (o.material) { if (Array.isArray(o.material)) o.material.forEach(m => m.dispose()); else o.material.dispose(); } });
+    scene.remove(parcelGroup); parcelGroup = null;
+  }
+  const parcel = siteCfg.parcel;
+  const rings = parcel?.rings;
+  if (!rings?.length) return;
+  parcelGroup = new THREE.Group();
+  const rot = THREE.MathUtils.degToRad(parcel.rot || 0);
+  const ox = parcel.x || 0, oy = parcel.y || 0;
+  const c = Math.cos(rot), si = Math.sin(rot);
+  const xf = (x, y) => [ox + x * c - y * si, oy + x * si + y * c];
+  const lineMat = new THREE.LineBasicMaterial({ color: 0xe0a95a, linewidth: 2 });
+  const fillMat = new THREE.MeshBasicMaterial({ color: 0xe0a95a, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false });
+  for (const ring of rings) {
+    if (!ring || ring.length < 2) continue;
+    const plan = ring.map(([x, y]) => xf(x, y));
+    const pts = plan.map(([x, y]) => new THREE.Vector3(x, 0.06, y));
+    if (!pts[0].equals(pts[pts.length - 1])) pts.push(pts[0].clone());
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat);
+    line.renderOrder = 3;
+    parcelGroup.add(line);
+    if (plan.length >= 3) {
+      const shape = new THREE.Shape(plan.map(([x, y]) => new THREE.Vector2(x, -y)));
+      const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), fillMat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.y = 0.03;
+      mesh.renderOrder = 2;
+      parcelGroup.add(mesh);
+    }
+  }
+  scene.add(parcelGroup);
+}
+function siteFromProject(p) {
+  const s = p?.site || {};
+  siteCfg = {
+    panoYaw: s.pano ? s.pano.yaw : SITE_DEFAULTS.panoYaw,
+    panoHeight: s.pano ? s.pano.height : SITE_DEFAULTS.panoHeight,
+    groundScale: s.ground ? s.ground.scale : SITE_DEFAULTS.groundScale,
+    groundRot: s.ground ? s.ground.rot : SITE_DEFAULTS.groundRot,
+    groundX: s.ground ? s.ground.x : SITE_DEFAULTS.groundX,
+    groundY: s.ground ? s.ground.y : SITE_DEFAULTS.groundY,
+  };
+  siteCanEdit = SRC.kind === 'project';
+  sitePanoUrl = (s.pano && assetBase) ? `${assetBase}/files/${s.pano.fileId}` : null;
+  siteGroundUrl = (s.ground && assetBase) ? `${assetBase}/files/${s.ground.fileId}` : null;
+  siteCfg.parcel = s.parcel ? {
+    rings: s.parcel.rings, rot: s.parcel.rot || 0, x: s.parcel.x || 0, y: s.parcel.y || 0,
+  } : null;
+}
+async function loadProjectSite(p) {
+  siteFromProject(p);
+  try {
+    if (sitePanoUrl && sitePanoUrl !== sitePanoUrlLoaded) {
+      sitePanoTex = await textureFromUrl(sitePanoUrl);
+      sitePanoUrlLoaded = sitePanoUrl;
+    }
+    if (siteGroundUrl && siteGroundUrl !== siteGroundUrlLoaded) {
+      siteGroundTex = await textureFromUrl(siteGroundUrl);
+      siteGroundUrlLoaded = siteGroundUrl;
+    }
+  } catch (e) { console.warn(e); }
+  applySiteEnv();
+}
+function syncSiteHud() {
+  const hud = $('siteHud'), panoHud = $('panoHud'), groundHud = $('groundHud');
+  if (!hud) return;
+  const show = siteCanEdit && (sitePanoUrl || siteGroundUrl || siteCfg.parcel);
+  hud.hidden = !show;
+  if (panoHud) panoHud.hidden = !sitePanoUrl;
+  if (groundHud) groundHud.hidden = !siteGroundUrl;
+  const parcelHud = $('parcelHud');
+  if (parcelHud) parcelHud.hidden = !siteCfg.parcel;
+  const set = (id, v, fmt) => {
+    const el = $(id), out = $(id + 'Val');
+    if (el && document.activeElement !== el) el.value = v;
+    if (out) out.textContent = fmt;
+  };
+  set('panoYaw', siteCfg.panoYaw, Math.round(siteCfg.panoYaw) + '°');
+  set('panoHeight', siteCfg.panoHeight, (Math.round(siteCfg.panoHeight * 10) / 10) + ' ft');
+  set('groundScale', siteCfg.groundScale, String(Math.round(siteCfg.groundScale)));
+  set('groundRot', siteCfg.groundRot, Math.round(siteCfg.groundRot) + '°');
+  set('groundX', siteCfg.groundX, '');
+  set('groundY', siteCfg.groundY, '');
+  if ($('groundX') && document.activeElement !== $('groundX')) $('groundX').value = siteCfg.groundX;
+  if ($('groundY') && document.activeElement !== $('groundY')) $('groundY').value = siteCfg.groundY;
+  if (siteCfg.parcel) {
+    set('parcelRot', siteCfg.parcel.rot || 0, Math.round(siteCfg.parcel.rot || 0) + '°');
+    if ($('parcelX') && document.activeElement !== $('parcelX')) $('parcelX').value = siteCfg.parcel.x || 0;
+    if ($('parcelY') && document.activeElement !== $('parcelY')) $('parcelY').value = siteCfg.parcel.y || 0;
+  }
+}
+function queueSiteSave(partial) {
+  Object.assign(siteCfg, partial);
+  Object.assign(sitePending, partial);
+  applySiteEnv();
+  if (!siteCanEdit || SRC.kind !== 'project') return;
+  clearTimeout(siteSaveTimer);
+  siteSaveTimer = setTimeout(async () => {
+    const body = sitePending; sitePending = {};
+    try {
+      await fetch(`/api/projects/${encodeURIComponent(SRC.id)}`, {
+        method: 'PATCH', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ site: body }),
+      });
+    } catch (e) { console.warn(e); }
+  }, 400);
+}
+function bindSiteHud() {
+  const bindRange = (id, key, fmt) => {
+    const el = $(id); if (!el) return;
+    el.addEventListener('input', () => {
+      const v = +el.value;
+      if ($(id + 'Val') && fmt) $(id + 'Val').textContent = fmt(v);
+      queueSiteSave({ [key]: v });
+    });
+  };
+  bindRange('panoYaw', 'panoYaw', v => Math.round(v) + '°');
+  bindRange('panoHeight', 'panoHeight', v => (Math.round(v * 10) / 10) + ' ft');
+  bindRange('groundScale', 'groundScale', v => String(Math.round(v)));
+  bindRange('groundRot', 'groundRot', v => Math.round(v) + '°');
+  for (const [id, key] of [['groundX', 'groundX'], ['groundY', 'groundY']]) {
+    $(id)?.addEventListener('change', () => queueSiteSave({ [key]: +$(id).value || 0 }));
+  }
+  const parcelPartial = (extra) => ({ parcel: { ...(siteCfg.parcel || { rings: [] }), ...extra } });
+  $('parcelRot')?.addEventListener('input', () => {
+    const v = +$('parcelRot').value;
+    if ($('parcelRotVal')) $('parcelRotVal').textContent = Math.round(v) + '°';
+    queueSiteSave(parcelPartial({ rot: v }));
+  });
+  $('parcelX')?.addEventListener('change', () => queueSiteSave(parcelPartial({ x: +$('parcelX').value || 0 })));
+  $('parcelY')?.addEventListener('change', () => queueSiteSave(parcelPartial({ y: +$('parcelY').value || 0 })));
+}
+bindSiteHud();
+
 // ---------- per-model state ----------
 let M = null, root = null, wallsFull, wallsCut, roof, labels, planOverlay, ceilings;
 let fires = [];
@@ -295,7 +537,9 @@ function buildModel(model) {
     MAT.glass.emissive.set('#000000'); MAT.glass.emissiveIntensity = 0;
   }
   const bg = st.bg || '#cfe3f2'; scene.background.set(bg);
-  if (scene.fog) { scene.fog.color.set(bg); scene.fog.near = st.fogNear || 260; scene.fog.far = st.fogFar || 560; }
+  styleBg = bg; styleFog = { color: bg, near: st.fogNear || 260, far: st.fogFar || 560 };
+  if (scene.fog) { scene.fog.color.set(bg); scene.fog.near = styleFog.near; scene.fog.far = styleFog.far; }
+  else scene.fog = new THREE.Fog(bg, styleFog.near, styleFog.far);
   // bounds from rooms
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   for (const r of M.rooms) { x0 = Math.min(x0, r[3]); y0 = Math.min(y0, r[4]); x1 = Math.max(x1, r[5]); y1 = Math.max(y1, r[6]); }
@@ -706,6 +950,7 @@ function buildModel(model) {
   $('mtitle').textContent = M.title || M.name; $('msub').textContent = M.subtitle || '';
   document.title = `${M.name || M.title || 'Model'} — Home View`;
   setModelUi(true);
+  applySiteEnv();
 }
 
 // ---------- controls / modes ----------
@@ -863,6 +1108,7 @@ function buildGLB(gltfScene, meta = {}) {
   document.title = `${M.name} — Home View`;
   setModelUi(false, roofNodes.length > 0);
   if (roofNodes.length) setRoof(true);
+  applySiteEnv();
 }
 
 // JSON models: same shape as models/smith-0N.js but plain data (no code).
@@ -932,6 +1178,7 @@ async function loadExample(id) {
   if (currentId !== entry.id) return;
   if (mode === 'walk') exitWalk();
   disposeRoot();
+  clearSiteEnv();
   currentStyle = (mod.default && mod.default.defaultStyle) || 'default';
   syncStyleUi();
   buildModel(mod.default);
@@ -958,6 +1205,7 @@ async function loadProjectModel() {
     buildModel(mod.default);
     setMode('orbit', true);
     window.app.current = entry.id;
+    await loadProjectSite(p);
     return;
   }
   if (!model) return showError('This project has no 3D model yet. Add one from the project page.');
@@ -973,6 +1221,7 @@ async function loadProjectModel() {
     }
   } catch (e) { console.error(e); return showError('This 3D model could not be opened: ' + (e.message || e)); }
   setMode('orbit', true);
+  await loadProjectSite(p);
 }
 
 addEventListener('resize', () => {

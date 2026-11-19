@@ -13,6 +13,65 @@
         <div class="row" style="margin-top:10px"><label class="btn small" style="margin:0">Upload a 3D model<input type="file" id="modelFile" accept=".glb,.gltf,.json" hidden></label><button class="btn small danger" id="modelDel" style="display:none">Remove model</button></div>
         <p class="muted" style="font-size:12.5px;margin:8px 0 0">Accepted: <b>.glb</b> / <b>.gltf</b> (export from SketchUp, Blender, Revit, etc.) or a Home View <b>.json</b> plan model (<a href="/3d/models/template-smith-02.json" download>download an example</a>).</p>
       </section>
+      <section class="card" id="siteCard">
+        <h2>Site photos</h2>
+        <p class="muted" style="font-size:13.5px;margin:0 0 14px">Optional. Drop in photos of the real lot so the walk-through looks out onto your land. Works for uploaded models and for Smith examples saved to My projects.</p>
+        <h3 style="font-size:15px;margin:0 0 6px">360° panorama</h3>
+        <p class="muted" style="font-size:12.5px;margin:0 0 8px">An equirectangular 2:1 photo (from a drone or phone at the build spot). It becomes the sky and the view out the windows and off the porch.</p>
+        <div id="panoBox" class="muted" style="font-size:13px">No panorama yet.</div>
+        <div class="row" style="margin:8px 0 14px"><label class="btn small" style="margin:0">Upload 360° photo<input type="file" id="panoFile" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden></label><button class="btn small danger" id="panoDel" style="display:none">Remove</button></div>
+        <div id="panoCtrls" style="display:none">
+          <div class="field-row"><label for="panoYaw">Heading / rotation</label><output id="panoYawOut">0°</output></div>
+          <input type="range" id="panoYaw" min="0" max="360" step="1" value="0">
+          <div class="field-row" style="margin-top:8px"><label for="panoHeight">Capture height</label><output id="panoHeightOut">6 ft</output></div>
+          <input type="range" id="panoHeight" min="-10" max="80" step="0.5" value="6">
+          <p class="muted" style="font-size:12px;margin:6px 0 0">Line the photo up with the house and the compass in the 3D view. Height raises the horizon — about 6 ft for a phone, higher for a drone.</p>
+        </div>
+        <h3 style="font-size:15px;margin:18px 0 6px">Top-down aerial</h3>
+        <p class="muted" style="font-size:12.5px;margin:0 0 8px">A drone or satellite photo used as the ground under the house.</p>
+        <div id="groundBox" class="muted" style="font-size:13px">No aerial photo yet.</div>
+        <div class="row" style="margin:8px 0 14px"><label class="btn small" style="margin:0">Upload aerial photo<input type="file" id="groundFile" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden></label><button class="btn small danger" id="groundDel" style="display:none">Remove</button></div>
+        <div id="groundCtrls" style="display:none">
+          <label for="groundScale">Scale (feet across the width of the photo)</label>
+          <input id="groundScale" type="number" min="20" max="2000" step="5" value="200">
+          <div class="field-row" style="margin-top:8px"><label for="groundRot">Rotation</label><output id="groundRotOut">0°</output></div>
+          <input type="range" id="groundRot" min="0" max="360" step="1" value="0">
+          <div class="row" style="margin-top:8px;align-items:end">
+            <div style="flex:1;min-width:120px"><label for="groundX">East offset (ft)</label><input id="groundX" type="number" step="1" value="0"></div>
+            <div style="flex:1;min-width:120px"><label for="groundY">South offset (ft)</label><input id="groundY" type="number" step="1" value="0"></div>
+          </div>
+        </div>
+        <h3 style="font-size:15px;margin:18px 0 6px">Lot lines</h3>
+        <p class="muted" style="font-size:12.5px;margin:0 0 8px">Optional. Import a parcel outline so the lot is drawn on the ground around the house. This works for any location in the United States.</p>
+        <details class="card" style="padding:12px 14px;margin:0 0 12px;background:rgba(255,255,255,.03)">
+          <summary style="cursor:pointer;font-weight:650">Where to get parcel data</summary>
+          <p class="muted" style="font-size:13px;margin:10px 0 8px">Most US counties have a free GIS parcel viewer. Search for:</p>
+          <div class="row" style="align-items:end;margin-bottom:8px">
+            <div style="flex:1;min-width:140px"><label for="parcelCounty">County</label><input id="parcelCounty" placeholder="your county" autocomplete="off"></div>
+            <div style="flex:1;min-width:160px"><label for="parcelState">State</label><select id="parcelState"><option value="">State (optional)</option></select></div>
+          </div>
+          <p id="parcelTip" style="font-size:13.5px;margin:0 0 8px"><code>search "your county state GIS parcel viewer"</code></p>
+          <button type="button" class="btn small" id="copyParcelSearch">Copy search</button>
+          <p class="muted" style="font-size:12.5px;margin:10px 0 0">You can also use a plat from the county assessor or recorder, a survey of the lot, and the local zoning setbacks from the county or city zoning office. Export the parcel as GeoJSON or KML if the viewer offers it, or type the corner coordinates below.</p>
+        </details>
+        <div id="parcelBox" class="muted" style="font-size:13px">No lot outline yet.</div>
+        <div class="row" style="margin:8px 0 14px">
+          <label class="btn small" style="margin:0">Import GeoJSON or KML<input type="file" id="parcelFile" accept=".geojson,.json,.kml,application/geo+json,application/vnd.google-earth.kml+xml,application/xml,text/xml" hidden></label>
+          <button class="btn small danger" id="parcelDel" style="display:none">Remove lot</button>
+        </div>
+        <label for="parcelCorners">Or paste lat/long corners (one “latitude, longitude” pair per line)</label>
+        <textarea id="parcelCorners" rows="5" placeholder="45.0000, -93.0000&#10;45.0000, -92.9990&#10;44.9992, -92.9990&#10;44.9992, -93.0000"></textarea>
+        <div class="row" style="margin-top:8px"><button type="button" class="btn small" id="parcelCornersBtn">Use these corners</button></div>
+        <div id="parcelCtrls" style="display:none;margin-top:12px">
+          <div class="field-row"><label for="parcelRot">Lot rotation</label><output id="parcelRotOut">0°</output></div>
+          <input type="range" id="parcelRot" min="0" max="360" step="1" value="0">
+          <div class="row" style="margin-top:8px;align-items:end">
+            <div style="flex:1;min-width:120px"><label for="parcelX">East offset (ft)</label><input id="parcelX" type="number" step="1" value="0"></div>
+            <div style="flex:1;min-width:120px"><label for="parcelY">South offset (ft)</label><input id="parcelY" type="number" step="1" value="0"></div>
+          </div>
+          <p class="muted" style="font-size:12px;margin:6px 0 0">Rotate and nudge the lot until it lines up with the house and the north compass in the 3D view.</p>
+        </div>
+      </section>
       <section class="card">
         <h2>Images</h2>
         <div class="drop" id="drop">Drop floor plans, renders or photos here, or <u>choose files</u><input type="file" id="imgFile" accept="image/*,application/pdf" multiple hidden></div>
@@ -38,6 +97,8 @@
 <script type="module">
 import { $, esc, api, me, header, toast, fmtSize, renderGallery } from '/js/common.js';
 import { upload } from '/js/blob-client.js';
+import { prepareSiteImage, SITE_MAX_BYTES } from '/js/site-image.js';
+import { parseParcelFile, parseParcelText, parcelSearchTip, US_STATES } from '/js/parcel.js';
 const id = new URLSearchParams(location.search).get('id');
 const user = await me();
 if (!user) location.replace('/?next=' + encodeURIComponent(location.pathname + location.search));
@@ -65,6 +126,7 @@ function render() {
     if (!confirm('Delete ' + f.name + '?')) return;
     try { P = (await api(`projects/${enc(P.id)}/files/${enc(f.id)}`, { method: 'DELETE' })).project; render(); } catch (e) { toast(e.message); }
   } });
+  renderSite();
   $('#share').checked = !!P.shareToken;
   $('#shareBox').style.display = P.shareToken ? '' : 'none';
   $('#shareHelp').textContent = P.shareToken ? 'On: anyone with this link can view (read-only) this project\'s images, notes and 3D model.' : 'Off: only you can see this project.';
@@ -112,5 +174,145 @@ drop.addEventListener('dragleave', () => drop.classList.remove('over'));
 drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); uploadMany([...e.dataTransfer.files].filter(f => /^image\/|pdf/.test(f.type)), 'image'); });
 $('#modelFile').onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; $('#modelInfo').innerHTML = '<span class="muted">Uploading ' + esc(f.name) + '…</span>'; await uploadMany([f], 'model'); render(); };
 $('#modelDel').onclick = async () => { const m = P.files.find(f => f.kind === 'model'); if (!m || !confirm('Remove the 3D model?')) return; P = (await api(`projects/${enc(P.id)}/files/${enc(m.id)}`, { method: 'DELETE' })).project; render(); };
+
+function siteVals() {
+  const s = P.site || {};
+  return {
+    panoYaw: s.pano?.yaw ?? 0,
+    panoHeight: s.pano?.height ?? 6,
+    groundScale: s.ground?.scale ?? 200,
+    groundRot: s.ground?.rot ?? 0,
+    groundX: s.ground?.x ?? 0,
+    groundY: s.ground?.y ?? 0,
+    parcel: s.parcel || null,
+  };
+}
+function renderSite() {
+  const s = siteVals();
+  const pano = P.files.find(f => f.kind === 'pano');
+  const ground = P.files.find(f => f.kind === 'ground');
+  const panoUrl = pano ? fileUrl(pano) : '';
+  const groundUrl = ground ? fileUrl(ground) : '';
+  $('#panoBox').innerHTML = pano ? `<img class="site-preview" alt="360° panorama preview" src="${panoUrl}">` : 'No panorama yet.';
+  $('#groundBox').innerHTML = ground ? `<img class="site-preview aerial" alt="Aerial photo preview" src="${groundUrl}">` : 'No aerial photo yet.';
+  $('#panoDel').style.display = pano ? '' : 'none';
+  $('#groundDel').style.display = ground ? '' : 'none';
+  $('#panoCtrls').style.display = pano ? '' : 'none';
+  $('#groundCtrls').style.display = ground ? '' : 'none';
+  const set = (id, v) => { if (document.activeElement !== $(id)) $(id).value = v; };
+  set('panoYaw', s.panoYaw); $('#panoYawOut').value = Math.round(s.panoYaw) + '°';
+  set('panoHeight', s.panoHeight); $('#panoHeightOut').value = Number(s.panoHeight).toFixed(1).replace(/\.0$/, '') + ' ft';
+  set('groundScale', s.groundScale);
+  set('groundRot', s.groundRot); $('#groundRotOut').value = Math.round(s.groundRot) + '°';
+  set('groundX', s.groundX); set('groundY', s.groundY);
+  const parcel = s.parcel;
+  if (parcel) {
+    const n = parcel.rings.reduce((a, r) => a + Math.max(0, r.length - 1), 0);
+    const where = (parcel.anchorLat != null && parcel.anchorLon != null)
+      ? ` centered near ${Number(parcel.anchorLat).toFixed(5)}, ${Number(parcel.anchorLon).toFixed(5)}`
+      : '';
+    $('#parcelBox').textContent = (parcel.sourceName ? parcel.sourceName + ' · ' : '') + n + ' corners' + where;
+  } else $('#parcelBox').textContent = 'No lot outline yet.';
+  $('#parcelDel').style.display = parcel ? '' : 'none';
+  $('#parcelCtrls').style.display = parcel ? '' : 'none';
+  if (parcel) {
+    set('parcelRot', parcel.rot ?? 0); $('#parcelRotOut').value = Math.round(parcel.rot ?? 0) + '°';
+    set('parcelX', parcel.x ?? 0); set('parcelY', parcel.y ?? 0);
+  }
+}
+let siteTimer = 0;
+async function saveSite(partial) {
+  try {
+    P = (await api('projects/' + enc(P.id), { method: 'PATCH', body: { site: partial } })).project;
+    renderSite();
+  } catch (e) { toast(e.message); }
+}
+function queueSite(partial) {
+  renderSiteLive(partial);
+  clearTimeout(siteTimer);
+  siteTimer = setTimeout(() => saveSite(partial), 350);
+}
+function renderSiteLive(partial) {
+  if (partial.panoYaw !== undefined) $('#panoYawOut').value = Math.round(partial.panoYaw) + '°';
+  if (partial.panoHeight !== undefined) $('#panoHeightOut').value = Number(partial.panoHeight).toFixed(1).replace(/\.0$/, '') + ' ft';
+  if (partial.groundRot !== undefined) $('#groundRotOut').value = Math.round(partial.groundRot) + '°';
+  if (partial.parcel?.rot !== undefined) $('#parcelRotOut').value = Math.round(partial.parcel.rot) + '°';
+}
+$('#panoYaw').addEventListener('input', e => queueSite({ panoYaw: +e.target.value }));
+$('#panoHeight').addEventListener('input', e => queueSite({ panoHeight: +e.target.value }));
+$('#groundScale').addEventListener('change', e => saveSite({ groundScale: +e.target.value }));
+$('#groundRot').addEventListener('input', e => queueSite({ groundRot: +e.target.value }));
+$('#groundX').addEventListener('change', e => saveSite({ groundX: +e.target.value }));
+$('#groundY').addEventListener('change', e => saveSite({ groundY: +e.target.value }));
+
+async function uploadSite(file, kind) {
+  const st = kind === 'pano' ? $('#panoBox') : $('#groundBox');
+  st.textContent = 'Preparing photo…';
+  try {
+    const prepared = await prepareSiteImage(file, kind);
+    st.textContent = 'Uploading…';
+    const blob = await upload(`files/${user.id}/${P.id}/${safeName(prepared.file.name)}`, prepared.file, {
+      access: 'private', handleUploadUrl: '/api/upload', clientPayload: JSON.stringify({ pid: P.id, kind }),
+      contentType: prepared.contentType, multipart: prepared.file.size > 8 * 1024 * 1024,
+    });
+    P = (await api(`projects/${enc(P.id)}/files`, { method: 'POST', body: { pathname: blob.pathname, name: prepared.file.name, kind } })).project;
+    toast('Site photo saved');
+    render();
+  } catch (e) { toast(e.message || 'Upload failed', 4000); render(); }
+}
+$('#panoFile').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) uploadSite(f, 'pano'); };
+$('#groundFile').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) uploadSite(f, 'ground'); };
+$('#panoDel').onclick = async () => {
+  const f = P.files.find(x => x.kind === 'pano');
+  if (!f || !confirm('Remove the 360° panorama?')) return;
+  P = (await api(`projects/${enc(P.id)}/files/${enc(f.id)}`, { method: 'DELETE' })).project; render();
+};
+$('#groundDel').onclick = async () => {
+  const f = P.files.find(x => x.kind === 'ground');
+  if (!f || !confirm('Remove the aerial photo?')) return;
+  P = (await api(`projects/${enc(P.id)}/files/${enc(f.id)}`, { method: 'DELETE' })).project; render();
+};
+
+const stateSel = $('#parcelState');
+for (const [abbr, name] of US_STATES) {
+  const o = document.createElement('option'); o.value = name; o.textContent = name; stateSel.appendChild(o);
+}
+function updateParcelTip() {
+  const tip = parcelSearchTip($('#parcelState').value, $('#parcelCounty').value);
+  $('#parcelTip').innerHTML = '<code>' + tip.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</code>';
+  return tip;
+}
+$('#parcelState').addEventListener('change', updateParcelTip);
+$('#parcelCounty').addEventListener('input', updateParcelTip);
+updateParcelTip();
+$('#copyParcelSearch').onclick = async () => {
+  try { await navigator.clipboard.writeText(updateParcelTip()); toast('Search copied'); } catch { toast('Could not copy'); }
+};
+
+async function saveParcel(parsed) {
+  P = (await api('projects/' + enc(P.id), { method: 'PATCH', body: { site: { parcel: parsed } } })).project;
+  renderSite();
+  toast('Lot outline saved');
+}
+$('#parcelFile').onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try { await saveParcel(await parseParcelFile(f)); } catch (err) { toast(err.message || 'Could not import that file', 4000); }
+};
+$('#parcelCornersBtn').onclick = async () => {
+  try { await saveParcel(parseParcelText($('#parcelCorners').value, 'corners')); } catch (err) { toast(err.message || 'Could not read those corners', 4000); }
+};
+function parcelPartial(extra) {
+  const cur = (P.site && P.site.parcel) || {};
+  return { parcel: { ...cur, ...extra } };
+}
+$('#parcelRot').addEventListener('input', e => queueSite(parcelPartial({ rot: +e.target.value })));
+$('#parcelX').addEventListener('change', e => saveSite(parcelPartial({ x: +e.target.value })));
+$('#parcelY').addEventListener('change', e => saveSite(parcelPartial({ y: +e.target.value })));
+$('#parcelDel').onclick = async () => {
+  if (!confirm('Remove the lot outline?')) return;
+  try { P = (await api('projects/' + enc(P.id), { method: 'PATCH', body: { site: { parcel: null } } })).project; renderSite(); }
+  catch (err) { toast(err.message); }
+};
 </script>
 </body></html>

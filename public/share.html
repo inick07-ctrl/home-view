@@ -22,7 +22,7 @@ try {
   document.title = P.name + ' — Home View';
   $('#title').textContent = P.name;
   const model = P.files.find(f => f.kind === 'model');
-  if (model) { $('#open3d').style.display = ''; $('#open3d').href = '/viewer?s=' + enc(token); } else $('#noModel').style.display = '';
+  if (model || P.exampleId) { $('#open3d').style.display = ''; $('#open3d').href = '/viewer?s=' + enc(token); } else $('#noModel').style.display = '';
   if (P.notes) { $('#notesCard').style.display = ''; $('#notes').textContent = P.notes; }
   renderGallery($('#gallery'), P, f => `/api/share/${enc(token)}/files/${enc(f.id)}`);
   $('#body').style.display = '';
