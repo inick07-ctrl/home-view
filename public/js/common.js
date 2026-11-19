@@ -14,7 +14,7 @@ export function header(user, active = '') {
   const h = document.createElement('header'); h.className = 'top';
   const link = (href, text, key) => `<a class="pill${active === key ? ' on' : ''}" href="${href}">${text}</a>`;
   h.innerHTML = `<a class="brand" href="${user ? '/dashboard' : '/'}">${LOGO}<span>Home View</span></a><nav>${link('/examples', 'Examples', 'examples')}${user
-    ? link('/dashboard', 'My projects', 'dashboard') + `<button class="pill" id="logoutBtn" title="${esc(user.email)}">Log out</button>`
+    ? link('/dashboard', 'My projects', 'dashboard') + (user.admin ? link('/admin', 'Sponsors', 'admin') : '') + `<button class="pill" id="logoutBtn" title="${esc(user.email)}">Log out</button>`
     : link('/#login', 'Log in', 'login') + link('/#signup', 'Sign up', 'signup')}</nav>`;
   document.body.prepend(h);
   h.querySelector('#logoutBtn')?.addEventListener('click', async () => { await api('auth/logout', { method: 'POST', body: {} }).catch(() => {}); location.href = '/'; });
@@ -45,4 +45,14 @@ export function renderGallery(el, project, fileUrl, { onDelete } = {}) {
     fig.querySelector('button')?.addEventListener('click', () => onDelete(f));
     el.appendChild(fig);
   }
+}
+
+export function footer() {
+  const existing = document.querySelector('footer.site-foot');
+  if (existing) return existing;
+  const f = document.querySelector('footer');
+  const html = `Home View · <a href="/examples">Examples</a> · <a href="/advertise">Advertise with Home View</a>`;
+  if (f) { f.classList.add('site-foot'); f.innerHTML = html; return f; }
+  const el = document.createElement('footer'); el.className = 'site-foot'; el.innerHTML = html;
+  document.body.appendChild(el); return el;
 }

@@ -6,6 +6,10 @@ import {
 } from '../server/auth.js';
 import { readJSON, writeJSON, writeJSONIfAbsent, remove, listAll, headBlob, streamBlob } from '../server/store.js';
 import { getExample } from '../server/examples.js';
+import {
+  sanitizeBuildType, isAdmin, contactEmail,
+  sanitizeSponsor, publicSponsor, sanitizeInquiry,
+} from '../server/sponsors.js';
 
 export const config = { maxDuration: 30 };
 
@@ -50,8 +54,13 @@ async function requireUser(req) {
   if (!u) throw new HttpError(401, 'Please log in');
   return u;
 }
+async function requireAdmin(req) {
+  const u = await requireUser(req);
+  if (!isAdmin(u)) throw new HttpError(403, 'Admin only');
+  return u;
+}
 
-const publicUser = (u) => ({ id: u.id, email: u.email, createdAt: u.createdAt });
+const publicUser = (u) => ({ id: u.id, email: u.email, createdAt: u.createdAt, admin: isAdmin(u) });
 const publicFile = (f) => ({ id: f.id, name: f.name, kind: f.kind, format: f.format || null, contentType: f.contentType, size: f.size, uploadedAt: f.uploadedAt });
 function clampNum(v, lo, hi, fallback) {
   const n = Number(v);
@@ -159,6 +168,7 @@ function publicProject(p, { owner = false } = {}) {
     id: p.id, name: p.name, notes: p.notes || '', createdAt: p.createdAt, updatedAt: p.updatedAt,
     files: (p.files || []).map(publicFile),
     site: publicSite(p),
+    buildType: sanitizeBuildType(p.buildType),
   };
   if (p.exampleId) out.exampleId = p.exampleId;
   if (owner) out.shareToken = p.shareToken || null;
@@ -197,6 +207,17 @@ async function streamFile(res, f) {
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(f.name)}"`);
   res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox");
   Readable.fromWeb(r.stream).pipe(res);
+}
+
+const advertiseHits = new Map();
+function allowAdvertise(ip) {
+  const now = Date.now();
+  const key = ip || 'unknown';
+  const recent = (advertiseHits.get(key) || []).filter(t => now - t < 30 * 60 * 1000);
+  if (recent.length >= 5) { advertiseHits.set(key, recent); return false; }
+  recent.push(now);
+  advertiseHits.set(key, recent);
+  return true;
 }
 
 const routes = {
@@ -253,11 +274,11 @@ const routes = {
   'POST projects': async (req, res) => {
     requireJson(req);
     const user = await requireUser(req);
-    const { name, notes } = await readBody(req);
+    const { name, notes, buildType } = await readBody(req);
     const metas = await listAll(`db/projects/${user.id}/`);
     if (metas.length >= 50) throw bad('Project limit reached (50)');
     const now = new Date().toISOString();
-    const p = { id: newId(9), owner: user.id, name: cleanText(name, 120).trim() || 'Untitled project', notes: cleanText(notes, 20000), files: [], shareToken: null, createdAt: now, updatedAt: now };
+    const p = { id: newId(9), owner: user.id, name: cleanText(name, 120).trim() || 'Untitled project', notes: cleanText(notes, 20000), files: [], shareToken: null, buildType: sanitizeBuildType(buildType), createdAt: now, updatedAt: now };
     await writeJSON(projPath(user.id, p.id), p);
     send(res, 201, { project: publicProject(p, { owner: true }) });
   },
@@ -278,7 +299,7 @@ const routes = {
     const now = new Date().toISOString();
     const p = {
       id: newId(9), owner: user.id, name: ex.name, notes: '', files: [],
-      shareToken: null, exampleId: ex.id, createdAt: now, updatedAt: now,
+      shareToken: null, exampleId: ex.id, buildType: sanitizeBuildType(ex.type), createdAt: now, updatedAt: now,
     };
     await writeJSON(projPath(user.id, p.id), p);
     send(res, 201, { project: publicProject(p, { owner: true }), alreadySaved: false });
@@ -294,6 +315,7 @@ const routes = {
     const body = await readBody(req);
     if (body.name !== undefined) p.name = cleanText(body.name, 120).trim() || 'Untitled project';
     if (body.notes !== undefined) p.notes = cleanText(body.notes, 20000);
+    if (body.buildType !== undefined) p.buildType = sanitizeBuildType(body.buildType);
     if (body.share === true && !p.shareToken) {
       p.shareToken = newId(18);
       await writeJSON(sharePath(p.shareToken), { uid: user.id, pid: p.id });
@@ -402,6 +424,77 @@ const routes = {
     const f = (p.files || []).find(x => x.id === fid);
     if (!f) throw new HttpError(404, 'File not found');
     await streamFile(res, f);
+  },
+
+  // ---------- sponsors (public read of active only; admin write) ----------
+  'GET sponsors': async (req, res) => {
+    const metas = await listAll('db/sponsors/');
+    const all = (await Promise.all(metas.map(m => readJSON(m.pathname)))).filter(Boolean);
+    const sponsors = all.filter(s => s && s.active).map(publicSponsor);
+    send(res, 200, { sponsors });
+  },
+  'GET advertise': async (req, res) => {
+    send(res, 200, { contactEmail: contactEmail() || null });
+  },
+  'POST advertise': async (req, res) => {
+    requireJson(req);
+    const body = await readBody(req);
+    if (body.website) { // honeypot
+      send(res, 201, { ok: true });
+      return;
+    }
+    const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
+    if (!allowAdvertise(ip)) throw new HttpError(429, 'Please wait a little before sending another message.');
+    const inquiry = sanitizeInquiry(body);
+    const now = new Date().toISOString();
+    const rec = { id: newId(8), ...inquiry, createdAt: now };
+    await writeJSON(`db/advertise/${rec.id}.json`, rec);
+    send(res, 201, { ok: true });
+  },
+  'GET admin/sponsors': async (req, res) => {
+    await requireAdmin(req);
+    const metas = await listAll('db/sponsors/');
+    const sponsors = (await Promise.all(metas.map(m => readJSON(m.pathname)))).filter(Boolean)
+      .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
+    send(res, 200, { sponsors });
+  },
+  'POST admin/sponsors': async (req, res) => {
+    requireJson(req);
+    await requireAdmin(req);
+    const body = await readBody(req);
+    const now = new Date().toISOString();
+    const fields = sanitizeSponsor(body);
+    const s = { id: newId(8), ...fields, createdAt: now, updatedAt: now };
+    await writeJSON(`db/sponsors/${s.id}.json`, s);
+    send(res, 201, { sponsor: s });
+  },
+  'PATCH admin/sponsors/:id': async (req, res, { id }) => {
+    requireJson(req);
+    await requireAdmin(req);
+    if (!ID_RE.test(id || '')) throw new HttpError(404, 'Sponsor not found');
+    const prev = await readJSON(`db/sponsors/${id}.json`);
+    if (!prev) throw new HttpError(404, 'Sponsor not found');
+    const body = await readBody(req);
+    const fields = sanitizeSponsor(body, { partial: true, prev });
+    const s = { ...prev, ...fields, id: prev.id, createdAt: prev.createdAt, updatedAt: new Date().toISOString() };
+    await writeJSON(`db/sponsors/${s.id}.json`, s);
+    send(res, 200, { sponsor: s });
+  },
+  'DELETE admin/sponsors/:id': async (req, res, { id }) => {
+    await requireAdmin(req);
+    if (!ID_RE.test(id || '')) throw new HttpError(404, 'Sponsor not found');
+    const prev = await readJSON(`db/sponsors/${id}.json`);
+    if (!prev) throw new HttpError(404, 'Sponsor not found');
+    await remove(`db/sponsors/${id}.json`);
+    send(res, 200, { ok: true });
+  },
+  'GET admin/inquiries': async (req, res) => {
+    await requireAdmin(req);
+    const metas = await listAll('db/advertise/');
+    const inquiries = (await Promise.all(metas.map(m => readJSON(m.pathname)))).filter(Boolean)
+      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+      .slice(0, 200);
+    send(res, 200, { inquiries });
   },
 };
 

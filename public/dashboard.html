@@ -3,8 +3,9 @@
 </head><body>
 <main>
   <div class="row"><div><h1>My projects</h1><div class="muted" id="who"></div></div><div class="spacer"></div></div>
-  <form class="card row" id="newForm" style="margin:16px 0">
-    <input id="newName" placeholder="New project name, e.g. Lake cabin" maxlength="120" style="flex:1;min-width:200px" required>
+  <form class="card row" id="newForm" style="margin:16px 0;align-items:end">
+    <div style="flex:1;min-width:200px"><label for="newName">Project name</label><input id="newName" placeholder="e.g. Lake cabin" maxlength="120" required></div>
+    <div style="min-width:180px"><label for="newType">Build type</label><select id="newType"></select></div>
     <button class="btn primary" type="submit">+ New project</button>
   </form>
   <div class="err" id="err"></div>
@@ -15,11 +16,16 @@
     <div class="err" id="delErr"></div>
   </details>
 </main>
+<footer class="site-foot">Home View</footer>
+
 <script type="module">
-import { $, esc, api, me, header, fmtDate } from '/js/common.js';
+import { $, esc, api, me, header, footer, fmtDate } from '/js/common.js';
+import { BUILD_TYPES, buildTypeOptionsHtml, buildTypeLabel, sanitizeBuildType } from '/js/build-types.js';
 const user = await me();
 if (!user) location.replace('/?next=/dashboard');
 header(user, 'dashboard');
+footer();
+$('#newType').innerHTML = buildTypeOptionsHtml('home');
 $('#who').textContent = user.email;
 async function load() {
   const { projects } = await api('projects');
@@ -37,14 +43,14 @@ async function load() {
     const thumb = thumbSrc ? `<img loading="lazy" alt="" src="${thumbSrc}">` : (hasModel ? '3D model' : 'No images yet');
     card.innerHTML = `<a class="ex-body" href="${href}"><div class="thumb">${thumb}</div>
       <div class="title">${esc(p.name)}</div></a>
-      <div class="row ex-actions" style="gap:6px">${hasModel ? '<span class="badge acc">3D</span>' : ''}${p.exampleId ? '<span class="badge">Example</span>' : ''}<span class="badge">${p.files.filter(f => f.kind === 'image').length} images</span>${p.shareToken ? '<span class="badge acc">Shared</span>' : '<span class="badge">Private</span>'}<span class="spacer"></span><a class="muted" style="font-size:12px" href="/project?id=${encodeURIComponent(p.id)}">Details</a><span class="muted" style="font-size:12px">${fmtDate(p.updatedAt)}</span></div>`;
+      <div class="row ex-actions" style="gap:6px"><span class="badge">${esc(buildTypeLabel(p.buildType))}</span>${hasModel ? '<span class="badge acc">3D</span>' : ''}${p.exampleId ? '<span class="badge">Example</span>' : ''}<span class="badge">${p.files.filter(f => f.kind === 'image').length} images</span>${p.shareToken ? '<span class="badge acc">Shared</span>' : '<span class="badge">Private</span>'}<span class="spacer"></span><a class="muted" style="font-size:12px" href="/project?id=${encodeURIComponent(p.id)}">Details</a><span class="muted" style="font-size:12px">${fmtDate(p.updatedAt)}</span></div>`;
     list.appendChild(card);
   }
 }
 load().catch(e => { $('#err').textContent = e.message; });
 $('#newForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  try { const { project } = await api('projects', { method: 'POST', body: { name: $('#newName').value } }); location.href = '/project?id=' + encodeURIComponent(project.id); }
+  try { const { project } = await api('projects', { method: 'POST', body: { name: $('#newName').value, buildType: sanitizeBuildType($('#newType').value) } }); location.href = '/project?id=' + encodeURIComponent(project.id); }
   catch (err) { $('#err').textContent = err.message; }
 });
 $('#delAcct').addEventListener('click', async () => {

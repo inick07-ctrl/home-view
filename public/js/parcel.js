@@ -301,7 +301,7 @@ export function modelBounds(model) {
 
 export function footprintRects(model) {
   const rooms = model?.rooms || [];
-  return rooms.filter(r => r[3] != null && r[6] != null && !r[7]?.outside).map(r => [r[3], r[4], r[5], r[6]]);
+  return rooms.filter(r => r[3] != null && r[6] != null && !r[7]?.outside && !r[7]?.noFloor && !r[7]?.loft).map(r => [r[3], r[4], r[5], r[6]]);
 }
 
 export function footprintArea(rects) {

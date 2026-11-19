@@ -18,7 +18,7 @@
   .btns button:hover{background:rgba(255,255,255,.18)}
   .btns button.on{background:var(--acc);color:#1d1d1d;border-color:var(--acc)}
   #help{font-size:12px;opacity:.85;margin-top:8px;line-height:1.35}
-  #hud.collapsed .btns,#hud.collapsed #help,#hud.collapsed .sub,#hud.collapsed #siteHud{display:none}
+  #hud.collapsed .btns,#hud.collapsed #help,#hud.collapsed .sub,#hud.collapsed #siteHud,#hud.collapsed #sponsorHud{display:none}
   #toggleHud{position:absolute;right:8px;top:6px;background:none;border:0;color:var(--fg);font-size:16px;cursor:pointer;opacity:.8}
   #north{position:fixed;right:14px;top:14px;z-index:5;width:64px;height:64px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 18px rgba(0,0,0,.25)}
   #north svg{width:54px;height:54px;transition:none}
@@ -63,7 +63,7 @@
   #saveWrap .save-ctl{font:inherit;font-size:13px;font-weight:600;white-space:nowrap;border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:6px 12px;background:rgba(255,255,255,.08);color:#f3f1ec;text-decoration:none;cursor:pointer}
   #saveWrap .save-ctl.primary{background:#e0a95a;border-color:#e0a95a;color:#1d1d1d}
   #saveWrap .save-ctl:disabled{opacity:.6;cursor:default}
-  #tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+  #tabs{display:flex;flex-wrap:wrap;gap:6px;overflow:visible}
   #tabs button{font:inherit;font-size:13px;font-weight:600;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#f3f1ec;padding:6px 14px;border-radius:999px;cursor:pointer;white-space:nowrap}
   #tabs button.on{background:var(--acc);border-color:var(--acc);color:#1d1d1d}
   #hud{top:58px !important}
@@ -144,6 +144,7 @@
     </div>
     <div class="muted">Saved to this project. Line the photos and lot up with the house and the north compass.</div>
   </div>
+  <div id="sponsorHud" class="sp-featured" hidden></div>
   <div id="help"></div>
 </div>
 <div id="sf" aria-label="Estimated square footage"><div class="sf-h"><span id="sfHeated">—</span> <span class="sf-unit">sf heated</span></div><div class="sf-sub" id="sfSub"></div><div class="sf-lot" id="sfLot" hidden></div><div class="sf-warn" id="lotWarn" hidden></div></div>
@@ -154,5 +155,9 @@
 <div id="err"></div>
 <script type="module" src="/3d/engine.js"></script>
 <script type="module" src="/js/viewer-save.js"></script>
+<script type="module">
+import { mountSponsors } from '/js/sponsors.js';
+mountSponsors({ featured: document.getElementById('sponsorHud') });
+</script>
 </body>
 </html>

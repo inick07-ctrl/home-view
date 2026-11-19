@@ -1,0 +1,63 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#14191e"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Cpath d=%27M8 1 1 7h2v8h4v-5h2v5h4V7h2z%27 fill=%27%23e0a95a%27/%3E%3C/svg%3E"><link rel="stylesheet" href="/css/site.css">
+<title>Advertise with Home View</title>
+<meta name="description" content="Tell Home View about sponsoring products for homes, tiny homes, and trailer homes — roofing, plumbing, electrical, appliances, furniture, and more.">
+</head><body>
+<main class="narrow">
+  <h1>Advertise with Home View</h1>
+  <p class="lead">Home View is building a place to explore homes, tiny homes, and trailer homes in 3D. We’re opening a path for companies — roofing, plumbing, electrical, HVAC, windows and doors, flooring, appliances, furniture, and related trades — to feature real products on the site later.</p>
+  <p class="muted">Nothing is for sale here and we are not publishing packages or prices. If you’d like to be considered, send a note. We’ll follow up when there is a fit.</p>
+  <form class="card" id="form" style="margin-top:18px">
+    <label for="name">Name</label>
+    <input id="name" name="name" maxlength="120" required autocomplete="name">
+    <label for="company">Company</label>
+    <input id="company" name="company" maxlength="160" autocomplete="organization">
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" maxlength="200" required autocomplete="email">
+    <label for="category">Category of interest</label>
+    <select id="category" name="category">
+      <option value="">Select one (optional)</option>
+    </select>
+    <label for="message">About your products or interest</label>
+    <textarea id="message" name="message" rows="6" maxlength="4000" required></textarea>
+    <div style="position:absolute;left:-9999px" aria-hidden="true"><input id="website" name="website" tabindex="-1" autocomplete="off"></div>
+    <div class="err" id="err"></div>
+    <div class="ok" id="ok" hidden>Thanks — we received your note and will be in touch.</div>
+    <button class="btn primary" type="submit" id="btn" style="margin-top:10px">Send interest</button>
+  </form>
+  <p class="muted" id="mailWrap" hidden style="margin-top:14px">You can also email <a id="mailTo" href="#"></a>.</p>
+</main>
+<footer>Home View</footer>
+<script type="module">
+import { $, me, header, footer, api } from '/js/common.js';
+import { SPONSOR_CATEGORIES } from '/js/sponsors.js';
+const user = await me();
+header(user);
+footer();
+const sel = $('#category');
+for (const c of SPONSOR_CATEGORIES) {
+  const o = document.createElement('option'); o.value = c.id; o.textContent = c.label; sel.appendChild(o);
+}
+try {
+  const info = await api('advertise');
+  if (info.contactEmail) {
+    $('#mailWrap').hidden = false;
+    const a = $('#mailTo');
+    a.textContent = info.contactEmail;
+    a.href = 'mailto:' + info.contactEmail + '?subject=' + encodeURIComponent('Advertise with Home View');
+  }
+} catch {}
+$('#form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = $('#btn'); btn.disabled = true; $('#err').textContent = ''; $('#ok').hidden = true;
+  try {
+    await api('advertise', { method: 'POST', body: {
+      name: $('#name').value, company: $('#company').value, email: $('#email').value,
+      category: $('#category').value, message: $('#message').value, website: $('#website').value,
+    } });
+    $('#ok').hidden = false;
+    $('#form').reset();
+  } catch (err) { $('#err').textContent = err.message; }
+  finally { btn.disabled = false; }
+});
+</script>
+</body></html>

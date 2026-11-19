@@ -1,0 +1,127 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#14191e"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Cpath d=%27M8 1 1 7h2v8h4v-5h2v5h4V7h2z%27 fill=%27%23e0a95a%27/%3E%3C/svg%3E"><link rel="stylesheet" href="/css/site.css">
+<title>Sponsors — Home View</title>
+<meta name="robots" content="noindex">
+</head><body>
+<main>
+  <h1>Sponsors</h1>
+  <p class="muted">Only active sponsors appear on the site. Leave a company inactive while you draft it. No placeholder brands are shown to visitors.</p>
+  <div class="err" id="err"></div>
+  <form class="card" id="form" style="margin:16px 0">
+    <input type="hidden" id="sid">
+    <h2 id="formTitle">Add a sponsor</h2>
+    <div class="row" style="align-items:end">
+      <div style="flex:1;min-width:180px"><label for="company">Company</label><input id="company" required maxlength="160"></div>
+      <div style="flex:1;min-width:160px"><label for="category">Category</label><select id="category"></select></div>
+    </div>
+    <label for="link">Website (https)</label>
+    <input id="link" type="url" maxlength="500" placeholder="https://">
+    <label for="logo">Logo image URL (https, optional)</label>
+    <input id="logo" type="url" maxlength="500" placeholder="https://">
+    <label for="products">Products (one per line: name | optional url | optional blurb)</label>
+    <textarea id="products" rows="5" placeholder="Architectural shingles | https://example.com/shingles | Cool-roof option"></textarea>
+    <div class="row" style="margin-top:8px">
+      <label class="row" style="gap:8px;margin:0"><input type="checkbox" id="featured"> Featured products panel</label>
+      <label class="row" style="gap:8px;margin:0"><input type="checkbox" id="strip"> Examples page strip</label>
+      <label class="row" style="gap:8px;margin:0"><input type="checkbox" id="active"> Active (visible on the site)</label>
+    </div>
+    <label for="notes">Internal notes (not public)</label>
+    <textarea id="notes" rows="2" maxlength="2000"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn primary" type="submit" id="saveBtn">Save sponsor</button>
+      <button class="btn" type="button" id="resetBtn">Clear form</button>
+    </div>
+  </form>
+  <div id="list"></div>
+  <h2 style="margin-top:32px">Interest inquiries</h2>
+  <p class="muted">Messages from the Advertise with Home View page. Home View does not send email from this form.</p>
+  <div id="inq"></div>
+</main>
+<footer>Home View</footer>
+<script type="module">
+import { $, esc, me, header, footer, api, toast, fmtDate } from '/js/common.js';
+import { SPONSOR_CATEGORIES, categoryLabel } from '/js/sponsors.js';
+const user = await me();
+if (!user) location.replace('/?next=/admin');
+if (!user.admin) { document.querySelector('main').innerHTML = '<h1>Admin only</h1><p class="muted">This page is for the site owner. Set <code>ADMIN_EMAIL</code> in the project environment to your Home View login email.</p>'; header(user); footer(); throw new Error('not admin'); }
+header(user, 'admin');
+footer();
+const catSel = $('#category');
+for (const c of SPONSOR_CATEGORIES) {
+  const o = document.createElement('option'); o.value = c.id; o.textContent = c.label; catSel.appendChild(o);
+}
+function parseProducts(text) {
+  return String(text || '').split(/\n+/).map(line => {
+    const parts = line.split('|').map(s => s.trim());
+    if (!parts[0]) return null;
+    const p = { name: parts[0] };
+    if (parts[1] && /^https?:\/\//i.test(parts[1])) { p.url = parts[1]; if (parts[2]) p.blurb = parts[2]; }
+    else if (parts[1]) { p.blurb = parts.slice(1).join(' | '); }
+    return p;
+  }).filter(Boolean);
+}
+function formatProducts(list) {
+  return (list || []).map(p => [p.name, p.url, p.blurb].filter(Boolean).join(' | ')).join('\n');
+}
+function clearForm() {
+  $('#sid').value = ''; $('#formTitle').textContent = 'Add a sponsor';
+  $('#company').value = ''; $('#category').value = 'other'; $('#link').value = '';
+  $('#logo').value = ''; $('#products').value = ''; $('#notes').value = '';
+  $('#featured').checked = false; $('#strip').checked = false; $('#active').checked = false;
+}
+$('#resetBtn').onclick = () => clearForm();
+function fillForm(s) {
+  $('#sid').value = s.id; $('#formTitle').textContent = 'Edit ' + s.company;
+  $('#company').value = s.company; $('#category').value = s.category || 'other';
+  $('#link').value = s.link || ''; $('#logo').value = s.logo || '';
+  $('#products').value = formatProducts(s.products); $('#notes').value = s.notes || '';
+  $('#featured').checked = !!s.featured; $('#strip').checked = !!s.strip; $('#active').checked = !!s.active;
+  $('#company').focus();
+}
+async function load() {
+  const [{ sponsors }, { inquiries }] = await Promise.all([api('admin/sponsors'), api('admin/inquiries')]);
+  const list = $('#list');
+  if (!sponsors.length) { list.innerHTML = '<p class="muted">No sponsors yet. Add one above and leave it inactive until you are ready.</p>'; }
+  else {
+    list.innerHTML = '';
+    for (const s of sponsors) {
+      const card = document.createElement('div'); card.className = 'card'; card.style.marginBottom = '10px';
+      const flags = [s.active ? '<span class="badge acc">Active</span>' : '<span class="badge">Inactive</span>',
+        s.featured ? '<span class="badge">Featured</span>' : '',
+        s.strip ? '<span class="badge">Strip</span>' : ''].join(' ');
+      card.innerHTML = `<div class="row"><div><div class="title">${esc(s.company)}</div><div class="muted" style="font-size:13px">${esc(categoryLabel(s.category))} · ${(s.products||[]).length} product${(s.products||[]).length===1?'':'s'}</div></div><span class="spacer"></span>${flags}<button class="btn small" data-edit>Edit</button><button class="btn small danger" data-del>Delete</button></div>`;
+      card.querySelector('[data-edit]').onclick = () => fillForm(s);
+      card.querySelector('[data-del]').onclick = async () => {
+        if (!confirm('Delete ' + s.company + '?')) return;
+        try { await api('admin/sponsors/' + encodeURIComponent(s.id), { method: 'DELETE' }); toast('Deleted'); load(); }
+        catch (e) { toast(e.message); }
+      };
+      list.appendChild(card);
+    }
+  }
+  const inq = $('#inq');
+  if (!inquiries.length) inq.innerHTML = '<p class="muted">No inquiries yet.</p>';
+  else {
+    inq.innerHTML = inquiries.map(i => `<div class="card" style="margin-bottom:8px"><div class="row"><strong>${esc(i.name)}</strong>${i.company ? '<span class="muted">· ' + esc(i.company) + '</span>' : ''}<span class="spacer"></span><span class="muted" style="font-size:12px">${esc(fmtDate(i.createdAt))}</span></div><div class="muted" style="font-size:13px">${esc(i.email)}${i.category ? ' · ' + esc(categoryLabel(i.category)) : ''}</div><p style="margin:8px 0 0;white-space:pre-wrap">${esc(i.message)}</p></div>`).join('');
+  }
+}
+$('#form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = $('#saveBtn'); btn.disabled = true; $('#err').textContent = '';
+  const body = {
+    company: $('#company').value, category: $('#category').value,
+    link: $('#link').value, logo: $('#logo').value,
+    products: parseProducts($('#products').value),
+    featured: $('#featured').checked, strip: $('#strip').checked, active: $('#active').checked,
+    notes: $('#notes').value,
+  };
+  try {
+    const id = $('#sid').value;
+    if (id) await api('admin/sponsors/' + encodeURIComponent(id), { method: 'PATCH', body });
+    else await api('admin/sponsors', { method: 'POST', body });
+    toast('Saved'); clearForm(); await load();
+  } catch (err) { $('#err').textContent = err.message; }
+  finally { btn.disabled = false; }
+});
+load().catch(e => { $('#err').textContent = e.message; });
+</script>
+</body></html>

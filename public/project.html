@@ -3,7 +3,9 @@
 </head><body>
 <main>
   <a class="muted" href="/dashboard" style="text-decoration:none;font-size:14px">← My projects</a>
-  <div class="row" style="margin:6px 0 14px"><input id="name" maxlength="120" aria-label="Project name" style="font-size:22px;font-weight:700;background:transparent;border-color:transparent;padding:6px 8px;flex:1;min-width:220px"><span class="muted" id="saved" style="font-size:13px"></span></div>
+  <div class="row" style="margin:6px 0 14px;align-items:end"><input id="name" maxlength="120" aria-label="Project name" style="font-size:22px;font-weight:700;background:transparent;border-color:transparent;padding:6px 8px;flex:1;min-width:220px">
+    <div style="min-width:180px"><label for="buildType">Build type</label><select id="buildType" aria-label="Build type"></select></div>
+    <span class="muted" id="saved" style="font-size:13px"></span></div>
   <div class="err" id="err"></div>
   <div class="cols">
     <div style="display:flex;flex-direction:column;gap:16px">
@@ -132,6 +134,7 @@
       <button class="btn danger" id="delProj">Delete project</button>
     </div>
   </div>
+      <section class="sp-featured" id="featuredProducts" hidden></section>
 </main>
 <script type="module">
 import { $, esc, api, me, header, toast, fmtSize, renderGallery } from '/js/common.js';
@@ -139,16 +142,20 @@ import { upload } from '/js/blob-client.js';
 import { prepareSiteImage, SITE_MAX_BYTES } from '/js/site-image.js';
 import { parseParcelFile, parseParcelText, parseSurveyText, parcelSearchTip, US_STATES, parcelDefaults, lotStats, formatLotArea } from '/js/parcel.js';
 import { mountLotEditor } from '/js/lot-editor.js';
+import { buildTypeOptionsHtml, sanitizeBuildType, buildTypeLabel } from '/js/build-types.js';
+import { mountSponsors } from '/js/sponsors.js';
 const id = new URLSearchParams(location.search).get('id');
 const user = await me();
 if (!user) location.replace('/?next=' + encodeURIComponent(location.pathname + location.search));
 header(user, 'dashboard');
+$('#buildType').innerHTML = buildTypeOptionsHtml('home');
 let P = null, lotEditor = null, houseModel = null, houseBounds = null, groundImg = null, groundImgUrl = '';
 const enc = encodeURIComponent;
 const fileUrl = (f) => `/api/projects/${enc(P.id)}/files/${enc(f.id)}`;
 function render() {
   document.title = P.name + ' — Home View';
   if (document.activeElement !== $('#name')) $('#name').value = P.name;
+  if (document.activeElement !== $('#buildType')) $('#buildType').innerHTML = buildTypeOptionsHtml(P.buildType);
   const model = P.files.find(f => f.kind === 'model');
   const canOpen = !!(model || P.exampleId);
   $('#open3d').style.display = canOpen ? '' : 'none';
@@ -177,6 +184,8 @@ catch (e) { $('#err').textContent = e.status === 404 ? 'Project not found.' : e.
 
 async function patch(body) { P = (await api('projects/' + enc(P.id), { method: 'PATCH', body })).project; render(); }
 $('#name').addEventListener('change', async () => { try { await patch({ name: $('#name').value }); $('#saved').textContent = 'Saved'; setTimeout(() => $('#saved').textContent = '', 1500); } catch (e) { toast(e.message); } });
+$('#buildType').addEventListener('change', async () => { try { await patch({ buildType: sanitizeBuildType($('#buildType').value) }); $('#saved').textContent = 'Saved'; setTimeout(() => $('#saved').textContent = '', 1500); } catch (e) { toast(e.message); } });
+mountSponsors({ featured: $('#featuredProducts') });
 $('#name').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
 let notesDirty = false;
 $('#notes').addEventListener('input', () => { notesDirty = true; $('#notesSaved').textContent = 'Unsaved changes'; });

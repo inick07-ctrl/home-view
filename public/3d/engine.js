@@ -1025,7 +1025,7 @@ function buildModel(model) {
     if (dims || o.vaulted) { const sm = document.createElement('small'); sm.textContent = `${dims || ''}${o.vaulted ? (dims ? ' · ' : '') + 'vaulted' : ''}`; div.appendChild(sm); }
     const obj = new CSS2DObject(div);
     const [lx, ly] = o.labelAt || [(a + c) / 2, (b + d) / 2];
-    obj.position.set(Wx(lx), minor ? 3 : 4.5, Wz(ly));
+    obj.position.set(Wx(lx), o.labelZ || (minor ? 3 : 4.5), Wz(ly));
     labels.add(obj);
   }
   setLabels(labelsOn);
@@ -1077,7 +1077,7 @@ function setMode(m, instant = false) {
   document.body.classList.toggle('walk-pad', m === 'walk' && typeof isTouch !== 'undefined' && isTouch);
   setBtn('bOrbit', m === 'orbit'); setBtn('bTop', m === 'top'); setBtn('bWalk', m === 'walk');
   $('help').textContent = HELP[m];
-  const size = Math.max(BW, BH) / 91;
+  const size = Math.max(BW, BH, 48) / 91; // keep tiny homes and short trailers in frame
   const hp = housePose();
   if (m === 'orbit') {
     const k = Math.max(0.85, 0.95 / camera.aspect) * size;

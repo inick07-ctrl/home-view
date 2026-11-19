@@ -1,23 +1,27 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#14191e"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Cpath d=%27M8 1 1 7h2v8h4v-5h2v5h4V7h2z%27 fill=%27%23e0a95a%27/%3E%3C/svg%3E"><link rel="stylesheet" href="/css/site.css">
-<title>Example homes — Home View</title>
-<meta name="description" content="Example home plans you can explore in interactive 3D on Home View.">
+<title>Examples — Home View</title>
+<meta name="description" content="Example homes, tiny homes, and trailer homes you can explore in interactive 3D on Home View.">
 </head><body>
 <main>
   <div class="row" style="gap:12px;align-items:flex-end">
     <div>
-      <h1>Example homes</h1>
-      <p class="muted" style="margin:0">Eleven Smith home plans built as interactive 3D models. Open one to orbit, view the plan from above, take the roof off or walk through the rooms.</p>
+      <h1>Examples</h1>
+      <p class="muted" style="margin:0">Homes, tiny homes, and trailer homes built as interactive 3D models. Open one to orbit, view the plan from above, take the roof off or walk through the rooms.</p>
     </div>
     <span class="spacer"></span>
     <button type="button" class="btn" id="saveAll">Save all examples</button>
   </div>
+  <div class="type-filters" id="typeFilters" role="tablist" aria-label="Filter examples by type"></div>
+  <div id="sponsorStrip" class="sp-strip" hidden></div>
   <div class="grid" id="list" style="margin-top:16px"></div>
-  <div class="card" style="margin-top:22px"><h2>Make your own</h2><p class="muted">Create a free account to keep plans and photos for your own home projects, add a 3D model and share it with a link. Signed in, you can also save any example below to My projects.</p><a class="btn primary" href="/#signup" id="cta">Create an account</a></div>
+  <div class="card" style="margin-top:22px"><h2>Make your own</h2><p class="muted">Create a free account to keep plans and photos for a home, tiny home, trailer home, or ADU, add a 3D model and share it with a link. Signed in, you can also save any example below to My projects.</p><a class="btn primary" href="/#signup" id="cta">Create an account</a></div>
 </main>
-<footer>Home View</footer>
+<footer class="site-foot">Home View · <a href="/examples">Examples</a> · <a href="/advertise">Advertise with Home View</a></footer>
 <script type="module">
 import { $, esc, me, header, toast } from '/js/common.js';
 import { loginUrlFor, saveExample, savedExampleMap, renderSaveControl } from '/js/example-save.js';
+import { BUILD_TYPES } from '/js/build-types.js';
+import { mountSponsors } from '/js/sponsors.js';
 import REGISTRY from '/3d/models/registry.js';
 
 const params = new URLSearchParams(location.search);
@@ -49,15 +53,45 @@ async function onSave(id) {
   }
 }
 
-for (const r of REGISTRY) {
-  const card = document.createElement('div');
-  card.className = 'card pcard';
-  card.innerHTML = `<a class="ex-body" href="/viewer?ex=${esc(r.id)}"><div class="thumb"><img loading="lazy" alt="" src="/img/${esc(r.id)}.jpg"></div><div class="title">${esc(r.title || r.name)}</div><div class="muted" style="font-size:13px">${esc(r.blurb || '')}</div></a><div class="ex-actions"><a class="badge acc" href="/viewer?ex=${esc(r.id)}">Open in 3D</a><span class="spacer"></span><span class="save-slot"></span></div>`;
-  const slot = card.querySelector('.save-slot');
-  controls.set(r.id, slot);
-  list.appendChild(card);
-  paint(r.id);
+const typeParams = new URLSearchParams(location.search);
+let typeFilter = typeParams.get('type') || 'all';
+const filters = $('#typeFilters');
+function setType(t) {
+  typeFilter = t;
+  const q = new URLSearchParams(location.search);
+  if (t === 'all') q.delete('type'); else q.set('type', t);
+  q.delete('save');
+  history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
+  renderFilters();
+  renderList();
 }
+function renderFilters() {
+  const items = [{ id: 'all', label: 'All' }, ...BUILD_TYPES];
+  filters.innerHTML = items.map(t => `<button type="button" class="pill${typeFilter === t.id ? ' on' : ''}" data-type="${t.id}">${t.label}</button>`).join('');
+  filters.querySelectorAll('[data-type]').forEach(b => b.onclick = () => setType(b.dataset.type));
+}
+function renderList() {
+  list.innerHTML = '';
+  controls.clear();
+  const rows = typeFilter === 'all' ? REGISTRY : REGISTRY.filter(r => (r.type || 'home') === typeFilter);
+  if (!rows.length) {
+    list.innerHTML = '<div class="card"><p class="muted" style="margin:0">No examples in this type yet. Try another filter, or <a href="/#signup">create a project</a> for your own plan.</p></div>';
+    return;
+  }
+  for (const r of rows) {
+    const card = document.createElement('div');
+    card.className = 'card pcard';
+    const typeLabel = (BUILD_TYPES.find(t => t.id === (r.type || 'home')) || {}).label || '';
+    card.innerHTML = `<a class="ex-body" href="/viewer?ex=${esc(r.id)}"><div class="thumb"><img loading="lazy" alt="" src="/img/${esc(r.id)}.jpg"></div><div class="title">${esc(r.title || r.name)}</div><div class="muted" style="font-size:13px">${esc(r.blurb || '')}</div></a><div class="ex-actions"><a class="badge acc" href="/viewer?ex=${esc(r.id)}">Open in 3D</a><span class="badge">${esc(typeLabel)}</span><span class="spacer"></span><span class="save-slot"></span></div>`;
+    const slot = card.querySelector('.save-slot');
+    controls.set(r.id, slot);
+    list.appendChild(card);
+    paint(r.id);
+  }
+}
+renderFilters();
+renderList();
+mountSponsors({ strip: $('#sponsorStrip') });
 
 const saveAllBtn = $('#saveAll');
 async function saveAllExamples() {
