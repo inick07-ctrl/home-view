@@ -158,6 +158,7 @@ ground.rotation.x = -Math.PI / 2; ground.position.y = -0.6; ground.receiveShadow
 
 // ---------- per-model state ----------
 let M = null, root = null, wallsFull, wallsCut, roof, labels, planOverlay, ceilings;
+let fires = [];
 let CX = 0, CZ = 0, BW = 90, BH = 80, solids = [];
 const Wx = (x) => x - CX, Wz = (y) => y - CZ;
 
@@ -279,6 +280,7 @@ function buildModel(model) {
   }
   M = model; loadedModel = model; root = new THREE.Group(); scene.add(root);
   solids = [];
+  fires = [];
   const mats = M.materials || {};
   const H = M.wallH || 9;
   const st = STYLES[currentStyle] || STYLES.default;
@@ -524,16 +526,78 @@ function buildModel(model) {
         for (const [ws, wt] of [[.12, 0], [.75, 0], [.12, .93], [.75, .93]]) kit.block(...r(ws, ws + .1, wt, wt + .07), 0, 1.6, '#151515');
       }
     },
+    fire(a, b, c, d, face = 'e') {
+      // Built-in firebox: logs, glowing embers, a few flickering flame planes, and a warm light.
+      const alongX = (c - a) >= (d - b);
+      const len = alongX ? (c - a) : (d - b);
+      const nLogs = Math.max(2, Math.round(len / 1.15));
+      const logC = ['#3a2416', '#4a2e18', '#2a1a10', '#5a3820'];
+      for (let i = 0; i < nLogs; i++) {
+        const t0 = (i + 0.12) / nLogs, t1 = Math.min(0.98, (i + 0.82) / nLogs);
+        const col = logC[i % logC.length];
+        if (alongX) kit.block(a + t0 * (c - a), b + 0.12, a + t1 * (c - a), d - 0.12, 0.12, 0.55, col, { r: .85 });
+        else kit.block(a + 0.12, b + t0 * (d - b), c - 0.12, b + t1 * (d - b), 0.12, 0.55, col, { r: .85 });
+      }
+      const ember = new THREE.MeshStandardMaterial({ color: '#ff6a1a', emissive: '#ff4a00', emissiveIntensity: 1.4, roughness: 1 });
+      const ex0 = a + 0.15, ey0 = b + 0.15, ex1 = c - 0.15, ey1 = d - 0.15;
+      const em = new THREE.Mesh(boxRect(ex0, ey0, ex1, ey1, 0.08, 0.22, 0), ember);
+      em.castShadow = false; furn.add(em);
+      if (!TEX.flame) {
+        TEX.flame = canvasTex((g, s) => {
+          g.clearRect(0, 0, s, s);
+          const grd = g.createLinearGradient(s / 2, s, s / 2, 0);
+          grd.addColorStop(0, 'rgba(255,80,0,0)');
+          grd.addColorStop(0.15, 'rgba(255,90,10,.85)');
+          grd.addColorStop(0.45, 'rgba(255,160,20,.8)');
+          grd.addColorStop(0.75, 'rgba(255,230,80,.55)');
+          grd.addColorStop(1, 'rgba(255,255,200,0)');
+          g.fillStyle = grd;
+          g.beginPath();
+          g.moveTo(s * 0.5, s);
+          g.bezierCurveTo(s * 0.05, s * 0.7, s * 0.15, s * 0.25, s * 0.5, 0);
+          g.bezierCurveTo(s * 0.85, s * 0.25, s * 0.95, s * 0.7, s * 0.5, s);
+          g.fill();
+        }, 128);
+        TEX.flame.wrapS = TEX.flame.wrapT = THREE.ClampToEdgeWrapping;
+      }
+      const flames = [];
+      const nF = Math.max(3, Math.round(len / 1.4) + 1);
+      const cx = (a + c) / 2, cy = (b + d) / 2;
+      const inward = { e: [0.35, 0], w: [-0.35, 0], n: [0, -0.35], s: [0, 0.35] }[face] || [0.35, 0];
+      for (let i = 0; i < nF; i++) {
+        const t = (i + 0.5) / nF;
+        const fx = alongX ? a + t * (c - a) : cx;
+        const fy = alongX ? cy : b + t * (d - b);
+        const mat = new THREE.MeshBasicMaterial({
+          map: TEX.flame, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+          opacity: 0.7, color: i % 2 ? '#ffe08a' : '#ff9a3a', blending: THREE.AdditiveBlending,
+        });
+        const h = 2.1 + (i % 3) * 0.25;
+        const g = new THREE.PlaneGeometry(0.7 + (i % 2) * 0.15, h);
+        const m = new THREE.Mesh(g, mat);
+        m.position.set(Wx(fx + inward[0] * 0.15), 0.7 + h / 2, Wz(fy + inward[1] * 0.15));
+        m.rotation.y = (i % 2 ? 0.7 : -0.7);
+        m.castShadow = m.receiveShadow = false;
+        furn.add(m);
+        flames.push({ mesh: m, baseH: h, phase: i * 1.3 });
+      }
+      const light = new THREE.PointLight('#ffb056', 1.55, 18, 2);
+      light.position.set(Wx(cx + inward[0]), 2.1, Wz(cy + inward[1]));
+      light.castShadow = false;
+      root.add(light);
+      fires.push({ light, base: 1.55, flames, ember, t0: Math.random() * 12 });
+    },
   };
   if (typeof M.furnish === 'function') M.furnish(kit);
   else if (Array.isArray(M.furnish)) { // JSON models: a list of [method, ...args] calls on the kit
     for (const op of M.furnish) {
-      if (!Array.isArray(op) || !['block', 'plane', 'water', 'bed', 'car', 'firewood', 'zDoor'].includes(op[0])) continue;
+      if (!Array.isArray(op) || !['block', 'plane', 'water', 'bed', 'car', 'firewood', 'zDoor', 'fire'].includes(op[0])) continue;
       const args = op.slice(1).map(v => (typeof v === 'number' || typeof v === 'string' || (v && typeof v === 'object' && !Array.isArray(v))) ? v : undefined);
       try { kit[op[0]](...args); } catch (e) { console.warn('skipped furnish op', op, e); }
     }
   }
   if (currentStyle === 'english-country') applyEnglishCountry(kit, st, H, WS);
+  syncAreaUi(M);
 
   // roofs
   roof = new THREE.Group(); roof.visible = roofOn; root.add(roof);
@@ -672,6 +736,7 @@ function exitWalk() {
 function setMode(m, instant = false) {
   if (mode === 'walk' && m !== 'walk') exitWalk();
   mode = m;
+  document.body.classList.toggle('walk-pad', m === 'walk' && typeof isTouch !== 'undefined' && isTouch);
   setBtn('bOrbit', m === 'orbit'); setBtn('bTop', m === 'top'); setBtn('bWalk', m === 'walk');
   $('help').textContent = HELP[m];
   const size = Math.max(BW, BH) / 91;
@@ -902,6 +967,38 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight); labelRenderer.setSize(innerWidth, innerHeight);
 });
 const clock = new THREE.Clock();
+
+function modelAreas(M) {
+  if (M?.areas && typeof M.areas.heated === 'number') {
+    return { heated: M.areas.heated, garage: M.areas.garage || 0, porch: M.areas.porch || 0 };
+  }
+  let heated = 0, garage = 0, porch = 0;
+  for (const r of (M?.rooms || [])) {
+    const [name, , type, a, b, c, d, o = {}] = r;
+    if (a == null || d == null) continue;
+    const area = Math.abs((c - a) * (d - b));
+    const nm = (name || '').toLowerCase();
+    if (o.outside || type === 'porch' || type === 'terrace') porch += area;
+    else if (/\bbay\b|garage|shop garage|\bshop\b/.test(nm)) garage += area;
+    else heated += area;
+  }
+  return { heated, garage, porch };
+}
+function fmtSf(n) { return Math.round(n).toLocaleString('en-US'); }
+function syncAreaUi(M) {
+  const el = $('sf'), h = $('sfHeated'), sub = $('sfSub');
+  if (!el) return;
+  if (!M?.rooms?.length && !M?.areas) { el.style.display = 'none'; return; }
+  const { heated, garage, porch } = modelAreas(M);
+  if (!heated && !garage && !porch) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  h.textContent = fmtSf(heated);
+  const bits = [];
+  if (garage > 1) bits.push('Garage ' + fmtSf(garage) + ' sf');
+  if (porch > 1) bits.push('Porches ' + fmtSf(porch) + ' sf');
+  if (sub) { sub.textContent = bits.join(' · '); sub.style.display = bits.length ? '' : 'none'; }
+}
+
 function loop() {
   const dt = Math.min(clock.getDelta(), 0.05);
   if (mode === 'walk') walkStep(dt); else orbit.update();
@@ -909,6 +1006,19 @@ function loop() {
   if (labelsOn && labels) for (const o of labels.children) {
     const show = mode !== 'walk' || Math.hypot(o.position.x - camera.position.x, o.position.z - camera.position.z) < 16;
     o.visible = show;
+  }
+  if (fires.length) {
+    const t = performance.now() / 1000;
+    for (const f of fires) {
+      const flick = 0.82 + 0.18 * Math.sin(t * 11 + f.t0) + 0.1 * Math.sin(t * 27 + 1.4);
+      f.light.intensity = f.base * flick;
+      if (f.ember) f.ember.material.emissiveIntensity = 1.1 + 0.5 * flick;
+      for (const fl of f.flames) {
+        const k = 0.84 + 0.22 * Math.sin(t * (8.5 + fl.phase) + fl.phase);
+        fl.mesh.scale.y = k;
+        fl.mesh.material.opacity = 0.5 + 0.35 * Math.sin(t * (6.5 + fl.phase * 0.7) + fl.phase);
+      }
+    }
   }
   renderer.render(scene, camera); labelRenderer.render(scene, camera);
   requestAnimationFrame(loop);
