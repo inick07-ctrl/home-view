@@ -9,11 +9,11 @@ export async function api(path, { method = 'GET', body } = {}) {
   return data;
 }
 export async function me() { try { return (await api('auth/me')).user; } catch { return null; } }
-export const LOGO = '<svg viewBox="0 0 16 16"><path d="M8 1 1 7h2v8h4v-5h2v5h4V7h2z" fill="#e0a95a"/></svg>';
+export const LOGO = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.2 1.6 15.8h4.2V28.4h8V19.8h4.4v8.6h8V15.8h4.2L16 2.2z" fill="#e0a95a"/></svg>';
 export function header(user, active = '') {
   const h = document.createElement('header'); h.className = 'top';
   const link = (href, text, key) => `<a class="pill${active === key ? ' on' : ''}" href="${href}">${text}</a>`;
-  h.innerHTML = `<a class="brand" href="${user ? '/dashboard' : '/'}">${LOGO}<span>Home View</span></a><nav>${link('/examples', 'Examples', 'examples')}${user
+  h.innerHTML = `<a class="brand" href="${user ? '/dashboard' : '/'}">${LOGO}<span>PeakStead Designs</span></a><nav>${link('/examples', 'Examples', 'examples')}${user
     ? link('/dashboard', 'My projects', 'dashboard') + (user.admin ? link('/admin', 'Sponsors', 'admin') : '') + `<button class="pill" id="logoutBtn" title="${esc(user.email)}">Log out</button>`
     : link('/#login', 'Log in', 'login') + link('/#signup', 'Sign up', 'signup')}</nav>`;
   document.body.prepend(h);
@@ -51,7 +51,7 @@ export function footer() {
   const existing = document.querySelector('footer.site-foot');
   if (existing) return existing;
   const f = document.querySelector('footer');
-  const html = `Home View · <a href="/examples">Examples</a> · <a href="/advertise">Advertise with Home View</a>`;
+  const html = `PeakStead Designs · <a href="/examples">Examples</a> · <a href="/advertise">Advertise with PeakStead Designs</a>`;
   if (f) { f.classList.add('site-foot'); f.innerHTML = html; return f; }
   const el = document.createElement('footer'); el.className = 'site-foot'; el.innerHTML = html;
   document.body.appendChild(el); return el;

@@ -1,6 +1,6 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#14191e"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Cpath d=%27M8 1 1 7h2v8h4v-5h2v5h4V7h2z%27 fill=%27%23e0a95a%27/%3E%3C/svg%3E"><link rel="stylesheet" href="/css/site.css">
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#14191e"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.png" sizes="32x32" type="image/png"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="manifest" href="/site.webmanifest"><link rel="stylesheet" href="/css/site.css">
 <meta name="robots" content="noindex">
-<title>Shared project — Home View</title>
+<title>Shared project — PeakStead Designs</title>
 </head><body>
 <main>
   <div class="row"><div><div class="muted" style="font-size:13px">Shared project · read-only</div><h1 id="title">Loading…</h1></div><span class="spacer"></span><a class="btn primary" id="open3d" style="display:none">Open in 3D ↗</a></div>
@@ -11,7 +11,7 @@
     <section class="card"><h2>Images</h2><div class="gallery" id="gallery"></div></section>
   </div>
 </main>
-<footer>Made with <a href="/">Home View</a></footer>
+<footer>Made with <a href="/">PeakStead Designs</a></footer>
 <script type="module">
 import { $, api, me, header, renderGallery } from '/js/common.js';
 const token = new URLSearchParams(location.search).get('t') || location.pathname.split('/').pop();
@@ -19,7 +19,7 @@ header(await me());
 const enc = encodeURIComponent;
 try {
   const { project: P } = await api('share/' + enc(token));
-  document.title = P.name + ' — Home View';
+  document.title = P.name + ' — PeakStead Designs';
   $('#title').textContent = P.name;
   const model = P.files.find(f => f.kind === 'model');
   if (model || P.exampleId) { $('#open3d').style.display = ''; $('#open3d').href = '/viewer?s=' + enc(token); } else $('#noModel').style.display = '';

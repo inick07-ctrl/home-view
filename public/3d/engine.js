@@ -1041,7 +1041,7 @@ function buildModel(model) {
   }
   setCut(cutOn); setRoof(roofOn);
   $('mtitle').textContent = M.title || M.name; $('msub').textContent = M.subtitle || '';
-  document.title = `${M.name || M.title || 'Model'} — Home View`;
+  document.title = `${M.name || M.title || 'Model'} — PeakStead Designs`;
   setModelUi(true);
   applySiteEnv();
 }
@@ -1203,7 +1203,7 @@ function buildGLB(gltfScene, meta = {}) {
   Object.assign(sun.shadow.camera, { left: -R, right: R, top: R, bottom: -R, near: 10, far: 400 }); sun.shadow.camera.updateProjectionMatrix();
   M = { name: meta.name || 'Model', title: meta.name || 'Model', subtitle: meta.subtitle || '', rooms: [], walkStart: [0, BH / 2 + 6, 0] };
   $('mtitle').textContent = M.title; $('msub').textContent = M.subtitle;
-  document.title = `${M.name} — Home View`;
+  document.title = `${M.name} — PeakStead Designs`;
   setModelUi(false, roofNodes.length > 0);
   if (roofNodes.length) setRoof(true);
   applySiteEnv();
@@ -1221,7 +1221,7 @@ function sanitize(v, depth = 0) {
 }
 function normalizeJsonModel(raw, fallbackName) {
   const m = sanitize(raw) || {};
-  if (!Array.isArray(m.rooms) || !m.rooms.length) throw new Error('This model file has no "rooms" list, so it is not in the Home View JSON format.');
+  if (!Array.isArray(m.rooms) || !m.rooms.length) throw new Error('This model file has no "rooms" list, so it is not in the PeakStead Designs JSON format.');
   m.rooms = m.rooms.filter(r => Array.isArray(r) && r.length >= 7 && [3, 4, 5, 6].every(i => typeof r[i] === 'number'));
   if (!m.rooms.length) throw new Error('No valid rooms in this model file.');
   const w = m.walls && typeof m.walls === 'object' ? m.walls : {};

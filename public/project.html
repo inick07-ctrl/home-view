@@ -1,5 +1,5 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#14191e"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Cpath d=%27M8 1 1 7h2v8h4v-5h2v5h4V7h2z%27 fill=%27%23e0a95a%27/%3E%3C/svg%3E"><link rel="stylesheet" href="/css/site.css">
-<title>Project — Home View</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#14191e"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.png" sizes="32x32" type="image/png"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="manifest" href="/site.webmanifest"><link rel="stylesheet" href="/css/site.css">
+<title>Project — PeakStead Designs</title>
 </head><body>
 <main>
   <a class="muted" href="/dashboard" style="text-decoration:none;font-size:14px">← My projects</a>
@@ -13,7 +13,7 @@
         <div class="row"><h2 style="margin:0">3D model</h2><span class="spacer"></span><a class="btn primary" id="open3d" style="display:none">Open in 3D ↗</a></div>
         <div id="modelInfo" style="margin-top:10px"></div>
         <div class="row" style="margin-top:10px"><label class="btn small" style="margin:0">Upload a 3D model<input type="file" id="modelFile" accept=".glb,.gltf,.json" hidden></label><button class="btn small danger" id="modelDel" style="display:none">Remove model</button></div>
-        <p class="muted" style="font-size:12.5px;margin:8px 0 0">Accepted: <b>.glb</b> / <b>.gltf</b> (export from SketchUp, Blender, Revit, etc.) or a Home View <b>.json</b> plan model (<a href="/3d/models/template-smith-02.json" download>download an example</a>).</p>
+        <p class="muted" style="font-size:12.5px;margin:8px 0 0">Accepted: <b>.glb</b> / <b>.gltf</b> (export from SketchUp, Blender, Revit, etc.) or a PeakStead Designs <b>.json</b> plan model (<a href="/3d/models/template-smith-02.json" download>download an example</a>).</p>
       </section>
       <section class="card" id="siteCard">
         <h2>Site photos</h2>
@@ -154,7 +154,7 @@ let P = null, lotEditor = null, houseModel = null, houseBounds = null, groundImg
 const enc = encodeURIComponent;
 const fileUrl = (f) => `/api/projects/${enc(P.id)}/files/${enc(f.id)}`;
 function render() {
-  document.title = P.name + ' — Home View';
+  document.title = P.name + ' — PeakStead Designs';
   if (document.activeElement !== $('#name')) $('#name').value = P.name;
   if (document.activeElement !== $('#buildType')) $('#buildType').innerHTML = buildTypeOptionsHtml(P.buildType);
   const model = P.files.find(f => f.kind === 'model');

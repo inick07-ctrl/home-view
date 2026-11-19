@@ -383,7 +383,7 @@ const routes = {
     const f = { id: newId(8), pathname, name: fname, kind, contentType: meta.contentType, size: meta.size, uploadedAt: new Date().toISOString() };
     if (kind === 'model') {
       f.format = detectFormat(fname, meta.contentType);
-      if (!f.format) { await remove(pathname); throw bad('3D models must be .json (Home View format), .glb or .gltf'); }
+      if (!f.format) { await remove(pathname); throw bad('3D models must be .json (PeakStead Designs format), .glb or .gltf'); }
       const old = p.files.filter(x => x.kind === 'model');
       await remove(old.map(x => x.pathname));
       p.files = p.files.filter(x => x.kind !== 'model');

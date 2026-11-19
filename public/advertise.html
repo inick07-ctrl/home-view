@@ -1,10 +1,10 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#14191e"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Cpath d=%27M8 1 1 7h2v8h4v-5h2v5h4V7h2z%27 fill=%27%23e0a95a%27/%3E%3C/svg%3E"><link rel="stylesheet" href="/css/site.css">
-<title>Advertise with Home View</title>
-<meta name="description" content="Tell Home View about sponsoring products for homes, tiny homes, and trailer homes — roofing, plumbing, electrical, appliances, furniture, and more.">
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#14191e"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.png" sizes="32x32" type="image/png"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="manifest" href="/site.webmanifest"><link rel="stylesheet" href="/css/site.css">
+<title>Advertise with PeakStead Designs</title>
+<meta name="description" content="Tell PeakStead Designs about sponsoring products for homes, tiny homes, and trailer homes — roofing, plumbing, electrical, appliances, furniture, and more.">
 </head><body>
 <main class="narrow">
-  <h1>Advertise with Home View</h1>
-  <p class="lead">Home View is building a place to explore homes, tiny homes, and trailer homes in 3D. We’re opening a path for companies — roofing, plumbing, electrical, HVAC, windows and doors, flooring, appliances, furniture, and related trades — to feature real products on the site later.</p>
+  <h1>Advertise with PeakStead Designs</h1>
+  <p class="lead">PeakStead Designs is building a place to explore homes, tiny homes, and trailer homes in 3D. We’re opening a path for companies — roofing, plumbing, electrical, HVAC, windows and doors, flooring, appliances, furniture, and related trades — to feature real products on the site later.</p>
   <p class="muted">Nothing is for sale here and we are not publishing packages or prices. If you’d like to be considered, send a note. We’ll follow up when there is a fit.</p>
   <form class="card" id="form" style="margin-top:18px">
     <label for="name">Name</label>
@@ -26,7 +26,7 @@
   </form>
   <p class="muted" id="mailWrap" hidden style="margin-top:14px">You can also email <a id="mailTo" href="#"></a>.</p>
 </main>
-<footer>Home View</footer>
+<footer>PeakStead Designs</footer>
 <script type="module">
 import { $, me, header, footer, api } from '/js/common.js';
 import { SPONSOR_CATEGORIES } from '/js/sponsors.js';
@@ -43,7 +43,7 @@ try {
     $('#mailWrap').hidden = false;
     const a = $('#mailTo');
     a.textContent = info.contactEmail;
-    a.href = 'mailto:' + info.contactEmail + '?subject=' + encodeURIComponent('Advertise with Home View');
+    a.href = 'mailto:' + info.contactEmail + '?subject=' + encodeURIComponent('Advertise with PeakStead Designs');
   }
 } catch {}
 $('#form').addEventListener('submit', async (e) => {

@@ -1,4 +1,4 @@
-// Writes public/3d/models/template-smith-02.json: Smith 02 as a plain-data Home View model (example for uploads).
+// Writes public/3d/models/template-smith-02.json: Smith 02 as a plain-data PeakStead Designs model (example for uploads). The _format id stays "Home View model v1" so existing uploads still parse.
 import fs from 'node:fs';
 const { default: m } = await import('../public/3d/models/smith-02.js');
 const ops = [];

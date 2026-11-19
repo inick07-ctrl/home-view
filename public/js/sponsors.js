@@ -45,7 +45,7 @@ export function renderSponsorStrip(el, sponsors) {
   const row = (sponsors || []).filter(s => s.strip);
   if (!row.length) { el.replaceChildren(); el.hidden = true; return; }
   el.hidden = false;
-  el.innerHTML = `<div class="sp-strip-h">Featured on Home View</div><div class="sp-strip-row">${row.map(s =>
+  el.innerHTML = `<div class="sp-strip-h">Featured on PeakStead Designs</div><div class="sp-strip-row">${row.map(s =>
     `<div class="sp-strip-item">${companyLink(s, `${logoImg(s)}<span>${esc(s.company)}</span>`)}</div>`
   ).join('')}</div>`;
 }
