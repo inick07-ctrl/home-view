@@ -6,9 +6,9 @@ const DX = (x) => (x * 1.996 - 323) / 17.5, DY = (y) => (y * 1.996 - 83) / 17.5;
 
 export default {
   id: 'smith-01',
-  name: 'Smith 01',
-  title: 'Smith 01 — Single-Story U-Plan',
-  subtitle: 'Single story · ~2,636 sf living · 3 bed + office · 3-car garage',
+  name: "Willow Court",
+  title: "Willow Court",
+  subtitle: "A U-shaped single-story home that gathers three bedrooms and an office around a quiet court.",
   wallH: 9,
   planImage: { src: new URL("./smith-01-plan.png", import.meta.url).href, pxPerFt: 17.5, originPx: [323, 83], sizePx: [2044, 1473] },
   materials: { ext: '#ece5d8', int: '#f8f6f1', roof: '#4b5159', roofTex: 'shingle', roofUnder: '#d9d4ca', gable: 'ext', extSkin: false },

@@ -5,7 +5,7 @@ import {
   makeSessionCookie, clearSessionCookie,
 } from '../server/auth.js';
 import { readJSON, writeJSON, writeJSONIfAbsent, remove, listAll, headBlob, streamBlob } from '../server/store.js';
-import { getExample } from '../server/examples.js';
+import { getExample, resolvedExampleName } from '../server/examples.js';
 import {
   sanitizeBuildType, isAdmin, contactEmail,
   sanitizeSponsor, publicSponsor, sanitizeInquiry,
@@ -163,9 +163,18 @@ function applySitePatch(prev, patch) {
   if (patch.parcel !== undefined) next.parcel = sanitizeParcel(patch.parcel);
   return next;
 }
+async function persistExampleNameIfStale(p) {
+  const next = resolvedExampleName(p);
+  if (next !== p.name && p.owner && p.id) {
+    p.name = next;
+    await writeJSON(projPath(p.owner, p.id), p);
+  }
+  return p;
+}
+
 function publicProject(p, { owner = false } = {}) {
   const out = {
-    id: p.id, name: p.name, notes: p.notes || '', createdAt: p.createdAt, updatedAt: p.updatedAt,
+    id: p.id, name: resolvedExampleName(p), notes: p.notes || '', createdAt: p.createdAt, updatedAt: p.updatedAt,
     files: (p.files || []).map(publicFile),
     site: publicSite(p),
     buildType: sanitizeBuildType(p.buildType),
@@ -266,7 +275,9 @@ const routes = {
   'GET projects': async (req, res) => {
     const user = await requireUser(req);
     const metas = await listAll(`db/projects/${user.id}/`);
-    const projects = (await Promise.all(metas.map(m => readJSON(m.pathname)))).filter(Boolean)
+    const raw = (await Promise.all(metas.map(m => readJSON(m.pathname)))).filter(Boolean);
+    await Promise.all(raw.map(p => persistExampleNameIfStale(p)));
+    const projects = raw
       .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
       .map(p => publicProject(p, { owner: true }));
     send(res, 200, { projects });
@@ -306,7 +317,9 @@ const routes = {
   },
   'GET projects/:id': async (req, res, { id }) => {
     const user = await requireUser(req);
-    send(res, 200, { project: publicProject(await loadOwnProject(user, id), { owner: true }) });
+    const p = await loadOwnProject(user, id);
+    await persistExampleNameIfStale(p);
+    send(res, 200, { project: publicProject(p, { owner: true }) });
   },
   'PATCH projects/:id': async (req, res, { id }) => {
     requireJson(req);
@@ -314,6 +327,7 @@ const routes = {
     const p = await loadOwnProject(user, id);
     const body = await readBody(req);
     if (body.name !== undefined) p.name = cleanText(body.name, 120).trim() || 'Untitled project';
+    else p.name = resolvedExampleName(p);
     if (body.notes !== undefined) p.notes = cleanText(body.notes, 20000);
     if (body.buildType !== undefined) p.buildType = sanitizeBuildType(body.buildType);
     if (body.share === true && !p.shareToken) {

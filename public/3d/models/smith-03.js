@@ -56,9 +56,9 @@ w.seg(48.1, 45, 52.7, 45, {});
 const V = { vaulted: true }, M = { minor: true };
 export default {
   id: 'smith-03',
-  name: 'Smith 03',
-  title: 'Smith 03 — Back Forty Barndominium',
-  subtitle: "Single story · 3 bed + office · great room open to above · 39'4\" x 46'6\" shop garage · front & back porches (roof is a guess)",
+  name: "The Back Forty",
+  title: "The Back Forty",
+  subtitle: "A barndominium with a soaring great room and a shop garage built for serious work.",
   wallH: 10,
   planImage: { src: new URL("./smith-03-plan.jpg", import.meta.url).href, pxPerFt: 11.583, originPx: [54.28, 54.0], sizePx: [1400, 884] },
   materials: { ext: '#ebe7de', int: '#f7f4ee', roofTex: 'metal', roofUnder: '#d6c3a2', gable: 'ext', extSkin: true },

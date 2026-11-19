@@ -65,9 +65,9 @@ w.seg(61, 68, 85.5, 68, { ext: true, windows: [[65, 70, 4, 6.5], [76.5, 81.5, 4,
 
 export default {
   id: 'smith-06',
-  name: 'Smith 06',
-  title: 'Smith 06 — Original Breezeway Farmhouse',
-  subtitle: 'Original design · primary suite + 3 bed left · kitchen / dining / living breezeway centre · library, gym, safe room, 3-car garage right · screened porch with see-through fireplace',
+  name: "Breezeway Hearth",
+  title: "Breezeway Hearth",
+  subtitle: "A farmhouse centered on a breezeway, with a screened porch and a see-through fireplace.",
   wallH: 9,
   planImage: { src: new URL("./smith-06-plan.png", import.meta.url).href, pxPerFt: 12, originPx: [76, 220], sizePx: [1268, 1218] },
   materials: { ext: '#f4f3ef', int: '#f8f6f1', roofTex: 'metal', roofUnder: '#d8c7a8', gable: 'ext', extSkin: true },

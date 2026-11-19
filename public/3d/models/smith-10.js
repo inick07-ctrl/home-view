@@ -54,9 +54,9 @@ w.seg(11, 44, 24, 44, { doors: [[15, 18, 7]] });
 
 export default {
   id: 'smith-10',
-  name: 'Smith 10',
-  title: 'Smith 10 — Single-Story Ranch, English Country',
-  subtitle: "Single story \u00b7 ~1,853 sf heated \u00b7 3 bed + office + gym \u00b7 vaulted kitchen, dining & family with a linear fireplace \u00b7 mudroom and butler's pantry \u00b7 west-facing 3-car garage \u00b7 English Country interior",
+  name: "Ember Ranch",
+  title: "Ember Ranch",
+  subtitle: "A compact English Country ranch with a linear fireplace, mudroom, and butler's pantry.",
   wallH: 9,
   defaultStyle: 'english-country',
   walkStart: [56.25, 36, 0],

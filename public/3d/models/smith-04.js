@@ -66,9 +66,9 @@ w.seg(82.4, 63.9, 121.9, 63.9, { ...E, doors: [[83.3, 103.6, 8], [110, 121.2, 8]
 const V = { vaulted: true }, M = { minor: true }, O = { outside: true };
 export default {
   id: 'smith-04',
-  name: 'Smith 04',
-  title: 'Smith 04 — Modern Ranch, Two Master Suites',
-  subtitle: 'Single story · 2 master suites + 3 bedrooms + office · vaulted great room, dining & kitchen · 3-car garage · terraces front & back (roof is a guess)',
+  name: "Twin Oaks",
+  title: "Twin Oaks",
+  subtitle: "A modern ranch with two master suites and terraces that open front and back.",
   wallH: 10,
   planImage: { src: new URL("./smith-04-plan.jpg", import.meta.url).href, pxPerFt: 9.37, originPx: [29, 105], sizePx: [1206, 876] },
   materials: { ext: '#f1eee8', int: '#f8f6f1', roofTex: 'metal', roofUnder: '#d8c7a8', gable: 'ext', extSkin: true },

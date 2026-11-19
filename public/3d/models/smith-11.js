@@ -61,9 +61,9 @@ w.seg(64.8333, 33.6667, 64.8333, 40.6667, { doors: [[35.6667, 38.6667, 7]] });
 
 export default {
   id: 'smith-11',
-  name: 'Smith 11',
-  title: 'Smith 11 — Single-Story, English Country',
-  subtitle: "Single story \u00b7 ~2,479 sf heated \u00b7 4 bed + study \u00b7 vaulted great room, dining & kitchen with a fireplace \u00b7 covered patio \u00b7 3-car garage \u00b7 English Country interior",
+  name: "Hearth Patio",
+  title: "Hearth Patio",
+  subtitle: "An English Country house with four bedrooms, a study, and a covered patio.",
   wallH: 9,
   defaultStyle: 'english-country',
   walkStart: [21.8333, 30.7333, 0],

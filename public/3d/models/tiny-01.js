@@ -20,9 +20,9 @@ w.seg(18.5, 3.25, 24, 3.25);
 
 export default {
   id: 'tiny-01',
-  name: 'Tiny 01',
-  title: 'Tiny 01 — Tiny House on Wheels',
-  subtitle: "THOW · 8.5' × 24' on a trailer · loft over the kitchenette and bath · kitchenette, bath, living · ~310 sf heated with loft · English Country interior",
+  name: "Pine Nook",
+  title: "Pine Nook",
+  subtitle: "A tiny house on wheels, with a loft over the kitchenette and bath.",
   wallH: H,
   defaultStyle: 'english-country',
   buildType: 'tiny',

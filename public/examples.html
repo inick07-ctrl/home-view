@@ -82,7 +82,7 @@ function renderList() {
     const card = document.createElement('div');
     card.className = 'card pcard';
     const typeLabel = (BUILD_TYPES.find(t => t.id === (r.type || 'home')) || {}).label || '';
-    card.innerHTML = `<a class="ex-body" href="/viewer?ex=${esc(r.id)}"><div class="thumb"><img loading="lazy" alt="" src="/img/${esc(r.id)}.jpg"></div><div class="title">${esc(r.title || r.name)}</div><div class="muted" style="font-size:13px">${esc(r.blurb || '')}</div></a><div class="ex-actions"><a class="badge acc" href="/viewer?ex=${esc(r.id)}">Open in 3D</a><span class="badge">${esc(typeLabel)}</span><span class="spacer"></span><span class="save-slot"></span></div>`;
+    card.innerHTML = `<a class="ex-body" href="/viewer?ex=${esc(r.id)}"><div class="thumb"><img loading="lazy" alt="" src="/img/${esc(r.id)}.jpg"></div><div class="title">${esc(r.name)}</div><div class="ex-tagline">${esc(r.tagline || r.blurb || '')}</div></a><div class="ex-actions"><a class="badge acc" href="/viewer?ex=${esc(r.id)}">Open in 3D</a><span class="badge">${esc(typeLabel)}</span><span class="spacer"></span><span class="save-slot"></span></div>`;
     const slot = card.querySelector('.save-slot');
     controls.set(r.id, slot);
     list.appendChild(card);

@@ -66,9 +66,9 @@ w.seg(87.2, 51.1, 87.2, 74.3, { ...E, doors: [[53.3, 71.3, 8]] });
 const V = { vaulted: true }, M = { minor: true }, O = { outside: true };
 export default {
   id: 'smith-05',
-  name: 'Smith 05',
-  title: 'Smith 05 — Modern Farmhouse, Three Gables',
-  subtitle: "Single story · 4 bed + office · vaulted great room, dining & kitchen · 41'-4\" vaulted back porch · side-entry garage (roof read from the renders)",
+  name: "Triple Gable",
+  title: "Triple Gable",
+  subtitle: "A three-gable modern farmhouse with a deep, vaulted back porch.",
   wallH: 9,
   planImage: { src: new URL("./smith-05-plan.jpg", import.meta.url).href, pxPerFt: 11.45, originPx: [80, 537], sizePx: [1206, 1436] },
   materials: { ext: '#f4f3ef', int: '#f8f6f1', roofTex: 'metal', roofUnder: '#d8c7a8', gable: 'ext', extSkin: true },

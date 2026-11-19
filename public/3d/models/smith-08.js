@@ -67,9 +67,9 @@ w.seg(99.8333, 42.9167, 105.8333, 42.9167, { doors: [[101.3333, 103.8333]] });
 
 export default {
   id: 'smith-08',
-  name: 'Smith 08',
-  title: 'Smith 08 — Single-Story Ranch, English Country',
-  subtitle: "Single story · ~2,798 sf heated · 3 bed + office/library + gym + safe room · 14' kitchen/dining, 12' family, vaulted primary · 31' back porch · side-load 3-car garage · English Country interior",
+  name: "Limewash Hall",
+  title: "Limewash Hall",
+  subtitle: "An English Country ranch with a library, gym, and a long back porch.",
   wallH: 10,
   defaultStyle: 'english-country',
   planImage: { src: new URL("./smith-08-plan.png", import.meta.url).href, pxPerFt: 12, originPx: [112, 88], sizePx: [1642, 1017] },

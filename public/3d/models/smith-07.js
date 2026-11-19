@@ -42,9 +42,9 @@ w.seg(53, 36, 53, 44, {  });
 
 export default {
   id: 'smith-07',
-  name: 'Smith 07',
-  title: 'Smith 07 — Single-Story Farmhouse',
-  subtitle: "Single story · ~2,640 sf living · 3 bed + study + flex room · open living / dining / kitchen with walk-in pantry · 50' front & rear porches · side-load 3-car garage",
+  name: "Porchlight Farm",
+  title: "Porchlight Farm",
+  subtitle: "A classic farmhouse with fifty-foot porches front and back, plus a study and flex room.",
   wallH: 9,
   planImage: { src: new URL("./smith-07-plan.png", import.meta.url).href, pxPerFt: 12, originPx: [76, 88], sizePx: [1268, 990] },
   materials: { ext: '#f5f4f0', int: '#f8f6f1', roofTex: 'metal', roofUnder: '#d8c7a8', gable: 'ext', extSkin: true },

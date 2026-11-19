@@ -61,9 +61,9 @@ w.seg(84.2, 65.9, 84.2, 69.9, {});
 const V = { vaulted: true }, M = { minor: true };
 export default {
   id: 'smith-02',
-  name: 'Smith 02',
-  title: 'Smith 02 — Modern Farmhouse with Pool',
-  subtitle: 'Single story · 3 bed + office · vaulted living wing · 3-car garage · terrace, pool & pool house',
+  name: "Poolside Gables",
+  title: "Poolside Gables",
+  subtitle: "A modern farmhouse with a vaulted living wing, an open terrace, and a pool house.",
   wallH: 9,
   planImage: { src: new URL("./smith-02-plan.jpg", import.meta.url).href, pxPerFt: 10.1, originPx: [0, 0], sizePx: [1206, 899] },
   materials: { ext: '#2a2c2f', extTex: 'board', int: '#f6f3ec', roof: '#1b1c1e', roofTex: 'metal', roofUnder: '#d8c3a0', gable: 'brick', extSkin: true },

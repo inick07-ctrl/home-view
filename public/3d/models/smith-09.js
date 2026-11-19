@@ -81,9 +81,9 @@ w.seg(86.25, 35.0833, 116.1667, 35.0833, { doors: [[110.6667, 113.6667, 7]] });
 
 export default {
   id: 'smith-09',
-  name: 'Smith 09',
-  title: 'Smith 09 — Single-Story, English Country',
-  subtitle: "Single story \u00b7 ~3,359 sf heated \u00b7 4 bed (Master 2 is 14'x12') + office \u00b7 vaulted great room, dining & kitchen \u00b7 60' front porch \u00b7 3-car garage \u00b7 English Country interior",
+  name: "The Prairie Lantern",
+  title: "The Prairie Lantern",
+  subtitle: "An English Country house with a sixty-foot front porch and a vaulted great room.",
   wallH: 10,
   defaultStyle: 'english-country',
   walkStart: [31.7917, 34.45, 0],

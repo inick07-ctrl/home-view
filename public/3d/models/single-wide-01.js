@@ -35,9 +35,9 @@ w.seg(70, 11, 70, 16);
 
 export default {
   id: 'single-wide-01',
-  name: 'Single-Wide 01',
-  title: 'Single-Wide 01 — 16\' × 76\' Manufactured Home',
-  subtitle: "Single-wide trailer · 16' × 76' · 3 bed, 2 bath · living, kitchen and dining · ~1,216 sf heated · English Country interior",
+  name: "Lakeshore Longhouse",
+  title: "Lakeshore Longhouse",
+  subtitle: "A long, single-wide home with three bedrooms, two baths, and a front porch.",
   wallH: H,
   defaultStyle: 'english-country',
   buildType: 'trailer',

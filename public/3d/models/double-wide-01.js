@@ -36,9 +36,9 @@ w.seg(14, 14, 26, 14, { doors: [[17, 23, 7]] });
 
 export default {
   id: 'double-wide-01',
-  name: 'Double-Wide 01',
-  title: 'Double-Wide 01 — 28\' × 56\' Manufactured Home',
-  subtitle: "Double-wide · 28' × 56' · 3 bed, 2 bath · living, dining and kitchen · ~1,568 sf heated · English Country interior",
+  name: "Meadow Glen",
+  title: "Meadow Glen",
+  subtitle: "A double-wide with three bedrooms, two baths, and a wide front porch.",
   wallH: H,
   defaultStyle: 'english-country',
   buildType: 'trailer',

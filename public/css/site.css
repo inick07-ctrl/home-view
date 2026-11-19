@@ -125,3 +125,5 @@ footer.site-foot a{color:inherit}
 #sponsorHud .sp-h{margin-top:0}
 #sponsorHud .sp-logo{width:28px;height:28px}
 #sponsorHud h3{font-size:12.5px;margin:8px 0 4px}
+
+.ex-tagline{font-size:13px;color:var(--muted,#8b939b);margin:4px 0 0;line-height:1.4}
