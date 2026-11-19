@@ -42,7 +42,7 @@
           </div>
         </div>
         <h3 style="font-size:15px;margin:18px 0 6px">Lot lines</h3>
-        <p class="muted" style="font-size:12.5px;margin:0 0 8px">Optional. Import a parcel outline so the lot is drawn on the ground around the house. This works for any location in the United States.</p>
+        <p class="muted" style="font-size:12.5px;margin:0 0 8px">Optional. Draw or import the property lines so you can place the house on your lot. This works for any location in the United States.</p>
         <details class="card" style="padding:12px 14px;margin:0 0 12px;background:rgba(255,255,255,.03)">
           <summary style="cursor:pointer;font-weight:650">Where to get parcel data</summary>
           <p class="muted" style="font-size:13px;margin:10px 0 8px">Most US counties have a free GIS parcel viewer. Search for:</p>
@@ -52,14 +52,31 @@
           </div>
           <p id="parcelTip" style="font-size:13.5px;margin:0 0 8px"><code>search "your county state GIS parcel viewer"</code></p>
           <button type="button" class="btn small" id="copyParcelSearch">Copy search</button>
-          <p class="muted" style="font-size:12.5px;margin:10px 0 0">You can also use a plat from the county assessor or recorder, a survey of the lot, and the local zoning setbacks from the county or city zoning office. Export the parcel as GeoJSON or KML if the viewer offers it, or type the corner coordinates below.</p>
+          <p class="muted" style="font-size:12.5px;margin:10px 0 0">You can also use a plat from the county assessor or recorder, a survey of the lot, and the local zoning setbacks from the county or city zoning office. Export the parcel as GeoJSON or KML if the viewer offers it, or type the corner coordinates or survey calls below. Some counties list plats and parcel documents in a land-records portal (sometimes called Datafi) — search for your county’s Datafi or document search and use the recorded survey or plat there.</p>
         </details>
+        <div class="lot-map-wrap">
+          <canvas id="lotMap" width="640" height="400" aria-label="Top-down lot editor"></canvas>
+        </div>
+        <div class="lot-tools">
+          <button type="button" class="btn small" id="lotDrawBtn">Draw lot</button>
+          <button type="button" class="btn small" id="lotFinishBtn" style="display:none">Finish lot</button>
+          <button type="button" class="btn small" id="lotCancelBtn" style="display:none">Cancel draw</button>
+          <button type="button" class="btn small" id="lotEditBtn">Edit corners</button>
+          <button type="button" class="btn small" id="lotHouseBtn">Move house</button>
+          <button type="button" class="btn small" id="lotFitBtn">Fit view</button>
+        </div>
+        <p class="muted" style="font-size:12px;margin:0 0 10px">Draw or drag corners on this top-down view. If you uploaded an aerial photo, it appears here so you can trace the lot. In Move house, drag the footprint or the white handle to rotate. Scroll to zoom, drag empty space to pan. Double-click a corner to delete it.</p>
+        <div id="lotStats" class="muted" style="font-size:13px;margin:0 0 8px"></div>
+        <div id="lotWarn" class="lot-warn" hidden></div>
         <div id="parcelBox" class="muted" style="font-size:13px">No lot outline yet.</div>
         <div class="row" style="margin:8px 0 14px">
           <label class="btn small" style="margin:0">Import GeoJSON or KML<input type="file" id="parcelFile" accept=".geojson,.json,.kml,application/geo+json,application/vnd.google-earth.kml+xml,application/xml,text/xml" hidden></label>
           <button class="btn small danger" id="parcelDel" style="display:none">Remove lot</button>
         </div>
-        <label for="parcelCorners">Or paste lat/long corners (one “latitude, longitude” pair per line)</label>
+        <label for="parcelSurvey">Or enter a survey (bearing and distance calls, or side lengths and interior angles)</label>
+        <textarea id="parcelSurvey" rows="6" placeholder="N 0° E 120&#10;S 90° E 80&#10;S 0° E 120&#10;N 90° W 80&#10;&#10;or sides:&#10;start east&#10;150, 90&#10;80, 90&#10;150, 90&#10;80, 90"></textarea>
+        <div class="row" style="margin-top:8px"><button type="button" class="btn small" id="parcelSurveyBtn">Use this survey</button></div>
+        <label for="parcelCorners" style="margin-top:12px">Or paste lat/long corners (one “latitude, longitude” pair per line)</label>
         <textarea id="parcelCorners" rows="5" placeholder="45.0000, -93.0000&#10;45.0000, -92.9990&#10;44.9992, -92.9990&#10;44.9992, -93.0000"></textarea>
         <div class="row" style="margin-top:8px"><button type="button" class="btn small" id="parcelCornersBtn">Use these corners</button></div>
         <div id="parcelCtrls" style="display:none;margin-top:12px">
@@ -69,7 +86,29 @@
             <div style="flex:1;min-width:120px"><label for="parcelX">East offset (ft)</label><input id="parcelX" type="number" step="1" value="0"></div>
             <div style="flex:1;min-width:120px"><label for="parcelY">South offset (ft)</label><input id="parcelY" type="number" step="1" value="0"></div>
           </div>
-          <p class="muted" style="font-size:12px;margin:6px 0 0">Rotate and nudge the lot until it lines up with the house and the north compass in the 3D view.</p>
+          <p class="muted" style="font-size:12px;margin:6px 0 10px">Rotate and nudge the lot until it lines up with the house, the aerial, and the north compass.</p>
+          <h4 style="font-size:13.5px;margin:12px 0 6px">Setbacks</h4>
+          <p class="muted" style="font-size:12px;margin:0 0 8px">Enter the front, side, and rear yard setbacks from your city or county zoning. They draw as a dashed buildable envelope on this map and in the 3D walk-through.</p>
+          <div class="row" style="align-items:end">
+            <div style="flex:1;min-width:90px"><label for="setbackF">Front (ft)</label><input id="setbackF" type="number" min="0" max="200" step="0.5" value="0"></div>
+            <div style="flex:1;min-width:90px"><label for="setbackS">Side (ft)</label><input id="setbackS" type="number" min="0" max="200" step="0.5" value="0"></div>
+            <div style="flex:1;min-width:90px"><label for="setbackR">Rear (ft)</label><input id="setbackR" type="number" min="0" max="200" step="0.5" value="0"></div>
+          </div>
+          <label for="lotFront" style="margin-top:8px">Front of the lot faces</label>
+          <select id="lotFront">
+            <option value="s">South (default, same as the house front)</option>
+            <option value="n">North</option>
+            <option value="e">East</option>
+            <option value="w">West</option>
+          </select>
+          <h4 style="font-size:13.5px;margin:14px 0 6px">House on the lot</h4>
+          <div class="field-row"><label for="houseYaw">House rotation</label><output id="houseYawOut">0°</output></div>
+          <input type="range" id="houseYaw" min="0" max="360" step="1" value="0">
+          <div class="row" style="margin-top:8px;align-items:end">
+            <div style="flex:1;min-width:120px"><label for="houseX">East offset (ft)</label><input id="houseX" type="number" step="0.5" value="0"></div>
+            <div style="flex:1;min-width:120px"><label for="houseY">South offset (ft)</label><input id="houseY" type="number" step="0.5" value="0"></div>
+          </div>
+          <p class="muted" style="font-size:12px;margin:6px 0 0">Move and rotate the house inside the lot. You’ll see a warning if it crosses a setback or the lot line.</p>
         </div>
       </section>
       <section class="card">
@@ -98,12 +137,13 @@
 import { $, esc, api, me, header, toast, fmtSize, renderGallery } from '/js/common.js';
 import { upload } from '/js/blob-client.js';
 import { prepareSiteImage, SITE_MAX_BYTES } from '/js/site-image.js';
-import { parseParcelFile, parseParcelText, parcelSearchTip, US_STATES } from '/js/parcel.js';
+import { parseParcelFile, parseParcelText, parseSurveyText, parcelSearchTip, US_STATES, parcelDefaults, lotStats, formatLotArea } from '/js/parcel.js';
+import { mountLotEditor } from '/js/lot-editor.js';
 const id = new URLSearchParams(location.search).get('id');
 const user = await me();
 if (!user) location.replace('/?next=' + encodeURIComponent(location.pathname + location.search));
 header(user, 'dashboard');
-let P = null;
+let P = null, lotEditor = null, houseModel = null, houseBounds = null, groundImg = null, groundImgUrl = '';
 const enc = encodeURIComponent;
 const fileUrl = (f) => `/api/projects/${enc(P.id)}/files/${enc(f.id)}`;
 function render() {
@@ -216,11 +256,18 @@ function renderSite() {
   $('#parcelDel').style.display = parcel ? '' : 'none';
   $('#parcelCtrls').style.display = parcel ? '' : 'none';
   if (parcel) {
-    set('parcelRot', parcel.rot ?? 0); $('#parcelRotOut').value = Math.round(parcel.rot ?? 0) + '°';
-    set('parcelX', parcel.x ?? 0); set('parcelY', parcel.y ?? 0);
+    const p = parcelDefaults(parcel);
+    set('parcelRot', p.rot); $('#parcelRotOut').value = Math.round(p.rot) + '°';
+    set('parcelX', p.x); set('parcelY', p.y);
+    set('setbackF', p.setbackF); set('setbackS', p.setbackS); set('setbackR', p.setbackR);
+    if (document.activeElement !== $('#lotFront')) $('#lotFront').value = p.front;
+    set('houseYaw', p.houseYaw); $('#houseYawOut').value = Math.round(p.houseYaw) + '°';
+    set('houseX', p.houseX); set('houseY', p.houseY);
   }
+  renderLotStats(parcel);
+  lotEditor?.redraw();
 }
-let siteTimer = 0;
+let siteTimer = 0, sitePending = {};
 async function saveSite(partial) {
   try {
     P = (await api('projects/' + enc(P.id), { method: 'PATCH', body: { site: partial } })).project;
@@ -228,15 +275,25 @@ async function saveSite(partial) {
   } catch (e) { toast(e.message); }
 }
 function queueSite(partial) {
+  if (partial.parcel) {
+    sitePending.parcel = { ...(sitePending.parcel || (P.site && P.site.parcel) || {}), ...partial.parcel };
+    const rest = { ...partial }; delete rest.parcel;
+    Object.assign(sitePending, rest);
+    if (!P.site) P.site = {};
+    P.site.parcel = sitePending.parcel;
+  } else Object.assign(sitePending, partial);
   renderSiteLive(partial);
+  renderLotStats((P.site && P.site.parcel) || null);
+  lotEditor?.redraw();
   clearTimeout(siteTimer);
-  siteTimer = setTimeout(() => saveSite(partial), 350);
+  siteTimer = setTimeout(() => { const body = sitePending; sitePending = {}; saveSite(body); }, 350);
 }
 function renderSiteLive(partial) {
   if (partial.panoYaw !== undefined) $('#panoYawOut').value = Math.round(partial.panoYaw) + '°';
   if (partial.panoHeight !== undefined) $('#panoHeightOut').value = Number(partial.panoHeight).toFixed(1).replace(/\.0$/, '') + ' ft';
   if (partial.groundRot !== undefined) $('#groundRotOut').value = Math.round(partial.groundRot) + '°';
   if (partial.parcel?.rot !== undefined) $('#parcelRotOut').value = Math.round(partial.parcel.rot) + '°';
+  if (partial.parcel?.houseYaw !== undefined) $('#houseYawOut').value = Math.round(partial.parcel.houseYaw) + '°';
 }
 $('#panoYaw').addEventListener('input', e => queueSite({ panoYaw: +e.target.value }));
 $('#panoHeight').addEventListener('input', e => queueSite({ panoHeight: +e.target.value }));
@@ -289,9 +346,19 @@ $('#copyParcelSearch').onclick = async () => {
   try { await navigator.clipboard.writeText(updateParcelTip()); toast('Search copied'); } catch { toast('Could not copy'); }
 };
 
+function keepParcelMeta(parsed) {
+  const cur = parcelDefaults((P.site && P.site.parcel) || {}) || {};
+  return {
+    ...parsed,
+    houseX: cur.houseX || 0, houseY: cur.houseY || 0, houseYaw: cur.houseYaw || 0,
+    setbackF: cur.setbackF || 0, setbackS: cur.setbackS || 0, setbackR: cur.setbackR || 0,
+    front: cur.front || 's',
+  };
+}
 async function saveParcel(parsed) {
-  P = (await api('projects/' + enc(P.id), { method: 'PATCH', body: { site: { parcel: parsed } } })).project;
+  P = (await api('projects/' + enc(P.id), { method: 'PATCH', body: { site: { parcel: keepParcelMeta(parsed) } } })).project;
   renderSite();
+  lotEditor?.fit(true);
   toast('Lot outline saved');
 }
 $('#parcelFile').onchange = async (e) => {
@@ -314,5 +381,82 @@ $('#parcelDel').onclick = async () => {
   try { P = (await api('projects/' + enc(P.id), { method: 'PATCH', body: { site: { parcel: null } } })).project; renderSite(); }
   catch (err) { toast(err.message); }
 };
+
+$('#parcelSurveyBtn').onclick = async () => {
+  try { await saveParcel(parseSurveyText($('#parcelSurvey').value)); } catch (err) { toast(err.message || 'Could not read that survey', 4000); }
+};
+
+async function loadHouseModel() {
+  houseModel = null; houseBounds = null;
+  if (!P?.exampleId) return;
+  try {
+    const mod = await import(`/3d/models/${P.exampleId}.js`);
+    houseModel = mod.default || null;
+  } catch (e) { console.warn(e); }
+}
+function currentGround() {
+  const s = siteVals();
+  const ground = P.files.find(f => f.kind === 'ground');
+  const url = ground ? fileUrl(ground) : '';
+  if (!url) { groundImg = null; groundImgUrl = ''; return null; }
+  if (url !== groundImgUrl) {
+    groundImgUrl = url;
+    groundImg = new Image();
+    groundImg.crossOrigin = 'anonymous';
+    groundImg.onload = () => lotEditor?.fit(true) || lotEditor?.redraw();
+    groundImg.src = url;
+  }
+  return { image: groundImg, scale: s.groundScale, rot: s.groundRot, x: s.groundX, y: s.groundY };
+}
+function renderLotStats(parcel) {
+  const statsEl = $('#lotStats'), warnEl = $('#lotWarn');
+  if (!parcel) {
+    statsEl.textContent = '';
+    warnEl.hidden = true;
+    return;
+  }
+  const st = lotStats(parcel, houseModel, houseBounds);
+  const cov = st.coverage == null ? '' : ` · Coverage ${st.coverage < 10 ? st.coverage.toFixed(1) : Math.round(st.coverage)}%`;
+  statsEl.textContent = 'Lot ' + formatLotArea(st.area) + cov + (st.footSf ? ` (${Math.round(st.footSf).toLocaleString('en-US')} sf heated + garage)` : '');
+  if (st.warning) { warnEl.hidden = false; warnEl.textContent = st.warning; }
+  else { warnEl.hidden = true; warnEl.textContent = ''; }
+}
+
+lotEditor = mountLotEditor($('#lotMap'), {
+  getState() {
+    const parcel = (P.site && P.site.parcel) || null;
+    return { parcel, model: houseModel, bounds: houseBounds, ground: currentGround() };
+  },
+  onLive(parcel) {
+    if (!P.site) P.site = {};
+    P.site.parcel = parcel;
+    renderSiteLive({ parcel });
+    renderLotStats(parcel);
+    lotEditor.redraw();
+  },
+  onChange(parcel) { saveSite({ parcel }); },
+});
+function setLotMode(m) {
+  lotEditor.setMode(m);
+  $('#lotFinishBtn').style.display = m === 'draw' ? '' : 'none';
+  $('#lotCancelBtn').style.display = m === 'draw' ? '' : 'none';
+}
+$('#lotDrawBtn').onclick = () => setLotMode('draw');
+$('#lotFinishBtn').onclick = () => { if (!lotEditor.finishDraw()) toast('Click at least three corners, then Finish lot.'); setLotMode(lotEditor.getMode()); };
+$('#lotCancelBtn').onclick = () => { lotEditor.cancelDraw(); setLotMode('edit'); };
+$('#lotEditBtn').onclick = () => setLotMode('edit');
+$('#lotHouseBtn').onclick = () => setLotMode('house');
+$('#lotFitBtn').onclick = () => lotEditor.fit(true) || lotEditor.redraw();
+
+for (const id of ['setbackF', 'setbackS', 'setbackR', 'houseX', 'houseY']) {
+  $(id).addEventListener('change', e => saveSite(parcelPartial({ [id]: +e.target.value || 0 })));
+}
+$('#lotFront').addEventListener('change', e => saveSite(parcelPartial({ front: e.target.value })));
+$('#houseYaw').addEventListener('input', e => queueSite(parcelPartial({ houseYaw: +e.target.value })));
+
+const _render = render;
+render = function() { _render(); loadHouseModel().then(() => { renderSite(); lotEditor.fit(true); lotEditor.redraw(); }); };
+if (P) loadHouseModel().then(() => { renderSite(); lotEditor.fit(true); lotEditor.redraw(); });
+
 </script>
 </body></html>

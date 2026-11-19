@@ -84,15 +84,28 @@ function publicSite(p) {
     parcel: site.parcel ? publicParcel(site.parcel) : null,
   };
 }
+function optCoord(v) {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
 function publicParcel(parcel) {
+  const front = String(parcel.front || 's').toLowerCase();
   return {
     rings: parcel.rings,
     rot: wrapDeg(parcel.rot, 0),
     x: clampNum(parcel.x, -2000, 2000, 0),
     y: clampNum(parcel.y, -2000, 2000, 0),
-    anchorLat: Number.isFinite(Number(parcel.anchorLat)) ? Number(parcel.anchorLat) : null,
-    anchorLon: Number.isFinite(Number(parcel.anchorLon)) ? Number(parcel.anchorLon) : null,
+    anchorLat: optCoord(parcel.anchorLat),
+    anchorLon: optCoord(parcel.anchorLon),
     sourceName: String(parcel.sourceName || '').slice(0, 160),
+    houseX: clampNum(parcel.houseX, -2000, 2000, 0),
+    houseY: clampNum(parcel.houseY, -2000, 2000, 0),
+    houseYaw: wrapDeg(parcel.houseYaw, 0),
+    setbackF: clampNum(parcel.setbackF, 0, 200, 0),
+    setbackS: clampNum(parcel.setbackS, 0, 200, 0),
+    setbackR: clampNum(parcel.setbackR, 0, 200, 0),
+    front: /^[nesw]$/.test(front) ? front : 's',
   };
 }
 function sanitizeParcel(raw) {
@@ -111,14 +124,22 @@ function sanitizeParcel(raw) {
     });
     return pts;
   });
+  const front = String(raw.front || 's').toLowerCase();
   return {
     rings,
     rot: wrapDeg(raw.rot, 0),
     x: clampNum(raw.x, -2000, 2000, 0),
     y: clampNum(raw.y, -2000, 2000, 0),
-    anchorLat: Number.isFinite(Number(raw.anchorLat)) ? Number(raw.anchorLat) : null,
-    anchorLon: Number.isFinite(Number(raw.anchorLon)) ? Number(raw.anchorLon) : null,
+    anchorLat: optCoord(raw.anchorLat),
+    anchorLon: optCoord(raw.anchorLon),
     sourceName: cleanText(raw.sourceName, 160),
+    houseX: clampNum(raw.houseX, -2000, 2000, 0),
+    houseY: clampNum(raw.houseY, -2000, 2000, 0),
+    houseYaw: wrapDeg(raw.houseYaw, 0),
+    setbackF: clampNum(raw.setbackF, 0, 200, 0),
+    setbackS: clampNum(raw.setbackS, 0, 200, 0),
+    setbackR: clampNum(raw.setbackR, 0, 200, 0),
+    front: /^[nesw]$/.test(front) ? front : 's',
   };
 }
 function applySitePatch(prev, patch) {

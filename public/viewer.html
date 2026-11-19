@@ -41,7 +41,8 @@
   #siteHud .site-h{font-weight:650;margin:0 0 6px;font-size:12.5px}
   #siteHud label{display:flex;justify-content:space-between;gap:8px;margin:6px 0 2px;opacity:.9}
   #siteHud input[type=range]{width:100%;accent-color:#e0a95a;margin:0}
-  #siteHud input[type=number]{width:100%;font:inherit;font-size:12px;background:rgba(255,255,255,.08);color:inherit;border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:4px 6px}
+  #siteHud input[type=number],#siteHud select{width:100%;font:inherit;font-size:12px;background:rgba(255,255,255,.08);color:inherit;border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:4px 6px}
+  #siteHud select option{color:#111}
   #siteHud .site-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   #siteHud .muted{opacity:.75;font-size:11px;margin:6px 0 0;line-height:1.3}
 
@@ -50,6 +51,8 @@
   #sf .sf-h{font-size:15px;font-weight:650;letter-spacing:.15px}
   #sf .sf-unit{font-weight:500;font-size:12px;opacity:.88}
   #sf .sf-sub{font-size:11px;opacity:.82;margin-top:3px}
+  #sf .sf-lot{font-size:11px;opacity:.9;margin-top:4px}
+  #sf .sf-warn{font-size:11px;color:#f3c2bc;margin-top:4px;max-width:220px}
   body.walk-pad #sf{bottom:max(148px,calc(140px + env(safe-area-inset-bottom)))}
   @media (max-width:600px){#sf{right:8px;bottom:max(8px,env(safe-area-inset-bottom));padding:7px 10px;padding-right:max(10px,env(safe-area-inset-right))}#sf .sf-h{font-size:13px}#sf .sf-unit{font-size:11px}#sf .sf-sub{font-size:10px}}
   @media (max-width:600px){#hud{padding:8px 10px}#hud .sub{display:none}#help{font-size:11px}.label{font-size:10px;padding:1px 4px}.label small{font-size:9px}.label.minor{display:none}#hud h1{font-size:14px}.btns button{font-size:12px;padding:6px 8px}#north{width:52px;height:52px}#north svg{width:44px;height:44px}}
@@ -119,12 +122,31 @@
         <div><label for="parcelX">East offset (ft)</label><input type="number" id="parcelX" step="1" value="0"></div>
         <div><label for="parcelY">South offset (ft)</label><input type="number" id="parcelY" step="1" value="0"></div>
       </div>
+      <div class="site-h" style="margin-top:8px">Setbacks (ft)</div>
+      <div class="site-pair" style="grid-template-columns:1fr 1fr 1fr">
+        <div><label for="setbackF">Front</label><input type="number" id="setbackF" min="0" max="200" step="0.5" value="0"></div>
+        <div><label for="setbackS">Side</label><input type="number" id="setbackS" min="0" max="200" step="0.5" value="0"></div>
+        <div><label for="setbackR">Rear</label><input type="number" id="setbackR" min="0" max="200" step="0.5" value="0"></div>
+      </div>
+      <label for="lotFront">Front of the lot faces</label>
+      <select id="lotFront" aria-label="Front of the lot faces">
+        <option value="s">South</option>
+        <option value="n">North</option>
+        <option value="e">East</option>
+        <option value="w">West</option>
+      </select>
+      <label>House rotation <span id="houseYawVal">0°</span></label>
+      <input type="range" id="houseYaw" min="0" max="360" step="1" value="0" aria-label="House rotation">
+      <div class="site-pair">
+        <div><label for="houseX">House east (ft)</label><input type="number" id="houseX" step="0.5" value="0"></div>
+        <div><label for="houseY">House south (ft)</label><input type="number" id="houseY" step="0.5" value="0"></div>
+      </div>
     </div>
     <div class="muted">Saved to this project. Line the photos and lot up with the house and the north compass.</div>
   </div>
   <div id="help"></div>
 </div>
-<div id="sf" aria-label="Estimated square footage"><div class="sf-h"><span id="sfHeated">—</span> <span class="sf-unit">sf heated</span></div><div class="sf-sub" id="sfSub"></div></div>
+<div id="sf" aria-label="Estimated square footage"><div class="sf-h"><span id="sfHeated">—</span> <span class="sf-unit">sf heated</span></div><div class="sf-sub" id="sfSub"></div><div class="sf-lot" id="sfLot" hidden></div><div class="sf-warn" id="lotWarn" hidden></div></div>
 <div id="north" title="North"><svg viewBox="-30 -30 60 60"><g id="narrow"><polygon points="0,-24 8,4 0,-2 -8,4" fill="#e0574f"/><polygon points="0,24 8,4 0,-2 -8,4" fill="#ddd" opacity=".7"/><text x="0" y="-8" font-size="0" fill="#fff">N</text></g><text id="nlabel" x="0" y="5" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">N</text></svg></div>
 <div id="pad"><button class="sp"></button><button data-k="f">▲</button><button class="sp"></button><button data-k="l">◀</button><button data-k="b">▼</button><button data-k="r">▶</button></div>
 <div id="walkmsg">Click to look around<br><small>Mouse to look · W A S D / arrows to move · Shift to run · Esc to release</small></div>

@@ -96,3 +96,9 @@ input[type=range]{width:100%;accent-color:var(--acc);height:24px}
 @media (max-width:520px){
   .hero-copy h1{font-size:26px}
 }
+
+.lot-map-wrap{width:100%;height:360px;border-radius:10px;overflow:hidden;background:#0d1218;margin:0 0 8px;border:1px solid rgba(255,255,255,.08)}
+#lotMap{width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+.lot-tools{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 8px}
+.lot-warn{background:rgba(180,50,40,.18);border:1px solid rgba(220,80,70,.45);color:#f3c2bc;padding:8px 10px;border-radius:8px;font-size:13px;margin:0 0 8px}
+label[style*="margin-top"]{display:block}

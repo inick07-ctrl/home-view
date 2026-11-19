@@ -4,6 +4,7 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import REGISTRY from './models/registry.js';
+import { parcelDefaults, lotStats, formatLotArea, worldRings, buildableRings, xfHouse, houseFromWorld } from '../js/parcel.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('c');
@@ -259,6 +260,8 @@ function applySiteEnv() {
     ground.visible = true;
   }
   applyParcelLines();
+  applyHouseXform();
+  syncLotStatus();
   syncSiteHud();
 }
 function applyParcelLines() {
@@ -266,24 +269,27 @@ function applyParcelLines() {
     parcelGroup.traverse(o => { o.geometry?.dispose(); if (o.material) { if (Array.isArray(o.material)) o.material.forEach(m => m.dispose()); else o.material.dispose(); } });
     scene.remove(parcelGroup); parcelGroup = null;
   }
-  const parcel = siteCfg.parcel;
-  const rings = parcel?.rings;
+  const parcel = siteCfg.parcel ? parcelDefaults(siteCfg.parcel) : null;
+  const rings = parcel ? worldRings(parcel) : null;
   if (!rings?.length) return;
   parcelGroup = new THREE.Group();
-  const rot = THREE.MathUtils.degToRad(parcel.rot || 0);
-  const ox = parcel.x || 0, oy = parcel.y || 0;
-  const c = Math.cos(rot), si = Math.sin(rot);
-  const xf = (x, y) => [ox + x * c - y * si, oy + x * si + y * c];
   const lineMat = new THREE.LineBasicMaterial({ color: 0xe0a95a, linewidth: 2 });
   const fillMat = new THREE.MeshBasicMaterial({ color: 0xe0a95a, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false });
-  for (const ring of rings) {
-    if (!ring || ring.length < 2) continue;
-    const plan = ring.map(([x, y]) => xf(x, y));
-    const pts = plan.map(([x, y]) => new THREE.Vector3(x, 0.06, y));
+  const dashMat = new THREE.LineDashedMaterial({ color: 0xf3e2b8, linewidth: 2, dashSize: 1.6, gapSize: 1.1 });
+  const postMat = new THREE.MeshStandardMaterial({ color: 0xf3e2b8, roughness: 0.55, metalness: 0.1 });
+  const addRingLine = (plan, mat, y, dashed) => {
+    const pts = plan.map(([x, yy]) => new THREE.Vector3(x, y, yy));
     if (!pts[0].equals(pts[pts.length - 1])) pts.push(pts[0].clone());
-    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat);
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    if (dashed) geo.computeLineDistances();
+    const line = new THREE.Line(geo, mat);
     line.renderOrder = 3;
     parcelGroup.add(line);
+  };
+  for (const ring of rings) {
+    if (!ring || ring.length < 2) continue;
+    const plan = ring.map(([x, y]) => [x, y]);
+    addRingLine(plan, lineMat, 0.06, false);
     if (plan.length >= 3) {
       const shape = new THREE.Shape(plan.map(([x, y]) => new THREE.Vector2(x, -y)));
       const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), fillMat);
@@ -293,8 +299,70 @@ function applyParcelLines() {
       parcelGroup.add(mesh);
     }
   }
+  const hasSetbacks = parcel.setbackF > 0 || parcel.setbackS > 0 || parcel.setbackR > 0;
+  if (hasSetbacks) {
+    const buildable = buildableRings(rings, parcel);
+    for (const ring of buildable) {
+      if (!ring || ring.length < 2) continue;
+      const plan = ring.map(([x, y]) => [x, y]);
+      addRingLine(plan, dashMat, 0.10, true);
+      // low posts at envelope corners
+      const seen = new Set();
+      for (const [x, y] of plan) {
+        const key = x.toFixed(2) + ',' + y.toFixed(2);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 2.6, 8), postMat);
+        post.position.set(x, 1.3, y);
+        post.castShadow = false;
+        post.receiveShadow = false;
+        parcelGroup.add(post);
+      }
+    }
+  }
   scene.add(parcelGroup);
 }
+let lastHouseX = 0, lastHouseZ = 0;
+function housePose() {
+  const p = siteCfg.parcel ? parcelDefaults(siteCfg.parcel) : null;
+  return p ? { x: p.houseX, z: p.houseY, yaw: p.houseYaw } : { x: 0, z: 0, yaw: 0 };
+}
+function applyHouseXform() {
+  const h = housePose();
+  if (root) {
+    root.position.set(h.x, 0, h.z);
+    root.rotation.y = -THREE.MathUtils.degToRad(h.yaw);
+  }
+  const dx = h.x - lastHouseX, dz = h.z - lastHouseZ;
+  if ((dx || dz) && orbit && mode !== 'walk') {
+    camera.position.x += dx; camera.position.z += dz;
+    orbit.target.x += dx; orbit.target.z += dz;
+  }
+  lastHouseX = h.x; lastHouseZ = h.z;
+}
+function syncLotStatus() {
+  const lotEl = $('sfLot'), warnEl = $('lotWarn'), sf = $('sf');
+  const parcel = siteCfg.parcel ? parcelDefaults(siteCfg.parcel) : null;
+  if (!parcel) {
+    if (lotEl) { lotEl.textContent = ''; lotEl.hidden = true; }
+    if (warnEl) { warnEl.textContent = ''; warnEl.hidden = true; }
+    return;
+  }
+  const bounds = { cx: CX, cz: CZ, bw: BW, bh: BH };
+  const st = lotStats(parcel, M, bounds);
+  if (lotEl) {
+    const cov = st.coverage == null ? '' : ` · Coverage ${st.coverage < 10 ? st.coverage.toFixed(1) : Math.round(st.coverage)}%`;
+    lotEl.textContent = 'Lot ' + formatLotArea(st.area) + cov;
+    lotEl.hidden = false;
+    if (sf && lotEl.textContent) sf.style.display = 'block';
+  }
+  if (warnEl) {
+    warnEl.textContent = st.warning || '';
+    warnEl.hidden = !st.warning;
+    if (st.warning && sf) sf.style.display = 'block';
+  }
+}
+
 function siteFromProject(p) {
   const s = p?.site || {};
   siteCfg = {
@@ -308,9 +376,7 @@ function siteFromProject(p) {
   siteCanEdit = SRC.kind === 'project';
   sitePanoUrl = (s.pano && assetBase) ? `${assetBase}/files/${s.pano.fileId}` : null;
   siteGroundUrl = (s.ground && assetBase) ? `${assetBase}/files/${s.ground.fileId}` : null;
-  siteCfg.parcel = s.parcel ? {
-    rings: s.parcel.rings, rot: s.parcel.rot || 0, x: s.parcel.x || 0, y: s.parcel.y || 0,
-  } : null;
+  siteCfg.parcel = s.parcel ? parcelDefaults(s.parcel) : null;
 }
 async function loadProjectSite(p) {
   siteFromProject(p);
@@ -349,14 +415,32 @@ function syncSiteHud() {
   if ($('groundX') && document.activeElement !== $('groundX')) $('groundX').value = siteCfg.groundX;
   if ($('groundY') && document.activeElement !== $('groundY')) $('groundY').value = siteCfg.groundY;
   if (siteCfg.parcel) {
-    set('parcelRot', siteCfg.parcel.rot || 0, Math.round(siteCfg.parcel.rot || 0) + '°');
-    if ($('parcelX') && document.activeElement !== $('parcelX')) $('parcelX').value = siteCfg.parcel.x || 0;
-    if ($('parcelY') && document.activeElement !== $('parcelY')) $('parcelY').value = siteCfg.parcel.y || 0;
+    const p = parcelDefaults(siteCfg.parcel);
+    set('parcelRot', p.rot || 0, Math.round(p.rot || 0) + '°');
+    if ($('parcelX') && document.activeElement !== $('parcelX')) $('parcelX').value = p.x || 0;
+    if ($('parcelY') && document.activeElement !== $('parcelY')) $('parcelY').value = p.y || 0;
+    if ($('setbackF') && document.activeElement !== $('setbackF')) $('setbackF').value = p.setbackF;
+    if ($('setbackS') && document.activeElement !== $('setbackS')) $('setbackS').value = p.setbackS;
+    if ($('setbackR') && document.activeElement !== $('setbackR')) $('setbackR').value = p.setbackR;
+    if ($('lotFront') && document.activeElement !== $('lotFront')) $('lotFront').value = p.front;
+    set('houseYaw', p.houseYaw, Math.round(p.houseYaw) + '°');
+    if ($('houseX') && document.activeElement !== $('houseX')) $('houseX').value = p.houseX;
+    if ($('houseY') && document.activeElement !== $('houseY')) $('houseY').value = p.houseY;
   }
 }
 function queueSiteSave(partial) {
-  Object.assign(siteCfg, partial);
-  Object.assign(sitePending, partial);
+  if (partial.parcel) {
+    siteCfg.parcel = { ...(siteCfg.parcel || {}), ...partial.parcel };
+    const pendingParcel = { ...(sitePending.parcel || siteCfg.parcel), ...partial.parcel };
+    const rest = { ...partial };
+    delete rest.parcel;
+    Object.assign(siteCfg, rest);
+    Object.assign(sitePending, rest);
+    sitePending.parcel = pendingParcel;
+  } else {
+    Object.assign(siteCfg, partial);
+    Object.assign(sitePending, partial);
+  }
   applySiteEnv();
   if (!siteCanEdit || SRC.kind !== 'project') return;
   clearTimeout(siteSaveTimer);
@@ -395,6 +479,15 @@ function bindSiteHud() {
   });
   $('parcelX')?.addEventListener('change', () => queueSiteSave(parcelPartial({ x: +$('parcelX').value || 0 })));
   $('parcelY')?.addEventListener('change', () => queueSiteSave(parcelPartial({ y: +$('parcelY').value || 0 })));
+  for (const key of ['setbackF', 'setbackS', 'setbackR', 'houseX', 'houseY']) {
+    $(key)?.addEventListener('change', () => queueSiteSave(parcelPartial({ [key]: +$(key).value || 0 })));
+  }
+  $('lotFront')?.addEventListener('change', () => queueSiteSave(parcelPartial({ front: $('lotFront').value })));
+  $('houseYaw')?.addEventListener('input', () => {
+    const v = +$('houseYaw').value;
+    if ($('houseYawVal')) $('houseYawVal').textContent = Math.round(v) + '°';
+    queueSiteSave(parcelPartial({ houseYaw: v }));
+  });
 }
 bindSiteHud();
 
@@ -985,19 +1078,21 @@ function setMode(m, instant = false) {
   setBtn('bOrbit', m === 'orbit'); setBtn('bTop', m === 'top'); setBtn('bWalk', m === 'walk');
   $('help').textContent = HELP[m];
   const size = Math.max(BW, BH) / 91;
+  const hp = housePose();
   if (m === 'orbit') {
     const k = Math.max(0.85, 0.95 / camera.aspect) * size;
-    const pos = new THREE.Vector3(52, 66, 92).multiplyScalar(k), tgt = new THREE.Vector3(0, 0, 4);
+    const pos = new THREE.Vector3(52, 66, 92).multiplyScalar(k).add(new THREE.Vector3(hp.x, 0, hp.z)), tgt = new THREE.Vector3(hp.x, 0, hp.z + 4);
     if (instant) { camera.position.copy(pos); orbit.target.copy(tgt); camera.lookAt(tgt); } else animateCam(pos, tgt);
   } else if (m === 'top') {
     setRoof(false);
     const span = Math.max(BH + 10, (BW + 14) / camera.aspect);
-    const pos = new THREE.Vector3(0, span / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) + 12, 0.01), tgt = new THREE.Vector3(0, 0, 0);
+    const pos = new THREE.Vector3(hp.x, span / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) + 12, hp.z + 0.01), tgt = new THREE.Vector3(hp.x, 0, hp.z);
     if (instant) { camera.position.copy(pos); orbit.target.copy(tgt); camera.lookAt(tgt); } else animateCam(pos, tgt);
   } else if (m === 'walk') {
     orbit.enabled = false; camera.fov = 70; camera.updateProjectionMatrix();
     const s = M.walkStart || [CX, CZ + BH / 2 + 5, 0];
-    player.set(Wx(s[0]), Wz(s[1])); yaw = s[2] || 0; pitch = -0.05;
+    const w = xfHouse(Wx(s[0]), Wz(s[1]), hp.x, hp.z, hp.yaw);
+    player.set(w[0], w[1]); yaw = (s[2] || 0) - THREE.MathUtils.degToRad(hp.yaw); pitch = -0.05;
     $('cross').style.display = 'block';
     if (isTouch) $('pad').style.display = 'grid'; else $('walkmsg').style.display = 'block';
   }
@@ -1020,9 +1115,12 @@ const EYE = 5.5, RADIUS = 0.75, player = new THREE.Vector2();
 let yaw = 0, pitch = 0;
 const keys = {};
 function blocked(x, z) {
+  const hp = housePose();
+  const loc = houseFromWorld(x, z, hp.x, hp.z, hp.yaw);
+  const lx = loc[0], lz = loc[1];
   for (const [a, b, c, d] of solids) {
-    const nx = Math.max(a, Math.min(x, c)), nz = Math.max(b, Math.min(z, d));
-    if ((x - nx) ** 2 + (z - nz) ** 2 < RADIUS * RADIUS) return true;
+    const nx = Math.max(a, Math.min(lx, c)), nz = Math.max(b, Math.min(lz, d));
+    if ((lx - nx) ** 2 + (lz - nz) ** 2 < RADIUS * RADIUS) return true;
   }
   return false;
 }
@@ -1250,15 +1348,17 @@ function fmtSf(n) { return Math.round(n).toLocaleString('en-US'); }
 function syncAreaUi(M) {
   const el = $('sf'), h = $('sfHeated'), sub = $('sfSub');
   if (!el) return;
-  if (!M?.rooms?.length && !M?.areas) { el.style.display = 'none'; return; }
+  const hasLot = !!(siteCfg.parcel && siteCfg.parcel.rings);
+  if (!M?.rooms?.length && !M?.areas && !hasLot) { el.style.display = 'none'; return; }
   const { heated, garage, porch } = modelAreas(M);
-  if (!heated && !garage && !porch) { el.style.display = 'none'; return; }
+  if (!heated && !garage && !porch && !hasLot) { el.style.display = 'none'; return; }
   el.style.display = 'block';
-  h.textContent = fmtSf(heated);
+  if (h) h.textContent = heated ? fmtSf(heated) : (hasLot ? '—' : fmtSf(heated));
   const bits = [];
   if (garage > 1) bits.push('Garage ' + fmtSf(garage) + ' sf');
   if (porch > 1) bits.push('Porches ' + fmtSf(porch) + ' sf');
   if (sub) { sub.textContent = bits.join(' · '); sub.style.display = bits.length ? '' : 'none'; }
+  syncLotStatus();
 }
 
 function loop() {
@@ -1266,7 +1366,8 @@ function loop() {
   if (mode === 'walk') walkStep(dt); else orbit.update();
   updateNorth();
   if (labelsOn && labels) for (const o of labels.children) {
-    const show = mode !== 'walk' || Math.hypot(o.position.x - camera.position.x, o.position.z - camera.position.z) < 16;
+    const wp = o.getWorldPosition(new THREE.Vector3());
+    const show = mode !== 'walk' || Math.hypot(wp.x - camera.position.x, wp.z - camera.position.z) < 16;
     o.visible = show;
   }
   if (fires.length) {
