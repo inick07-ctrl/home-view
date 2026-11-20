@@ -14,6 +14,12 @@ export const EXAMPLES = [
   { id: 'smith-11', name: 'Hearth Patio', type: 'home', formerNames: ['Smith 11'], tagline: 'An English Country house with four bedrooms, a study, and a covered patio.' },
   { id: 'smith-12', name: 'Twin Porch Homestead', type: 'home', formerNames: ['Smith 12'], tagline: 'A farmhouse with matching covered porches front and back, an open kitchen-dining-living core, and a two-car garage.' },
   { id: 'tiny-01', name: 'Pine Nook', type: 'tiny', formerNames: ['Tiny 01'], tagline: 'A tiny house on wheels, with a loft over the kitchenette and bath.' },
+  { id: 'tiny-02', name: 'Duskfen Loft', type: 'tiny', tagline: 'A sleek Nordic tiny home with dark siding, a clerestory roofline, a wall of glass, and a sleeping loft.' },
+  { id: 'tiny-03', name: 'Tamarack Porch', type: 'tiny', tagline: 'A rustic timber tiny cabin with a covered front porch, a steep gable, a private bedroom, and a loft overhang.' },
+  { id: 'tiny-04', name: 'Wrenwood Cabin', type: 'tiny', tagline: 'A cozy cabin-style tiny home with a covered porch, a dormered gable, a fireplace, and a kitchen with bar seating.' },
+  { id: 'aframe-01', name: 'Fernhollow A-Frame', type: 'aframe', tagline: 'A compact woodland A-frame with a glass front gable, an open great room and fireplace, one bath, and a sleeping loft.' },
+  { id: 'aframe-02', name: 'Lodgepole A-Frame', type: 'aframe', tagline: 'A classic timber A-frame with side dormers, two bedrooms plus a loft, two baths, and a wrap-around deck.' },
+  { id: 'aframe-03', name: 'Whitepine Homestead', type: 'aframe', tagline: 'A grand A-frame homestead with cathedral glass, three bedrooms and a loft, a kitchen island, mudroom, and a garage wing.' },
   { id: 'single-wide-01', name: 'Lakeshore Longhouse', type: 'trailer', formerNames: ['Single-Wide 01'], tagline: 'A long, single-wide home with three bedrooms, two baths, and a front porch.' },
   { id: 'double-wide-01', name: 'Meadow Glen', type: 'trailer', formerNames: ['Double-Wide 01'], tagline: 'A double-wide with three bedrooms, two baths, and a wide front porch.' },
 ];

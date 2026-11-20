@@ -35,7 +35,7 @@ export default {
     ['Kitchenette', '7\'-0" x 8\'-6"', 'wood', 11.5, 0, 18.5, 8.5],
     ['Bath', '5\'-6" x 5\'-3"', 'tile', 18.5, 3.25, 24, 8.5],
     ['Closet', '5\'-6" x 3\'-3"', 'wood', 18.5, 0, 24, 3.25, { minor: true }],
-    ['Loft', '12\'-6" x 8\'-6"', 'wood', 11.5, 0, 24, 8.5, { noFloor: true, loft: true, labelZ: 8.3, labelAt: [18.2, 4.25] }],
+    ['Loft', '12\'-6" x 8\'-6"', 'wood', 11.5, 0, 24, 8.5, { noFloor: true, loft: true, deckZ: 7.12, labelZ: 8.3, labelAt: [18.2, 4.25] }],
   ],
   slabs: [[-0.3, -0.3, 24.3, 8.8]],
   ceilings: [

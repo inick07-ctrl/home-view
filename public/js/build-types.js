@@ -2,6 +2,7 @@
 export const BUILD_TYPES = [
   { id: 'home', label: 'Home' },
   { id: 'tiny', label: 'Tiny home' },
+  { id: 'aframe', label: 'A-Frame' },
   { id: 'trailer', label: 'Trailer / Mobile home' },
   { id: 'adu', label: 'ADU / Cabin' },
 ];

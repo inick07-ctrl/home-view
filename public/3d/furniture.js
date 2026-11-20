@@ -1004,6 +1004,7 @@ export function makeItem(type, opts = {}) {
     hood: opts.hood,
     onCounter: opts.onCounter,
     upper: opts.upper,
+    z: opts.z != null ? +opts.z : 0,
   };
 }
 
@@ -1016,7 +1017,8 @@ export function buildItemMesh(rec, ctx) {
   t.build(g, rec);
   // hang pendants from a typical ceiling
   if (rec.type === 'pendant') g.position.y = 0; // builder already uses local y; we'll lift the group below
-  const lift = rec.type === 'pendant' ? (ctx?.ceiling || 8.2) - 2.0 : 0;
+  const baseZ = rec.z || 0;
+  const lift = rec.type === 'pendant' ? baseZ + ((ctx?.ceiling || 8.2) - 2.0) : baseZ;
   const { Wx, Wz } = ctx;
   g.position.set(Wx(rec.x), lift, Wz(rec.y));
   g.rotation.y = -((rec.rot || 0) * Math.PI) / 180;
@@ -1078,8 +1080,11 @@ export function autoFurnish(M, WS) {
   };
   let currentRoom = null;
   const put = (type, opts) => {
-    const rec = makeItem(type, opts);
-    if (clearanceHit(itemRect(rec), rooms, WS, 0.05)) return null;
+    const ro = currentRoom?.[7] || {};
+    const loftZ = (ro.loft || ro.noFloor) ? (ro.deckZ ?? ro.loftZ ?? 10.55) : 0;
+    const rec = makeItem(type, { z: loftZ, ...opts });
+    // Loft items sit above main-floor door swings and halls.
+    if (!(rec.z > 7.5) && clearanceHit(itemRect(rec), rooms, WS, 0.05)) return null;
     if (currentRoom && !roomContains(currentRoom, rec)) return null;
     items.push(rec);
     return rec;
@@ -1250,6 +1255,17 @@ export function autoFurnish(M, WS) {
       const plantWall = mediaWall === 's' ? 'n' : mediaWall === 'n' ? 'w' : 'n';
       const corner = againstWall(room, plantWall, 2.2, 2.2, 0.6);
       put('plant', { ...corner, variant: 'fiddle' });
+      continue;
+    }
+
+    if (/loft/i.test(n)) {
+      const wall = longestWallWithoutDoor(room, doors) || 'n';
+      const bw = Math.min(6.6, rw - 1.4), bd = Math.min(5.2, rd - 1.2);
+      const bed = againstWall(room, wall, bw, bd, 0.45);
+      put('bed', { ...bed, w: bw, d: bd });
+      const br = bed.rot || 0;
+      put('nightstand', { x: bed.x + Math.cos(br * Math.PI / 180) * (bw / 2 + 0.7), y: bed.y + Math.sin(br * Math.PI / 180) * (bw / 2 + 0.7), rot: br });
+      if (rw * rd >= 70) put('dresser', againstWall(room, wall === 'n' || wall === 's' ? 'e' : 's', 3.2, 1.6, 0.4));
       continue;
     }
 

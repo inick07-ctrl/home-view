@@ -1271,12 +1271,18 @@ function buildModel(model, opts = {}) {
       roof.add(top, new THREE.Mesh(g, roofUnder));
       continue;
     }
-    const along = rf.along === 'y', pitch = rf.pitch ?? .5, ohv = rf.oh ?? 1.5, eaveW = rf.eave ?? H;
+    const aframe = !!rf.aframe;
+    const along = rf.along === 'y', pitch = rf.pitch ?? (aframe ? 1.7 : .5), ohv = rf.oh ?? (aframe ? 0.55 : 1.5), eaveW = rf.eave ?? (aframe ? 1.35 : H);
     const oh = Array.isArray(ohv) ? ohv : [ohv, ohv], endOh = rf.endOh ?? [Math.max(...oh), Math.max(...oh)];
     const a = along ? [rf.x0 - oh[0], rf.x1 + oh[1]] : [rf.y0 - oh[0], rf.y1 + oh[1]];
     const b = along ? [rf.y0 - endOh[0], rf.y1 + endOh[1]] : [rf.x0 - endOh[0], rf.x1 + endOh[1]];
     const wHalf = along ? (rf.x1 - rf.x0) / 2 : (rf.y1 - rf.y0) / 2, mid = along ? (rf.x0 + rf.x1) / 2 : (rf.y0 + rf.y1) / 2;
-    const eaveA = eaveW - oh[0] * pitch, eaveB = eaveW - oh[1] * pitch, ridge = eaveW + wHalf * pitch;
+    let eaveA = eaveW - oh[0] * pitch, eaveB = eaveW - oh[1] * pitch, ridge = eaveW + wHalf * pitch;
+    if (aframe) {
+      const minE = rf.minEave ?? 0.28;
+      eaveA = Math.max(minE, eaveA);
+      eaveB = Math.max(minE, eaveB);
+    }
     const P = (acr, alo, h) => along ? new THREE.Vector3(Wx(acr), h, Wz(alo)) : new THREE.Vector3(Wx(alo), h, Wz(acr));
     const pos = [], uvs = [];
     const tri = (p, q, r) => {
@@ -1292,31 +1298,93 @@ function buildModel(model, opts = {}) {
     const top = new THREE.Mesh(g, roofTop); top.castShadow = true; top.receiveShadow = true;
     const under = new THREE.Mesh(g, roofUnder);
     roof.add(top, under);
-    // gable end triangles over the walls
+    // gable end triangles (A-frame: full-height from the floor; otherwise sit on the wall eave)
     const wa = along ? [rf.x0, rf.x1] : [rf.y0, rf.y1], wb = along ? [rf.y0, rf.y1] : [rf.x0, rf.x1];
     const rw = eaveW + ((wa[1] - wa[0]) / 2) * pitch;
     const ends = rf.ends || [mats.gable || 'ext', mats.gable || 'ext'];
-    ends.forEach((em, i) => {
-      if (!em) return;
-      const e = wb[i];
+    const gableZ = aframe ? (rf.gableFloor ?? 0.05) : eaveW;
+    const addGableMesh = (pts, em) => {
       const tg = new THREE.BufferGeometry();
-      let p1 = P(wa[0], e, eaveW), p2 = P(wa[1], e, eaveW); const p3 = P((wa[0] + wa[1]) / 2, e, rw);
-      { // orient the face outward (away from the roof's other end)
-        const n = new THREE.Vector3().subVectors(p2, p1).cross(new THREE.Vector3().subVectors(p3, p1));
-        const outward = along ? (i === 0 ? -1 : 1) * n.z : (i === 0 ? -1 : 1) * n.x;
-        if (outward < 0) [p1, p2] = [p2, p1];
-      }
-      tg.setAttribute('position', new THREE.Float32BufferAttribute([p1, p2, p3].flatMap(v => [v.x, v.y, v.z]), 3));
-      tg.setAttribute('uv', new THREE.Float32BufferAttribute([p1, p2, p3].flatMap(v => [(along ? v.x : v.z) / 5, v.y / 5]), 2));
+      const flat = pts.flatMap(v => [v.x, v.y, v.z]);
+      tg.setAttribute('position', new THREE.Float32BufferAttribute(flat, 3));
+      tg.setAttribute('uv', new THREE.Float32BufferAttribute(pts.flatMap(v => [(along ? v.x : v.z) / 5, v.y / 5]), 2));
       tg.computeVertexNormals();
       const mat = (gableMat[em] || extMat).clone(); mat.side = em === 'glass' ? THREE.DoubleSide : THREE.FrontSide;
       const tm = new THREE.Mesh(tg, mat); tm.castShadow = em !== 'glass'; roof.add(tm);
       if (em !== 'glass') roof.add(new THREE.Mesh(tg, gableInside));
-      if (em === 'glass') { // dark mullions on a glass gable
+    };
+    const orientOut = (p1, p2, p3, i) => {
+      const n = new THREE.Vector3().subVectors(p2, p1).cross(new THREE.Vector3().subVectors(p3, p1));
+      const outward = along ? (i === 0 ? -1 : 1) * n.z : (i === 0 ? -1 : 1) * n.x;
+      return outward < 0 ? [p2, p1, p3] : [p1, p2, p3];
+    };
+    ends.forEach((em, i) => {
+      if (!em) return;
+      const e = wb[i];
+      const midA = (wa[0] + wa[1]) / 2;
+      const apex = P(midA, e, rw);
+      const door = aframe && (rf.doorEnd === i || rf.doorEnd === (i === 0 ? 'start' : 'end') || (Array.isArray(rf.doorEnds) && rf.doorEnds.includes(i)));
+      const dw = rf.doorWidth ?? 3.2, dh = rf.doorHeight ?? 7.2;
+      const ds = midA - dw / 2, de = midA + dw / 2;
+      const tris = [];
+      if (door) {
+        const L = P(wa[0], e, gableZ), R = P(wa[1], e, gableZ);
+        const DL = P(ds, e, gableZ), DR = P(de, e, gableZ);
+        const DLt = P(ds, e, dh), DRt = P(de, e, dh);
+        tris.push([L, DL, DLt], [L, DLt, apex], [DLt, DRt, apex], [DRt, R, apex], [DRt, DR, R]);
+        const fm = '#3a2a1c', leaf = '#5a3f2a';
+        const t = 0.18;
+        if (along) {
+          roof.add(kit.block(ds - t, e - t, ds + t, e + t, gableZ, dh, fm));
+          roof.add(kit.block(de - t, e - t, de + t, e + t, gableZ, dh, fm));
+          roof.add(kit.block(ds - t, e - t, de + t, e + t, dh - t, dh + t, fm));
+          roof.add(kit.block(ds + 0.05, e - 0.12, de - 0.9, e + 0.12, gableZ, dh - 0.08, leaf));
+        } else {
+          roof.add(kit.block(e - t, ds - t, e + t, ds + t, gableZ, dh, fm));
+          roof.add(kit.block(e - t, de - t, e + t, de + t, gableZ, dh, fm));
+          roof.add(kit.block(e - t, ds - t, e + t, de + t, dh - t, dh + t, fm));
+          roof.add(kit.block(e - 0.12, ds + 0.05, e + 0.12, de - 0.9, gableZ, dh - 0.08, leaf));
+        }
+      } else {
+        tris.push([P(wa[0], e, gableZ), P(wa[1], e, gableZ), apex]);
+      }
+      for (const [p1, p2, p3] of tris) addGableMesh(orientOut(p1, p2, p3, i), em);
+      if (em === 'glass') {
         const fm = '#151618';
-        for (let k2 = 1; k2 < 4; k2++) { const s = wa[0] + (wa[1] - wa[0]) * k2 / 4, hh = eaveW + (Math.min(s - wa[0], wa[1] - s)) * pitch; roof.add(kit.block(along ? s - .1 : e - .1, along ? e - .1 : s - .1, along ? s + .1 : e + .1, along ? e + .1 : s + .1, eaveW, hh, fm)); }
+        const divs = aframe ? 6 : 4;
+        for (let k2 = 1; k2 < divs; k2++) {
+          const s = wa[0] + (wa[1] - wa[0]) * k2 / divs;
+          if (door && s > ds - 0.15 && s < de + 0.15) continue;
+          const hh = gableZ + (Math.min(s - wa[0], wa[1] - s)) * pitch;
+          roof.add(kit.block(along ? s - .08 : e - .08, along ? e - .08 : s - .08, along ? s + .08 : e + .08, along ? e + .08 : s + .08, gableZ, hh, fm));
+        }
+        if (aframe) {
+          for (const frac of [0.28, 0.55]) {
+            const z = gableZ + (rw - gableZ) * frac;
+            const half = Math.max(0.4, (rw - z) / pitch);
+            const s0 = midA - half, s1 = midA + half;
+            roof.add(kit.block(along ? s0 : e - .07, along ? e - .07 : s0, along ? s1 : e + .07, along ? e + .07 : s1, z - 0.06, z + 0.06, fm));
+          }
+        }
       }
     });
+    if (aframe && rf.rafters !== false) {
+      const TIM = rf.timber || '#6b4a30';
+      const y0 = along ? rf.y0 : rf.x0, y1 = along ? rf.y1 : rf.x1;
+      const x0 = along ? rf.x0 : rf.y0, x1 = along ? rf.x1 : rf.y1;
+      // ridge beam (axis-aligned along the peak)
+      if (along) roof.add(kit.block(mid - 0.2, y0 - 0.15, mid + 0.2, y1 + 0.15, ridge - 0.45, ridge + 0.1, TIM));
+      else roof.add(kit.block(y0 - 0.15, mid - 0.2, y1 + 0.15, mid + 0.2, ridge - 0.45, ridge + 0.1, TIM));
+      // collar ties across the A at loft height — true horizontal timbers
+      const tieZ = rf.tieZ ?? Math.min(ridge - 3, Math.max(8.5, eaveW + wHalf * pitch * 0.45));
+      const inset = Math.max(1.2, (tieZ - eaveW) / pitch * 0.15);
+      const half = Math.max(3, (ridge - tieZ) / pitch - 0.2);
+      const step = rf.rafterStep || 6;
+      for (let s = y0 + 2; s < y1 - 1; s += step) {
+        if (along) roof.add(kit.block(mid - half, s - 0.12, mid + half, s + 0.12, tieZ - 0.16, tieZ + 0.16, TIM));
+        else roof.add(kit.block(s - 0.12, mid - half, s + 0.12, mid + half, tieZ - 0.16, tieZ + 0.16, TIM));
+      }
+    }
   }
   // flat ceilings for 9' rooms (visible with the roof on; vaulted rooms show the roof underside)
   ceilings = mesh((M.ceilings || []).map(r => { const g = planeRect(r[0], r[1], r[2], r[3], r[4] || H, 4); return g; }), (st.ceiling && MAT[st.ceiling]) || MAT.ceiling, false);
