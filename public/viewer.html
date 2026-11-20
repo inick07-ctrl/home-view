@@ -71,6 +71,7 @@
   @media (max-width:420px){#topbar .brand{display:none}}
   @media (max-width:600px){#topbar .brand{display:none}#topbar{padding:6px 8px;flex-wrap:wrap}#topbar .back,#saveWrap .save-ctl{font-size:12px;padding:5px 10px}#tabs:empty{display:none}#tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;width:100%;overflow:visible}#tabs button{font-size:12px;padding:5px 4px;text-align:center}#hud{top:calc(var(--tbh,52px) + 6px) !important}#north{top:calc(var(--tbh,52px) + 8px) !important}}
 </style>
+<link rel="stylesheet" href="/css/plan-editor.css">
 <script type="importmap">
 {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
 </script>
@@ -90,6 +91,8 @@
     <button id="bLabels" class="on">Room names</button>
     <button id="bCut">Cutaway walls</button>
     <button id="bPlan">Plan overlay</button>
+    <button id="bItems" class="on">Items</button>
+    <button id="bEdit">Edit</button>
     <label id="styleWrap" class="stylepick" style="display:none">Style
       <select id="bStyle" aria-label="Interior style">
         <option value="default">Default</option>

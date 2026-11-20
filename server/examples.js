@@ -12,6 +12,7 @@ export const EXAMPLES = [
   { id: 'smith-09', name: 'The Prairie Lantern', type: 'home', formerNames: ['Smith 09'], tagline: 'An English Country house with a sixty-foot front porch and a vaulted great room.' },
   { id: 'smith-10', name: 'Ember Ranch', type: 'home', formerNames: ['Smith 10'], tagline: 'A compact English Country ranch with a linear fireplace, mudroom, and butler\'s pantry.' },
   { id: 'smith-11', name: 'Hearth Patio', type: 'home', formerNames: ['Smith 11'], tagline: 'An English Country house with four bedrooms, a study, and a covered patio.' },
+  { id: 'smith-12', name: 'Twin Porch Homestead', type: 'home', formerNames: ['Smith 12'], tagline: 'A farmhouse with matching covered porches front and back, an open kitchen-dining-living core, and a two-car garage.' },
   { id: 'tiny-01', name: 'Pine Nook', type: 'tiny', formerNames: ['Tiny 01'], tagline: 'A tiny house on wheels, with a loft over the kitchenette and bath.' },
   { id: 'single-wide-01', name: 'Lakeshore Longhouse', type: 'trailer', formerNames: ['Single-Wide 01'], tagline: 'A long, single-wide home with three bedrooms, two baths, and a front porch.' },
   { id: 'double-wide-01', name: 'Meadow Glen', type: 'trailer', formerNames: ['Double-Wide 01'], tagline: 'A double-wide with three bedrooms, two baths, and a wide front porch.' },

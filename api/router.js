@@ -172,6 +172,54 @@ async function persistExampleNameIfStale(p) {
   return p;
 }
 
+
+function sanitizeLayout(raw) {
+  if (raw === null) return null;
+  if (!raw || typeof raw !== 'object') return undefined;
+  const num = (v, lo, hi) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : null;
+  };
+  const items = Array.isArray(raw.items) ? raw.items.slice(0, 400).map((it) => {
+    if (!it || typeof it !== 'object' || typeof it.type !== 'string') return null;
+    const x = num(it.x, -500, 500), y = num(it.y, -500, 500);
+    if (x == null || y == null) return null;
+    const rec = {
+      id: String(it.id || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) || undefined,
+      type: String(it.type).slice(0, 40),
+      x, y,
+      rot: num(it.rot, -3600, 3600) ?? 0,
+      w: num(it.w, 0.2, 40) ?? undefined,
+      d: num(it.d, 0.2, 40) ?? undefined,
+    };
+    if (it.finish) rec.finish = String(it.finish).slice(0, 24);
+    if (it.variant) rec.variant = String(it.variant).slice(0, 24);
+    if (it.wood) rec.wood = String(it.wood).slice(0, 24);
+    if (it.chaise) rec.chaise = String(it.chaise).slice(0, 12);
+    return rec;
+  }).filter(Boolean) : undefined;
+  const rooms = Array.isArray(raw.rooms) ? raw.rooms.slice(0, 200).map((r) => {
+    if (!Array.isArray(r) || r.length < 7) return null;
+    const x0 = num(r[3], -500, 500), y0 = num(r[4], -500, 500), x1 = num(r[5], -500, 500), y1 = num(r[6], -500, 500);
+    if (x0 == null || y0 == null || x1 == null || y1 == null) return null;
+    const opts = r[7] && typeof r[7] === 'object' ? {
+      outside: !!r[7].outside, minor: !!r[7].minor, noLabel: !!r[7].noLabel, noFloor: !!r[7].noFloor, vaulted: !!r[7].vaulted,
+    } : {};
+    return [String(r[0] || 'Room').slice(0, 60), String(r[1] || '').slice(0, 40), String(r[2] || 'wood').slice(0, 24), x0, y0, x1, y1, opts];
+  }).filter(Boolean) : undefined;
+  let walls;
+  if (raw.walls && typeof raw.walls === 'object') {
+    walls = {};
+    for (const k of ['ext', 'int', 'win', 'door', 'counter']) {
+      const list = raw.walls[k];
+      if (!Array.isArray(list)) continue;
+      walls[k] = list.slice(0, 2000).filter((r) => Array.isArray(r) && r.length >= 4 && r.slice(0, 4).every((n) => Number.isFinite(Number(n)))).map((r) => r.slice(0, 8).map((n, i) => (i < 4 || typeof n === 'number') ? n : n));
+    }
+  }
+  if (!items && !rooms && !walls) return undefined;
+  return { version: 1, items, rooms, walls };
+}
+
 function publicProject(p, { owner = false } = {}) {
   const out = {
     id: p.id, name: resolvedExampleName(p), notes: p.notes || '', createdAt: p.createdAt, updatedAt: p.updatedAt,
@@ -180,6 +228,7 @@ function publicProject(p, { owner = false } = {}) {
     buildType: sanitizeBuildType(p.buildType),
   };
   if (p.exampleId) out.exampleId = p.exampleId;
+  if (p.layout) out.layout = p.layout;
   if (owner) out.shareToken = p.shareToken || null;
   return out;
 }
@@ -337,6 +386,14 @@ const routes = {
       await remove(sharePath(p.shareToken)); p.shareToken = null;
     }
     if (body.site !== undefined) p.site = applySitePatch(p.site, body.site);
+    if (body.layout !== undefined) {
+      if (body.layout === null) delete p.layout;
+      else {
+        const layout = sanitizeLayout(body.layout);
+        if (layout === undefined) throw bad('Invalid layout');
+        p.layout = layout;
+      }
+    }
     p.updatedAt = new Date().toISOString();
     await writeJSON(projPath(user.id, p.id), p);
     send(res, 200, { project: publicProject(p, { owner: true }) });

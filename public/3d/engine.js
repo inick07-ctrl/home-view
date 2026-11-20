@@ -5,6 +5,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import REGISTRY from './models/registry.js';
 import { parcelDefaults, lotStats, formatLotArea, worldRings, buildableRings, xfHouse, houseFromWorld } from '../js/parcel.js';
+import { sanitizeWalls, clipCounters, autoFurnish, installFurniture, buildItemMesh, makeItem, itemRect, clearanceHit } from './furniture.js';
+import { mountPlanEditor, cloneWalls, cloneRooms, cloneItems, loadLocalLayout, sanitizeLayout } from './plan-editor.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('c');
@@ -608,12 +610,292 @@ function applyEnglishCountry(kit, st, H, WS) {
   }
 }
 
-function buildModel(model) {
+
+// ---------- plan edit / furniture layout ----------
+let planOriginal = null;
+let activeLayout = null;
+let currentItems = [];
+let itemsGroup = null;
+let highlightGroup = null;
+let itemsOn = true;
+let editMode = false;
+let defaultItems = [];
+const hlMat = new THREE.MeshStandardMaterial({ color: '#e0a95a', emissive: '#e0a95a', emissiveIntensity: 0.45, transparent: true, opacity: 0.35, depthWrite: false });
+const hlEdge = new THREE.MeshBasicMaterial({ color: '#e0a95a', transparent: true, opacity: 0.95 });
+
+function snapshotOriginal(model) {
+  planOriginal = { source: model, rooms: cloneRooms(model.rooms), walls: cloneWalls(model.walls) };
+}
+function modelWithLayout(source, layout) {
+  return {
+    ...source,
+    rooms: layout?.rooms ? cloneRooms(layout.rooms) : cloneRooms(planOriginal ? planOriginal.rooms : source.rooms),
+    walls: layout?.walls ? cloneWalls(layout.walls) : cloneWalls((planOriginal ? planOriginal.walls : source.walls)),
+  };
+}
+function currentPlanId() {
+  return SRC.kind === 'project' ? 'p:' + SRC.id : SRC.kind === 'share' ? 's:' + SRC.token : 'ex:' + (currentId || 'default');
+}
+function layoutFromStorage() {
+  const saved = loadLocalLayout(SRC.kind === 'project' ? 'project:' + SRC.id : SRC.kind === 'share' ? 'share:' + SRC.token : 'example:' + (currentId || 'default'));
+  return sanitizeLayout(saved);
+}
+function wallsOnRoom(WS, room, slack = 0.6) {
+  const R = [room[3] - slack, room[4] - slack, room[5] + slack, room[6] + slack];
+  const inner = [room[3] + 0.35, room[4] + 0.35, room[5] - 0.35, room[6] - 0.35];
+  const hit = [];
+  const midIn = (w, box) => {
+    const mx = (w[0] + w[2]) / 2, my = (w[1] + w[3]) / 2;
+    return mx >= box[0] && mx <= box[2] && my >= box[1] && my <= box[3];
+  };
+  for (const kind of ['ext', 'int', 'win', 'door', 'counter']) {
+    (WS[kind] || []).forEach((w, i) => {
+      if (midIn(w, R) && !midIn(w, inner)) hit.push({ kind, i, w });
+    });
+  }
+  return hit;
+}
+function translateSeg(w, dx, dy) { w[0] += dx; w[1] += dy; w[2] += dx; w[3] += dy; }
+function captureLayout() {
+  activeLayout = { version: 1, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls) };
+  return activeLayout;
+}
+function rebuildPlan() {
+  if (!planOriginal) return;
+  captureLayout();
+  const keep = { mode, roofOn, labelsOn, cutOn, planOn };
+  buildModel(planOriginal.source, { layout: activeLayout });
+  setRoof(keep.roofOn); setLabels(keep.labelsOn); setCut(keep.cutOn); setPlan(keep.planOn);
+}
+function refreshItems() {
+  if (!itemsGroup) return;
+  while (itemsGroup.children.length) itemsGroup.remove(itemsGroup.children[0]);
+  const ctx = { Wx, Wz, ceiling: (M?.wallH || 9) };
+  for (const rec of currentItems) {
+    const mesh = buildItemMesh(rec, ctx);
+    if (mesh) itemsGroup.add(mesh);
+  }
+  itemsGroup.visible = itemsOn;
+  if (solids && M) {
+    // keep architectural solids; item footprints are not walk-blockers except large islands
+  }
+}
+function setItemsList(items, { soft } = {}) {
+  currentItems = cloneItems(items);
+  if (activeLayout) activeLayout.items = cloneItems(items);
+  refreshItems();
+}
+function highlightSel(sel) {
+  if (!highlightGroup) return;
+  while (highlightGroup.children.length) highlightGroup.remove(highlightGroup.children[0]);
+  if (!sel || !M) return;
+  const addBox = (x0, y0, x1, y1, h0, h1, mat = hlMat) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(Math.max(x1 - x0, 0.08), Math.max(h1 - h0, 0.04), Math.max(y1 - y0, 0.08)), mat);
+    m.position.set(Wx((x0 + x1) / 2), (h0 + h1) / 2, Wz((y0 + y1) / 2));
+    m.castShadow = false; m.receiveShadow = false;
+    highlightGroup.add(m);
+    return m;
+  };
+  if (sel.kind === 'item') {
+    const it = currentItems.find(x => x.id === sel.id);
+    if (!it) return;
+    const r = itemRect(it);
+    addBox(r[0] - 0.08, r[1] - 0.08, r[2] + 0.08, r[3] + 0.08, 0.03, 0.08, hlEdge);
+  } else if (sel.kind === 'room') {
+    const room = M.rooms[sel.index];
+    if (!room) return;
+    addBox(room[3], room[4], room[5], room[6], 0.04, 0.1);
+  } else if (sel.kind === 'wall') {
+    const w = (M.walls[sel.wallKind] || [])[sel.index];
+    if (!w) return;
+    const t = 0.28;
+    addBox(w[0] - t, w[1] - t, w[2] + t, w[3] + t, 0, 4.2);
+  }
+}
+function patchRoomOp(index, patch) {
+  const room = M.rooms[index];
+  if (!room) return;
+  const before = room.slice();
+  if (patch.name != null) room[0] = String(patch.name).slice(0, 60);
+  if (patch.floor != null) room[2] = patch.floor;
+  if (patch.w != null) room[5] = room[3] + Math.max(3, +patch.w);
+  if (patch.d != null) room[6] = room[4] + Math.max(3, +patch.d);
+  let dx = patch.dx || 0, dy = patch.dy || 0;
+  if (patch.x0 != null && patch.move) dx = +patch.x0 - before[3];
+  if (patch.y0 != null && patch.move) dy = +patch.y0 - before[4];
+  if (patch.x0 != null && patch.move) { /* applied via dx */ }
+  if (dx || dy) {
+    room[3] += dx; room[4] += dy; room[5] += dx; room[6] += dy;
+    const oldR = [before[3], before[4], before[5], before[6]];
+    for (const it of currentItems) {
+      if (it.x >= oldR[0] && it.x <= oldR[2] && it.y >= oldR[1] && it.y <= oldR[3]) { it.x += dx; it.y += dy; }
+    }
+    for (const { w } of wallsOnRoom(M.walls, before)) translateSeg(w, dx, dy);
+  }
+  if (!patch.soft) rebuildPlan();
+  else { captureLayout(); refreshItems(); syncAreaUi(M); }
+}
+function removeRoomOp(index) {
+  const room = M.rooms[index];
+  if (!room) return;
+  const R = [room[3], room[4], room[5], room[6]];
+  currentItems = currentItems.filter(it => !(it.x >= R[0] && it.x <= R[2] && it.y >= R[1] && it.y <= R[3]));
+  const doomed = new Set();
+  for (const hit of wallsOnRoom(M.walls, room, 0.55)) {
+    const mid = [(hit.w[0] + hit.w[2]) / 2, (hit.w[1] + hit.w[3]) / 2];
+    const shared = M.rooms.some((r, i) => i !== index && !r[7]?.outside && mid[0] >= r[3] - 0.5 && mid[0] <= r[5] + 0.5 && mid[1] >= r[4] - 0.5 && mid[1] <= r[6] + 0.5
+      && (Math.abs(mid[0] - r[3]) < 0.7 || Math.abs(mid[0] - r[5]) < 0.7 || Math.abs(mid[1] - r[4]) < 0.7 || Math.abs(mid[1] - r[6]) < 0.7));
+    if (!shared) doomed.add(hit.kind + ':' + hit.i);
+  }
+  for (const kind of ['ext', 'int', 'win', 'door', 'counter']) {
+    M.walls[kind] = (M.walls[kind] || []).filter((w, i) => !doomed.has(kind + ':' + i));
+  }
+  M.rooms.splice(index, 1);
+  rebuildPlan();
+}
+function addRoomOp(x0, y0, w, d) {
+  const room = ['Room', `${w.toFixed(0)}' x ${d.toFixed(0)}'`, 'wood', x0, y0, x0 + w, y0 + d, {}];
+  M.rooms.push(room);
+  const t = 0.4, a = x0, b = y0, c = x0 + w, e = y0 + d;
+  const segs = [
+    [a - t / 2, b - t / 2, c + t / 2, b + t / 2],
+    [a - t / 2, e - t / 2, c + t / 2, e + t / 2],
+    [a - t / 2, b - t / 2, a + t / 2, e + t / 2],
+    [c - t / 2, b - t / 2, c + t / 2, e + t / 2],
+  ];
+  (M.walls.int ||= []).push(...segs);
+  // doorway into an overlapping neighbor
+  const others = M.rooms.slice(0, -1);
+  for (const o of others) {
+    if (o[7]?.outside) continue;
+    // shared vertical edge
+    const shareX = Math.abs(c - o[3]) < 0.6 || Math.abs(a - o[5]) < 0.6;
+    const shareY = Math.abs(e - o[4]) < 0.6 || Math.abs(b - o[6]) < 0.6;
+    const overlapY = Math.min(e, o[6]) - Math.max(b, o[4]);
+    const overlapX = Math.min(c, o[5]) - Math.max(a, o[3]);
+    if (shareX && overlapY > 3.5) {
+      const ymid = (Math.max(b, o[4]) + Math.min(e, o[6])) / 2;
+      const x = Math.abs(c - o[3]) < 0.6 ? c : a;
+      M.walls.door.push([x - 0.2, ymid - 1.5, x + 0.2, ymid + 1.5, 7, null, 0]);
+      break;
+    } else if (shareY && overlapX > 3.5) {
+      const xmid = (Math.max(a, o[3]) + Math.min(c, o[5])) / 2;
+      const y = Math.abs(e - o[4]) < 0.6 ? e : b;
+      M.walls.door.push([xmid - 1.5, y - 0.2, xmid + 1.5, y + 0.2, 7, null, 0]);
+      break;
+    }
+  }
+  rebuildPlan();
+  return M.rooms.length - 1;
+}
+function addDoorwayOp(kind, index) {
+  const w = (M.walls[kind] || [])[index];
+  if (!w) return;
+  const horiz = (w[2] - w[0]) >= (w[3] - w[1]);
+  const mid = horiz ? (w[0] + w[2]) / 2 : (w[1] + w[3]) / 2;
+  const half = 1.5;
+  if (horiz) M.walls.door.push([mid - half, w[1], mid + half, w[3], 7, w[4] || null, kind === 'ext' ? 1 : 0]);
+  else M.walls.door.push([w[0], mid - half, w[2], mid + half, 7, w[4] || null, kind === 'ext' ? 1 : 0]);
+  rebuildPlan();
+}
+function removeWallOp(kind, index) {
+  const w = (M.walls[kind] || [])[index];
+  if (!w) return;
+  M.walls[kind].splice(index, 1);
+  const mx = (w[0] + w[2]) / 2, my = (w[1] + w[3]) / 2;
+  for (const k of ['door', 'win']) {
+    M.walls[k] = (M.walls[k] || []).filter(d => {
+      const dx = (d[0] + d[2]) / 2, dy = (d[1] + d[3]) / 2;
+      return Math.hypot(dx - mx, dy - my) > 1.2;
+    });
+  }
+  rebuildPlan();
+}
+function patchWallOp(kind, index, patch) {
+  const w = (M.walls[kind] || [])[index];
+  if (!w) return;
+  if (patch.dx || patch.dy) translateSeg(w, patch.dx || 0, patch.dy || 0);
+  if (patch.length) {
+    const horiz = (w[2] - w[0]) >= (w[3] - w[1]);
+    const mid = horiz ? (w[0] + w[2]) / 2 : (w[1] + w[3]) / 2;
+    const half = Math.max(1, +patch.length) / 2;
+    if (horiz) { w[0] = mid - half; w[2] = mid + half; }
+    else { w[1] = mid - half; w[3] = mid + half; }
+  }
+  rebuildPlan();
+}
+function addWallOp(x0, y0, x1, y1) {
+  const t = 0.4;
+  if (Math.abs(x1 - x0) >= Math.abs(y1 - y0)) {
+    const y = (y0 + y1) / 2;
+    M.walls.int.push([Math.min(x0, x1), y - t / 2, Math.max(x0, x1), y + t / 2]);
+  } else {
+    const x = (x0 + x1) / 2;
+    M.walls.int.push([x - t / 2, Math.min(y0, y1), x + t / 2, Math.max(y0, y1)]);
+  }
+  rebuildPlan();
+}
+async function saveLayoutRemote(layout) {
+  if (SRC.kind !== 'project') return;
+  const r = await fetch('/api/projects/' + encodeURIComponent(SRC.id), {
+    method: 'PATCH', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ layout: layout || null }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || 'Could not save layout');
+}
+function ensureEditor() {
+  mountPlanEditor({
+    canvas,
+    camera,
+    src: SRC,
+    canEdit: SRC.kind !== 'share',
+    get exampleId() { return currentId; },
+    getItems: () => currentItems,
+    setItems: setItemsList,
+    getRooms: () => M?.rooms || [],
+    getWalls: () => M?.walls || { ext: [], int: [], win: [], door: [], counter: [] },
+    applyLayout: (layout) => {
+      activeLayout = sanitizeLayout(layout) || layout;
+      if (planOriginal) buildModel(planOriginal.source, { layout: activeLayout });
+    },
+    resetLayout: () => {
+      activeLayout = null;
+      currentItems = cloneItems(defaultItems);
+      if (planOriginal) buildModel(planOriginal.source, { layout: { items: currentItems } });
+    },
+    highlight: highlightSel,
+    setEditMode: (on) => {
+      editMode = !!on;
+      if (on && !cutOn) setCut(true);
+    },
+    itemsGroup: () => itemsGroup,
+    CX: () => CX, CZ: () => CZ,
+    saveRemote: saveLayoutRemote,
+    addRoom: addRoomOp,
+    removeRoom: removeRoomOp,
+    patchRoom: patchRoomOp,
+    addWall: addWallOp,
+    removeWall: removeWallOp,
+    patchWall: patchWallOp,
+    addDoorway: addDoorwayOp,
+  });
+}
+
+function buildModel(model, opts = {}) {
   if (root) {
-    root.traverse(o => { if (o.element?.parentNode) o.element.parentNode.removeChild(o.element); if (o.geometry) o.geometry.dispose(); });
+    root.traverse(o => { if (o.element?.parentNode) o.element.parentNode.removeChild(o.element); if (o.geometry && !o.geometry.userData?.shared) o.geometry.dispose(); });
     scene.remove(root);
   }
-  M = model; loadedModel = model; root = new THREE.Group(); scene.add(root);
+  const srcModel = opts.source || planOriginal?.source || model;
+  if (!planOriginal || planOriginal.source !== srcModel && !opts.layout) {
+    /* snapshot is set by the loader */
+  }
+  const layout = opts.layout || activeLayout;
+  M = modelWithLayout(srcModel.rooms ? srcModel : model, layout);
+  loadedModel = M;
+  root = new THREE.Group(); scene.add(root);
   solids = [];
   fires = [];
   const mats = M.materials || {};
@@ -658,6 +940,9 @@ function buildModel(model) {
   // footprint for exterior-skin side detection
   const inside = (x, y) => M.rooms.some(r => !(r[7]?.outside) && x > r[3] && x < r[5] && y > r[4] && y < r[6]);
   const WS = M.walls;
+  sanitizeWalls(WS);
+  clipCounters(WS, M.rooms);
+
   function skinSplit(r, h0, h1, out) {
     // r = [x0,y0,x1,y1]; push {geo, mat} pieces: thin dark skin on the outside face, light core inside
     if (!mats.extSkin) { out.ext.push(boxRect(r[0], r[1], r[2], r[3], h0, h1, 4)); return; }
@@ -697,7 +982,7 @@ function buildModel(model) {
   }
   wallsFull = buildWalls(false); wallsCut = buildWalls(true);
   root.add(wallsFull, wallsCut);
-  if (WS.counter?.length) root.add(mesh(WS.counter.map(r => boxRect(...r, 0, 3)), new THREE.MeshStandardMaterial({ color: '#e8dcc6', roughness: .8 })));
+  // Counters are clipped and rendered as detailed items (not hallway/doorway slabs).
   for (const r of [...WS.ext, ...WS.int, ...WS.win, ...(WS.counter || [])]) solids.push([Wx(r[0]), Wz(r[1]), Wx(r[2]), Wz(r[3])]);
 
   // furniture / site via a small kit
@@ -925,6 +1210,10 @@ function buildModel(model) {
       fires.push({ light, base: 1.55, flames, ember, t0: Math.random() * 12 });
     },
   };
+  itemsGroup = new THREE.Group(); itemsGroup.name = 'items'; root.add(itemsGroup);
+  highlightGroup = new THREE.Group(); highlightGroup.name = 'highlight'; highlightGroup.renderOrder = 2; root.add(highlightGroup);
+  const detected = {};
+  installFurniture(kit, { rooms: M.rooms, WS, detected, Wx, Wz, itemsGroup, ceiling: H });
   if (typeof M.furnish === 'function') M.furnish(kit);
   else if (Array.isArray(M.furnish)) { // JSON models: a list of [method, ...args] calls on the kit
     for (const op of M.furnish) {
@@ -934,6 +1223,25 @@ function buildModel(model) {
     }
   }
   if (currentStyle === 'english-country') applyEnglishCountry(kit, st, H, WS);
+  // Convert leftover wall-counter slabs into detailed items, then auto-furnish (or restore saved items).
+  const fromCounters = [];
+  for (const c of (WS.counter || [])) {
+    const w = Math.abs(c[2] - c[0]), d = Math.abs(c[3] - c[1]);
+    fromCounters.push(makeItem(w < 4 && d < 4 && Math.min(w, d) >= 1.8 ? 'island' : 'counter', {
+      x: (c[0] + c[2]) / 2, y: (c[1] + c[3]) / 2, w: Math.max(w, d), d: Math.min(w, d), rot: w >= d ? 0 : 90,
+    }));
+  }
+  WS.counter = [];
+  let auto = autoFurnish(M, WS);
+  if ((detected.counters || []).length || fromCounters.length) {
+    auto = auto.filter(it => it.type !== 'island' && it.type !== 'counter' && it.type !== 'barstool');
+  }
+  defaultItems = [...auto, ...(detected.counters || []), ...fromCounters, ...(detected.placed || [])];
+  if (layout?.items) currentItems = cloneItems(layout.items);
+  else currentItems = cloneItems(defaultItems);
+  activeLayout = { version: 1, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls) };
+  refreshItems();
+  ensureEditor();
   syncAreaUi(M);
 
   // roofs
@@ -1022,7 +1330,7 @@ function buildModel(model) {
     const minor = o.minor || !dims;
     div.className = 'label' + (minor ? ' minor' : '');
     div.textContent = String(name);
-    if (dims || o.vaulted) { const sm = document.createElement('small'); sm.textContent = `${dims || ''}${o.vaulted ? (dims ? ' · ' : '') + 'vaulted' : ''}`; div.appendChild(sm); }
+    if (dims || o.vaulted || o.tray) { const sm = document.createElement('small'); const extra = [o.vaulted && 'vaulted', o.tray && 'tray'].filter(Boolean).join(' · '); sm.textContent = `${dims || ''}${extra ? (dims ? ' · ' : '') + extra : ''}`; div.appendChild(sm); }
     const obj = new CSS2DObject(div);
     const [lx, ly] = o.labelAt || [(a + c) / 2, (b + d) / 2];
     obj.position.set(Wx(lx), o.labelZ || (minor ? 3 : 4.5), Wz(ly));
@@ -1105,6 +1413,13 @@ $('bRoof').onclick = () => setRoof(!roofOn);
 $('bLabels').onclick = () => setLabels(!labelsOn);
 $('bCut').onclick = () => setCut(!cutOn);
 $('bPlan').onclick = () => setPlan(!planOn);
+function setItemsVisible(v) {
+  itemsOn = v;
+  if (itemsGroup) itemsGroup.visible = v;
+  if ($('bItems')) { $('bItems').classList.toggle('on', v); $('bItems').textContent = v ? 'Items' : 'Items off'; }
+}
+if ($('bItems')) { setItemsVisible(true); $('bItems').onclick = () => setItemsVisible(!itemsOn); }
+
 $('bOrbit').onclick = () => setMode('orbit');
 $('bTop').onclick = () => setMode('top');
 $('bWalk').onclick = () => setMode('walk');
@@ -1178,7 +1493,7 @@ function updateNorth() {
 // ---------- GLB / glTF models (uploaded by users) ----------
 function disposeRoot() {
   if (!root) return;
-  root.traverse(o => { if (o.element?.parentNode) o.element.parentNode.removeChild(o.element); if (o.geometry) o.geometry.dispose(); });
+  root.traverse(o => { if (o.element?.parentNode) o.element.parentNode.removeChild(o.element); if (o.geometry && !o.geometry.userData?.shared) o.geometry.dispose(); });
   scene.remove(root); root = null;
 }
 function buildGLB(gltfScene, meta = {}) {
@@ -1245,7 +1560,7 @@ function resolveAsset(src) {
   return src;
 }
 function setModelUi(engine, hasRoof = true) {
-  for (const id of ['bLabels', 'bCut', 'bPlan']) if ($(id)) $(id).style.display = engine ? '' : 'none';
+  for (const id of ['bLabels', 'bCut', 'bPlan', 'bEdit', 'bItems']) if ($(id)) $(id).style.display = engine ? '' : 'none';
   if ($('bRoof')) $('bRoof').style.display = engine || hasRoof ? '' : 'none';
   if (engine && $('bPlan')) $('bPlan').style.display = M.planImage ? '' : 'none';
   if ($('styleWrap')) $('styleWrap').style.display = engine ? '' : 'none';
@@ -1279,7 +1594,9 @@ async function loadExample(id) {
   clearSiteEnv();
   currentStyle = (mod.default && mod.default.defaultStyle) || 'default';
   syncStyleUi();
-  buildModel(mod.default);
+  snapshotOriginal(mod.default);
+  activeLayout = layoutFromStorage();
+  buildModel(mod.default, { layout: activeLayout });
   setMode('orbit', true);
   window.app.current = entry.id;
 }
@@ -1300,7 +1617,9 @@ async function loadProjectModel() {
     disposeRoot();
     currentStyle = (mod.default && mod.default.defaultStyle) || 'default';
     syncStyleUi();
-    buildModel(mod.default);
+    snapshotOriginal(mod.default);
+    activeLayout = sanitizeLayout(p.layout) || layoutFromStorage();
+    buildModel(mod.default, { layout: activeLayout });
     setMode('orbit', true);
     window.app.current = entry.id;
     await loadProjectSite(p);
@@ -1311,7 +1630,12 @@ async function loadProjectModel() {
   if (!fr.ok) return showError('Could not download the 3D model file.');
   try {
     if (model.format === 'json') {
-      buildModel(normalizeJsonModel(await fr.json(), p.name));
+      {
+        const jsonModel = normalizeJsonModel(await fr.json(), p.name);
+        snapshotOriginal(jsonModel);
+        activeLayout = sanitizeLayout(p.layout) || layoutFromStorage();
+        buildModel(jsonModel, { layout: activeLayout });
+      }
     } else {
       const buf = await fr.arrayBuffer();
       const gltf = await new Promise((res, rej) => new GLTFLoader().parse(buf, '', res, rej));
@@ -1401,7 +1725,7 @@ function setStyle(id) {
   const keep = mode, keepRoof = roofOn, keepLabels = labelsOn, keepCut = cutOn, keepPlan = planOn;
   const walkPos = mode === 'walk' ? player.clone() : null, walkYaw = yaw, walkPitch = pitch;
   if (mode === 'walk') exitWalk();
-  buildModel(loadedModel);
+  buildModel(planOriginal?.source || loadedModel, { layout: activeLayout });
   setMode(keep, true);
   if (keep === 'walk' && walkPos) { player.copy(walkPos); yaw = walkYaw; pitch = walkPitch; }
   setRoof(keepRoof); setLabels(keepLabels); setCut(keepCut); setPlan(keepPlan);
@@ -1411,6 +1735,22 @@ if ($('bStyle')) $('bStyle').addEventListener('change', e => setStyle(e.target.v
 window.app = {
   loadExample, scene, setMode, setRoof, setLabels, setCut, setPlan, setStyle, camera, orbit, player,
   setLook: (y, p) => { yaw = y; pitch = p; }, setPlayer: (fx, fy) => player.set(Wx(fx), Wz(fy)), current: null,
+  planToWorld: (fx, fy) => [Wx(fx), Wz(fy)],
+  getRooms: () => M?.rooms || [],
+  getItems: () => currentItems,
+  lookAtPlan: (fx, fy, dist = 22, height = 9) => {
+    const wx = Wx(fx), wz = Wz(fy);
+    orbit.target.set(wx, 1.4, wz);
+    camera.position.set(wx + dist * 0.65, height, wz + dist * 0.85);
+    orbit.update();
+  },
+  lookTop: (fx, fy, height = 48) => {
+    const wx = Wx(fx), wz = Wz(fy);
+    setMode('top', true);
+    orbit.target.set(wx, 0, wz);
+    camera.position.set(wx, height, wz + 0.01);
+    orbit.update();
+  },
 };
 if (SRC.kind === 'example') await loadExample(params.get('ex') || REGISTRY[0].id);
 else await loadProjectModel();
