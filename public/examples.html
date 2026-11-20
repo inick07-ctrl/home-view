@@ -12,22 +12,26 @@
     <button type="button" class="btn" id="saveAll">Save all examples</button>
   </div>
   <div class="type-filters" id="typeFilters" role="tablist" aria-label="Filter examples by type"></div>
+  <div id="costBar"></div>
   <div id="sponsorStrip" class="sp-strip" hidden></div>
   <div class="grid" id="list" style="margin-top:16px"></div>
   <div class="card" style="margin-top:22px"><h2>Make your own</h2><p class="muted">Snap rooms together like Lego blocks in the Builder, or create a free account to keep plans and photos for a home, tiny home, A-frame, trailer home, or ADU, add a 3D model and share it with a link. Signed in, you can also save a Builder plan or any example below to My projects.</p><div class="row"><a class="btn primary" href="/builder">Open the Builder</a><a class="btn" href="/#signup" id="cta">Create an account</a></div></div>
 </main>
 <footer class="site-foot">PeakStead Designs · <a href="/examples">Examples</a> · <a href="/builder">Builder</a> · <a href="/advertise">Advertise with PeakStead Designs</a></footer>
 <script type="module">
-import { $, esc, me, header, toast } from '/js/common.js';
+import { $, esc, me, header, footer, toast } from '/js/common.js';
 import { loginUrlFor, saveExample, savedExampleMap, renderSaveControl } from '/js/example-save.js';
 import { favButtonHtml, paintFavButton, isExampleFavorite, toggleExampleFavorite, listExampleFavorites } from '/js/favorites.js';
 import { BUILD_TYPES } from '/js/build-types.js';
 import { mountSponsors } from '/js/sponsors.js';
 import REGISTRY from '/3d/models/registry.js';
+import { areasForExample } from '/js/example-areas.js';
+import { loadPrefs, savePrefs, estimateBuild, renderZipTierBar, estimatePillHtml } from '/js/cost-estimator.js';
 
 const params = new URLSearchParams(location.search);
 let { user, byId } = await savedExampleMap();
 header(user, 'examples');
+footer();
 if (user) { $('#cta').href = '/dashboard'; $('#cta').textContent = 'Go to my projects'; }
 
 const list = $('#list');
@@ -57,6 +61,16 @@ async function onSave(id) {
 const typeParams = new URLSearchParams(location.search);
 let typeFilter = typeParams.get('type') || 'all';
 const filters = $('#typeFilters');
+let costPrefs = loadPrefs();
+function exampleEstimate(id, type) {
+  const areas = areasForExample(id);
+  if (!areas) return null;
+  return estimateBuild({ heatedSqFt: areas.heated, garageSqFt: areas.garage, porchSqFt: areas.porch, buildType: type || areas.buildType || 'home', zip: costPrefs.zip, tier: costPrefs.tier });
+}
+renderZipTierBar($('#costBar'), {
+  zip: costPrefs.zip, tier: costPrefs.tier,
+  onChange: (next) => { costPrefs = { ...costPrefs, ...next }; savePrefs(costPrefs); renderList(); },
+});
 function setType(t) {
   typeFilter = t;
   const q = new URLSearchParams(location.search);
@@ -89,7 +103,8 @@ function renderList() {
     card.className = 'card pcard';
     card.dataset.id = r.id;
     const typeLabel = (BUILD_TYPES.find(t => t.id === (r.type || 'home')) || {}).label || '';
-    card.innerHTML = `${favButtonHtml({ on: isExampleFavorite(r.id), className: 'fav-btn p-fav' })}<a class="ex-body" href="/viewer?ex=${esc(r.id)}"><div class="thumb"><img loading="lazy" alt="" src="/img/${esc(r.id)}.jpg"></div><div class="title">${esc(r.name)}</div><div class="ex-tagline">${esc(r.tagline || r.blurb || '')}</div></a><div class="ex-actions"><a class="badge acc" href="/viewer?ex=${esc(r.id)}">Open in 3D</a><span class="badge">${esc(typeLabel)}</span><span class="spacer"></span><span class="save-slot"></span></div>`;
+    const est = exampleEstimate(r.id, r.type || 'home');
+    card.innerHTML = `${favButtonHtml({ on: isExampleFavorite(r.id), className: 'fav-btn p-fav' })}<a class="ex-body" href="/viewer?ex=${esc(r.id)}"><div class="thumb"><img loading="lazy" alt="" src="/img/${esc(r.id)}.jpg"></div><div class="title">${esc(r.name)}</div><div class="ex-tagline">${esc(r.tagline || r.blurb || '')}</div></a><div class="ex-actions"><a class="badge acc" href="/viewer?ex=${esc(r.id)}">Open in 3D</a><span class="badge">${esc(typeLabel)}</span>${estimatePillHtml(est)}<span class="spacer"></span><span class="save-slot"></span></div>`;
     const slot = card.querySelector('.save-slot');
     controls.set(r.id, slot);
     list.appendChild(card);

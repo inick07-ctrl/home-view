@@ -113,6 +113,11 @@
           <p class="muted" style="font-size:12px;margin:6px 0 0">Move and rotate the house inside the lot. You’ll see a warning if it crosses a setback or the lot line.</p>
         </div>
       </section>
+      <section class="card cost-section" id="costCard">
+        <h2>Build Cost Estimate</h2>
+        <div id="costBar"></div>
+        <div id="costBreakdown" style="margin-top:12px"></div>
+      </section>
       <section class="card">
         <h2>Images</h2>
         <div class="drop" id="drop">Drop floor plans, renders or photos here, or <u>choose files</u><input type="file" id="imgFile" accept="image/*,application/pdf" multiple hidden></div>
@@ -145,6 +150,7 @@ import { mountLotEditor } from '/js/lot-editor.js';
 import { buildTypeOptionsHtml, sanitizeBuildType, buildTypeLabel } from '/js/build-types.js';
 import { mountSponsors } from '/js/sponsors.js';
 import REGISTRY from '/3d/models/registry.js';
+import { loadPrefs, savePrefs, estimateBuild, renderZipTierBar, renderBreakdown } from '/js/cost-estimator.js';
 const id = new URLSearchParams(location.search).get('id');
 const user = await me();
 if (!user) location.replace('/?next=' + encodeURIComponent(location.pathname + location.search));
@@ -153,6 +159,37 @@ $('#buildType').innerHTML = buildTypeOptionsHtml('home');
 let P = null, lotEditor = null, houseModel = null, houseBounds = null, groundImg = null, groundImgUrl = '';
 const enc = encodeURIComponent;
 const fileUrl = (f) => `/api/projects/${enc(P.id)}/files/${enc(f.id)}`;
+let costPrefs = loadPrefs();
+let costBarReady = false;
+function currentCostEstimate() {
+  const a = P.areas || {};
+  const zip = P.costZip || costPrefs.zip;
+  const tier = P.costTier || costPrefs.tier;
+  if (!(a.heated > 0 || a.garage > 0 || a.porch > 0)) return null;
+  return estimateBuild({ heatedSqFt: a.heated, garageSqFt: a.garage, porchSqFt: a.porch, buildType: P.buildType || 'home', zip, tier });
+}
+function paintCost() {
+  const zip = P.costZip || costPrefs.zip;
+  const tier = P.costTier || costPrefs.tier;
+  if (!costBarReady) {
+    renderZipTierBar($('#costBar'), {
+      zip, tier,
+      onChange: async (next) => {
+        costPrefs = { ...costPrefs, ...next };
+        savePrefs(costPrefs);
+        try { P = (await api('projects/' + enc(P.id), { method: 'PATCH', body: { costZip: next.zip, costTier: next.tier } })).project; }
+        catch (e) { toast(e.message); }
+        renderBreakdown($('#costBreakdown'), currentCostEstimate());
+      },
+    });
+    costBarReady = true;
+  } else {
+    const input = $('#costBar').querySelector('.cost-zip');
+    if (input && document.activeElement !== input) input.value = zip || '';
+    $('#costBar').querySelectorAll('.cost-tier').forEach((b) => b.classList.toggle('on', b.dataset.tier === tier));
+  }
+  renderBreakdown($('#costBreakdown'), currentCostEstimate());
+}
 function render() {
   document.title = P.name + ' — PeakStead Designs';
   if (document.activeElement !== $('#name')) $('#name').value = P.name;
@@ -180,6 +217,7 @@ function render() {
   $('#shareBox').style.display = P.shareToken ? '' : 'none';
   $('#shareHelp').textContent = P.shareToken ? 'On: anyone with this link can view (read-only) this project\'s images, notes and 3D model.' : 'Off: only you can see this project.';
   if (P.shareToken) { const u = location.origin + '/s/' + P.shareToken; $('#shareUrl').value = u; $('#shareOpen').href = u; }
+  paintCost();
 }
 try { P = (await api('projects/' + enc(id))).project; $('#notes').value = P.notes; render(); }
 catch (e) { $('#err').textContent = e.status === 404 ? 'Project not found.' : e.message; throw e; }

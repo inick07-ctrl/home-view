@@ -236,9 +236,6 @@ export default {
       k.block(x, 45.9167, x + 1.6, 46.1167, 1.5, 3.3, BK);
     }
     // garage cars: Golf R in Bay 1, Lexus GX in Bay 2 Truck, G-Wagon in Bay 3; all nose west toward the doors
-    k.car(6.2, 23.9833, 22.2, 32.0167, '#8a8680', 'golf-r', 'w');
-    k.car(3, 36.6167, 22.2, 44.3833, '#161616', 'lexus-gx', 'w');
-    k.car(6, 48.7833, 22.4, 57.2167, '#0a0a0a', 'g63', 'w');
     // closed overhead doors
     k.block(3.75, 23.3833, 4.15, 32.6167, 0, 8, '#2a2b2d');
     k.block(-0.25, 35.9167, 0.15, 45.0833, 0, 8, '#2a2b2d');

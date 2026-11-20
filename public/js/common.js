@@ -9,7 +9,7 @@ export async function api(path, { method = 'GET', body } = {}) {
   return data;
 }
 export async function me() { try { return (await api('auth/me')).user; } catch { return null; } }
-export const LOGO = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.2 1.6 15.8h4.2V28.4h8V19.8h4.4v8.6h8V15.8h4.2L16 2.2z" fill="#e0a95a"/></svg>';
+export const LOGO = '<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M4.5 23L15.2 8.5L19.6 14.4L13.2 23H4.5Z" fill="#DFB974"/><path d="M17.8 18.2L21.5 13.2L27.5 23H21.2L17.8 18.2Z" fill="#F4F1EA"/></svg>';
 export function header(user, active = '') {
   const h = document.createElement('header'); h.className = 'top';
   const link = (href, text, key) => `<a class="pill${active === key ? ' on' : ''}" href="${href}">${text}</a>`;
@@ -48,10 +48,8 @@ export function renderGallery(el, project, fileUrl, { onDelete } = {}) {
 }
 
 export function footer() {
-  const existing = document.querySelector('footer.site-foot');
-  if (existing) return existing;
+  const html = `<a class="foot-brand" href="/">${LOGO}<span>PeakStead Designs</span></a> · <a href="/examples">Examples</a> · <a href="/builder">Builder</a> · <a href="/advertise">Advertise with PeakStead Designs</a>`;
   const f = document.querySelector('footer');
-  const html = `PeakStead Designs · <a href="/examples">Examples</a> · <a href="/builder">Builder</a> · <a href="/advertise">Advertise with PeakStead Designs</a>`;
   if (f) { f.classList.add('site-foot'); f.innerHTML = html; return f; }
   const el = document.createElement('footer'); el.className = 'site-foot'; el.innerHTML = html;
   document.body.appendChild(el); return el;

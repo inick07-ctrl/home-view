@@ -1,5 +1,6 @@
 // PeakStead Designs — Builder workspace: drag, snap, compile, 3D preview, save.
 import { $, esc, api, me, header, toast } from '/js/common.js';
+import { loadPrefs, estimateBuild, fmtRange } from '/js/cost-estimator.js';
 import { loginUrlFor } from '/js/example-save.js';
 import { upload } from '/js/blob-client.js';
 import {
@@ -111,9 +112,12 @@ function resizeCanvas() {
 function updateStats() {
   const s = planStats(blocks);
   const overlaps = countOverlaps();
+  const prefs = loadPrefs();
+  const est = s.rooms ? estimateBuild({ heatedSqFt: s.heated, garageSqFt: s.garage, porchSqFt: s.porch || 0, buildType: 'home', zip: prefs.zip, tier: prefs.tier }) : null;
   statsEl.innerHTML = s.rooms
     ? `<span class="sf"><b>${s.heated.toLocaleString()}</b> sf heated</span>` +
       (s.garage ? `<span><b>${s.garage.toLocaleString()}</b> sf garage</span>` : '') +
+      (est && est.mid ? `<span class="sf" title="${fmtRange(est)} mid, land not included">${fmtRange(est, { compact: true })}</span>` : '') +
       `<span>Footprint <b>${s.width}' × ${s.depth}'</b></span>` +
       `<span><b>${s.rooms}</b> room${s.rooms === 1 ? '' : 's'}</span>`
     : `<span>Drag a room onto the lot to start</span>`;

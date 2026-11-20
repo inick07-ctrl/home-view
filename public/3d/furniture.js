@@ -10,8 +10,18 @@ export const CATEGORIES = [
   { id: 'office', name: 'Office' },
   { id: 'gym', name: 'Gym' },
   { id: 'patio', name: 'Patio' },
+  { id: 'garage', name: 'Garage' },
   { id: 'decor', name: 'Decor' },
 ];
+
+export const VEHICLE_FINISHES = {
+  silver: { name: 'Silver', paint: '#8a8680' },
+  black: { name: 'Black', paint: '#161616' },
+  white: { name: 'White', paint: '#e8e6e1' },
+  blue: { name: 'Blue', paint: '#1e3a5f' },
+  red: { name: 'Red', paint: '#7a1c1c' },
+  graphite: { name: 'Graphite', paint: '#3f3f46' },
+};
 
 export const FINISHES = {
   linen: { upholstery: '#e7e1d4', welt: '#d9d2c4', name: 'Linen' },
@@ -778,6 +788,10 @@ export const CATALOG = {
   outdoorSofa: { name: 'Outdoor sofa', category: 'patio', w: 7.0, d: 3.2, h: 2.6, finishes: Object.keys(FINISHES), build: buildOutdoorSofa },
   outdoorDining: { name: 'Outdoor dining table', category: 'patio', w: 5.5, d: 3.0, h: 2.5, build: buildOutdoorDining },
   firepit: { name: 'Fire pit', category: 'patio', w: 3.4, d: 3.4, h: 1.2, build: buildFirepit },
+  sedan: { name: 'Sedan / Hatchback', category: 'garage', w: 15.4, d: 6.2, h: 4.8, finishes: Object.keys(VEHICLE_FINISHES), build: buildSedan },
+  suv: { name: 'SUV', category: 'garage', w: 16.6, d: 6.6, h: 6.2, finishes: Object.keys(VEHICLE_FINISHES), build: buildSuv },
+  pickup: { name: 'Pickup Truck', category: 'garage', w: 18.4, d: 6.6, h: 6.0, finishes: Object.keys(VEHICLE_FINISHES), build: buildPickup },
+  sportsCar: { name: 'Sports Car', category: 'garage', w: 14.6, d: 6.0, h: 4.2, finishes: Object.keys(VEHICLE_FINISHES), build: buildSportsCar },
 };
 
 export function itemFootprint(rec) {
@@ -1325,4 +1339,84 @@ export function installFurniture(kit, ctx) {
     return rec;
   };
   return { origBlock, origBed };
+}
+
+
+function vehiclePaint(rec, fallback) {
+  const f = VEHICLE_FINISHES[rec.finish];
+  return (f && f.paint) || rec.color || fallback;
+}
+
+function addWheel(g, x, z, rad = 0.72, width = 0.32, col = '#1a1a1a') {
+  const tire = mat(col, { r: 0.55, m: 0.15 });
+  const rim = mat('#c8c8cc', { r: 0.35, m: 0.55 });
+  add(g, cyl(rad, rad, width, 16), tire, x, rad, z, 0, 0, Math.PI / 2);
+  add(g, cyl(rad * 0.42, rad * 0.42, width + 0.04, 12), rim, x, rad, z, 0, 0, Math.PI / 2);
+}
+
+function buildSedan(g, rec) {
+  const W = rec.w || 15.4, D = rec.d || 6.2;
+  const body = mat(vehiclePaint(rec, '#8a8680'), { r: 0.38, m: 0.5 });
+  const glass = mat('#7ea0b8', { r: 0.12, m: 0.2 });
+  add(g, box(W * 0.96, 1.55, D * 0.88), body, 0, 1.35, 0);
+  add(g, box(W * 0.48, 0.4, D * 0.8), body, -W * 0.12, 2.3, 0); // hood
+  add(g, box(W * 0.5, 2.0, D * 0.8), body, W * 0.08, 3.15, 0); // cabin
+  add(g, box(W * 0.42, 1.7, D * 0.72), glass, W * 0.08, 3.25, 0);
+  add(g, box(0.12, 0.7, D * 0.64), mat('#cfc8b8', { r: 0.4, m: 0.3 }), -W / 2 + 0.08, 1.5, 0);
+  add(g, box(0.1, 0.45, 0.35), mat('#f4f0d8', { r: 0.3 }), -W / 2 + 0.02, 1.55, -D * 0.22);
+  add(g, box(0.1, 0.45, 0.35), mat('#f4f0d8', { r: 0.3 }), -W / 2 + 0.02, 1.55, D * 0.22);
+  add(g, box(0.1, 0.4, 0.35), mat('#a03030', { r: 0.5 }), W / 2 - 0.04, 1.7, -D * 0.22);
+  add(g, box(0.1, 0.4, 0.35), mat('#a03030', { r: 0.5 }), W / 2 - 0.04, 1.7, D * 0.22);
+  const wx = W * 0.32, wz = D * 0.42;
+  for (const x of [-wx, wx]) for (const z of [-wz, wz]) addWheel(g, x, z, 0.7, 0.34);
+}
+
+function buildSuv(g, rec) {
+  const W = rec.w || 16.6, D = rec.d || 6.6;
+  const body = mat(vehiclePaint(rec, '#161616'), { r: 0.72, m: 0.15 });
+  const glass = mat('#5a6a72', { r: 0.15, m: 0.15 });
+  const blk = mat('#0d0d0d', { r: 0.5, m: 0.2 });
+  add(g, box(W * 0.96, 2.2, D * 0.9), body, 0, 1.95, 0);
+  add(g, box(W * 0.42, 0.4, D * 0.84), body, -W * 0.16, 3.25, 0);
+  add(g, box(W * 0.55, 2.3, D * 0.84), body, W * 0.1, 4.25, 0);
+  add(g, box(W * 0.46, 1.9, D * 0.72), glass, W * 0.1, 4.35, 0);
+  add(g, box(0.18, 1.2, D * 0.5), blk, -W / 2 + 0.1, 2.0, 0);
+  add(g, box(0.1, 0.45, 0.38), mat('#e8e4d4', { r: 0.3 }), -W / 2 + 0.02, 2.05, -D * 0.22);
+  add(g, box(0.1, 0.45, 0.38), mat('#e8e4d4', { r: 0.3 }), -W / 2 + 0.02, 2.05, D * 0.22);
+  add(g, box(W * 0.48, 0.12, 0.12), blk, W * 0.06, 5.55, -D * 0.34); // roof rails
+  add(g, box(W * 0.48, 0.12, 0.12), blk, W * 0.06, 5.55, D * 0.34);
+  const wx = W * 0.3, wz = D * 0.42;
+  for (const x of [-wx, wx]) for (const z of [-wz, wz]) addWheel(g, x, z, 0.84, 0.4);
+}
+
+function buildPickup(g, rec) {
+  const W = rec.w || 18.4, D = rec.d || 6.6;
+  const body = mat(vehiclePaint(rec, '#3f3f46'), { r: 0.45, m: 0.35 });
+  const glass = mat('#6a7a84', { r: 0.15, m: 0.2 });
+  const bed = mat('#2a2c2e', { r: 0.7, m: 0.1 });
+  add(g, box(W * 0.96, 1.7, D * 0.88), body, 0, 1.7, 0);
+  add(g, box(W * 0.38, 2.15, D * 0.84), body, -W * 0.18, 3.55, 0); // cab
+  add(g, box(W * 0.28, 1.7, D * 0.72), glass, -W * 0.16, 3.7, 0);
+  add(g, box(W * 0.46, 1.15, D * 0.82), bed, W * 0.22, 2.55, 0); // bed walls
+  add(g, box(W * 0.42, 0.12, D * 0.7), mat('#3a3d42', { r: 0.8 }), W * 0.22, 2.05, 0); // bed floor
+  add(g, box(0.14, 1.1, D * 0.5), mat('#111', { r: 0.5 }), -W / 2 + 0.1, 1.8, 0);
+  add(g, box(0.1, 0.45, 0.38), mat('#f4f0d8', { r: 0.3 }), -W / 2 + 0.02, 1.85, -D * 0.22);
+  add(g, box(0.1, 0.45, 0.38), mat('#f4f0d8', { r: 0.3 }), -W / 2 + 0.02, 1.85, D * 0.22);
+  const wx = W * 0.32, wz = D * 0.42;
+  for (const x of [-wx, wx]) for (const z of [-wz, wz]) addWheel(g, x, z, 0.82, 0.38);
+}
+
+function buildSportsCar(g, rec) {
+  const W = rec.w || 14.6, D = rec.d || 6.0;
+  const body = mat(vehiclePaint(rec, '#7a1c1c'), { r: 0.22, m: 0.65 });
+  const glass = mat('#4a6080', { r: 0.1, m: 0.25 });
+  add(g, box(W * 0.96, 1.15, D * 0.86), body, 0, 1.05, 0);
+  add(g, box(W * 0.55, 0.35, D * 0.8), body, -W * 0.12, 1.75, 0); // long hood
+  add(g, box(W * 0.36, 1.15, D * 0.78), body, W * 0.12, 2.2, 0);
+  add(g, box(W * 0.28, 0.95, D * 0.68), glass, W * 0.1, 2.3, 0);
+  add(g, box(0.16, 0.45, D * 0.62), mat('#111', { r: 0.4 }), -W / 2 + 0.08, 1.1, 0);
+  add(g, box(0.08, 0.28, 0.4), mat('#f8fbff', { r: 0.2, m: 0.2 }), -W / 2 + 0.02, 1.15, -D * 0.22);
+  add(g, box(0.08, 0.28, 0.4), mat('#f8fbff', { r: 0.2, m: 0.2 }), -W / 2 + 0.02, 1.15, D * 0.22);
+  const wx = W * 0.3, wz = D * 0.4;
+  for (const x of [-wx, wx]) for (const z of [-wz, wz]) addWheel(g, x, z, 0.62, 0.32);
 }

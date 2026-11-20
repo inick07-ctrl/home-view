@@ -280,7 +280,5 @@ export default {
     // Two-car garage: closed door panels + cars nosed toward the south doors
     k.block(2.3, YC1 - 0.22, 11.2, YC1 + 0.05, 0, 8, GD);
     k.block(15.3, YC1 - 0.22, 24.2, YC1 + 0.05, 0, 8, GD);
-    k.car(3.2, 13.8, 10.3, 32.6, '#8a8680', 'golf-r', 's');
-    k.car(16.2, 13.8, 23.3, 32.6, '#161616', 'lexus-gx', 's');
   },
 };

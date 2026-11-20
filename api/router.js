@@ -6,6 +6,8 @@ import {
 } from '../server/auth.js';
 import { readJSON, writeJSON, writeJSONIfAbsent, remove, listAll, headBlob, streamBlob } from '../server/store.js';
 import { getExample, resolvedExampleName } from '../server/examples.js';
+import { areasForExample } from '../public/js/example-areas.js';
+import { estimateBuild, resolveLocation, sanitizeTier, normalizeZip } from '../public/js/cost-estimator.js';
 import {
   sanitizeBuildType, isAdmin, contactEmail,
   sanitizeSponsor, publicSponsor, sanitizeInquiry,
@@ -232,8 +234,24 @@ function publicProject(p, { owner = false } = {}) {
   if (owner) {
     out.shareToken = p.shareToken || null;
     out.favorited = !!p.favorited;
+    if (p.costZip) out.costZip = p.costZip;
+    if (p.costTier) out.costTier = p.costTier;
   }
+  const areas = projectAreas(p);
+  if (areas) out.areas = areas;
   return out;
+}
+
+function projectAreas(p) {
+  const src = (p && p.areas && typeof p.areas.heated === 'number')
+    ? p.areas
+    : (p?.exampleId ? areasForExample(p.exampleId) : null);
+  if (!src) return null;
+  return {
+    heated: Math.max(0, Math.round(Number(src.heated) || 0)),
+    garage: Math.max(0, Math.round(Number(src.garage) || 0)),
+    porch: Math.max(0, Math.round(Number(src.porch) || 0)),
+  };
 }
 
 const cleanText = (s, max) => String(s ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').slice(0, max);
@@ -398,9 +416,24 @@ const routes = {
       }
     }
     if (body.favorited !== undefined) p.favorited = !!body.favorited;
+    if (body.costZip !== undefined) p.costZip = normalizeZip(body.costZip) || null;
+    if (body.costTier !== undefined) p.costTier = sanitizeTier(body.costTier);
+    if (body.areas !== undefined) {
+      if (body.areas === null) delete p.areas;
+      else {
+        const heated = Number(body.areas?.heated);
+        if (!Number.isFinite(heated) || heated < 0) throw bad('Invalid areas');
+        p.areas = {
+          heated: Math.round(heated),
+          garage: Math.max(0, Math.round(Number(body.areas.garage) || 0)),
+          porch: Math.max(0, Math.round(Number(body.areas.porch) || 0)),
+        };
+      }
+    }
     const favoriteOnly = body.favorited !== undefined
       && body.name === undefined && body.notes === undefined && body.buildType === undefined
-      && body.share === undefined && body.site === undefined && body.layout === undefined;
+      && body.share === undefined && body.site === undefined && body.layout === undefined
+      && body.costZip === undefined && body.costTier === undefined && body.areas === undefined;
     if (!favoriteOnly) p.updatedAt = new Date().toISOString();
     await writeJSON(projPath(user.id, p.id), p);
     send(res, 200, { project: publicProject(p, { owner: true }) });
@@ -505,7 +538,29 @@ const routes = {
   },
 
   // ---------- sponsors (public read of active only; admin write) ----------
+  'GET local-rates': async (req, res) => {
+    const url = new URL(req.url, 'http://x');
+    const q = url.searchParams;
+    const zip = normalizeZip(q.get('zip') || '');
+    const location = resolveLocation(zip);
+    const heated = Number(q.get('heatedSqFt') ?? q.get('heated'));
+    const hasNums = [q.get('heatedSqFt'), q.get('heated'), q.get('garageSqFt'), q.get('porchSqFt')].some((v) => v != null && v !== '');
+    const out = { location };
+    if (hasNums || q.get('buildType') || q.get('tier')) {
+      out.estimate = estimateBuild({
+        heatedSqFt: Number.isFinite(heated) ? heated : 0,
+        garageSqFt: Number(q.get('garageSqFt') || 0),
+        porchSqFt: Number(q.get('porchSqFt') || 0),
+        buildType: q.get('buildType') || 'home',
+        tier: q.get('tier') || 'standard',
+        zip,
+        location,
+      });
+    }
+    send(res, 200, out);
+  },
   'GET sponsors': async (req, res) => {
+
     const metas = await listAll('db/sponsors/');
     const all = (await Promise.all(metas.map(m => readJSON(m.pathname)))).filter(Boolean);
     const sponsors = all.filter(s => s && s.active).map(publicSponsor);

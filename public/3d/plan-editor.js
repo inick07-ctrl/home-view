@@ -217,7 +217,7 @@ export function mountPlanEditor(ctrl) {
   const topBtn = document.getElementById('editPlanBtn');
   if (topBtn && topBtn !== btn) topBtn.addEventListener('click', toggle);
   drawer.querySelector('[data-act=close]').onclick = close;
-  drawer.querySelector('[data-act=undo]').onclick = () => {
+  function undoLast() {
     const prev = undo.pop();
     if (!prev) return;
     ctrl.applyLayout(prev);
@@ -225,7 +225,15 @@ export function mountPlanEditor(ctrl) {
     render();
     ctrl.highlight(null);
     persist();
-  };
+  }
+  drawer.querySelector('[data-act=undo]').onclick = undoLast;
+  window.addEventListener('keydown', (ev) => {
+    if (!drawer.classList.contains('open') || !canEdit()) return;
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z' && !ev.shiftKey) {
+      ev.preventDefault();
+      undoLast();
+    }
+  });
   drawer.querySelector('[data-act=reset]').onclick = () => {
     if (!confirm('Reset this plan’s items, rooms, and walls to the original layout?')) return;
     pushUndo();
@@ -416,7 +424,7 @@ export function mountPlanEditor(ctrl) {
 
   function renderRooms(body) {
     const rooms = ctrl.getRooms();
-    body.appendChild(el('p', { id: 'editHint', text: canEdit() ? 'Select a room to move, resize, rename, or cut it out. Add a room, then click the floor to place it.' : 'View only.' }));
+    body.appendChild(el('p', { id: 'editHint', text: canEdit() ? 'Click any room in 3D and drag to move it. Resize, rename, or nudge it here — furniture and walls inside the room come along.' : 'View only.' }));
     const list = el('div', { id: 'editList' });
     rooms.forEach((r, i) => {
       if (r[7]?.noLabel && !r[0]) return;
@@ -585,7 +593,10 @@ export function mountPlanEditor(ctrl) {
       if (hits[0]) {
         let obj = hits[0].object;
         while (obj && !obj.userData.itemId) obj = obj.parent;
-        if (obj?.userData.itemId) return { kind: 'item', id: obj.userData.itemId, point: hits[0].point };
+        if (obj?.userData.itemId) {
+          const pt = hits[0].point;
+          return { kind: 'item', id: obj.userData.itemId, x: pt.x + ctrl.CX(), y: pt.z + ctrl.CZ(), point: pt };
+        }
       }
     }
     plane.constant = 0;
@@ -631,7 +642,7 @@ export function mountPlanEditor(ctrl) {
       ev.preventDefault(); ev.stopPropagation();
       const t = CATALOG[placing];
       const rec = makeItem(placing, { x: at.x, y: at.y, rot: 0 });
-      const hitC = clearanceHit(itemRect(rec), ctrl.getRooms(), ctrl.getWalls(), 0.05);
+      const hitC = t.category === 'garage' ? null : clearanceHit(itemRect(rec), ctrl.getRooms(), ctrl.getWalls(), 0.05);
       showClearance(!!hitC, hitC?.kind);
       if (hitC) return;
       pushUndo();
@@ -643,19 +654,25 @@ export function mountPlanEditor(ctrl) {
     }
     if (at.kind === 'item') {
       ev.preventDefault(); ev.stopPropagation();
+      try { ev.target.setPointerCapture?.(ev.pointerId); } catch {}
       select({ kind: 'item', id: at.id });
       if (tab !== 'items') { tab = 'items'; render(); }
       dragging = { id: at.id, lx: at.x ?? 0, ly: at.y ?? 0, start: currentLayout() };
+      ctrl.setOrbitEnabled?.(false);
       return;
     }
     if (at.kind === 'floor') {
       const rooms = ctrl.getRooms();
       const room = roomOfPoint(rooms, at.x, at.y);
-      if (room && tab === 'rooms') {
+      if (room && !placing) {
         ev.preventDefault(); ev.stopPropagation();
+        try { ev.target.setPointerCapture?.(ev.pointerId); } catch {}
         const index = rooms.indexOf(room);
+        if (tab !== 'rooms') tab = 'rooms';
         select({ kind: 'room', index });
-        dragging = { room: index, lx: at.x, ly: at.y, start: currentLayout() };
+        const r = rooms[index];
+        dragging = { room: index, startX: at.x, startY: at.y, origin: [r[3], r[4], r[5], r[6]], start: currentLayout() };
+        ctrl.setOrbitEnabled?.(false);
         return;
       }
       if (tab === 'walls') {
@@ -692,31 +709,68 @@ export function mountPlanEditor(ctrl) {
       if (!it) return;
       it.x = plan.x;
       it.y = plan.y;
-      const hitC = clearanceHit(itemRect(it), ctrl.getRooms(), ctrl.getWalls(), 0.05);
+      const typ = CATALOG[it.type];
+      const hitC = typ?.category === 'garage' ? null : clearanceHit(itemRect(it), ctrl.getRooms(), ctrl.getWalls(), 0.05);
       showClearance(!!hitC, hitC?.kind);
       if (hitC) return;
       ctrl.setItems(items, { soft: true });
       ctrl.highlight({ kind: 'item', id: it.id });
     } else if (dragging.room != null) {
-      const dx = plan.x - dragging.lx, dy = plan.y - dragging.ly;
-      dragging.lx = plan.x; dragging.ly = plan.y;
-      ctrl.patchRoom(dragging.room, { dx, dy, soft: true });
+      const rooms = ctrl.getRooms();
+      const [dx, dy] = snapRoomDelta(dragging.origin, plan.x - dragging.startX, plan.y - dragging.startY, rooms, dragging.room);
+      const cur = rooms[dragging.room];
+      if (!cur) return;
+      const adx = (dragging.origin[0] + dx) - cur[3];
+      const ady = (dragging.origin[1] + dy) - cur[4];
+      if (Math.abs(adx) > 0.001 || Math.abs(ady) > 0.001) {
+        ctrl.patchRoom(dragging.room, { dx: adx, dy: ady, soft: true });
+      }
       ctrl.highlight({ kind: 'room', index: dragging.room });
     }
   });
   const endDrag = () => {
     if (!dragging) return;
-    if (dragging.start) {
-      undo.push(dragging.start);
+    const moved = dragging.start;
+    if (moved) {
+      undo.push(moved);
       if (undo.length > 40) undo.shift();
     }
+    const wasRoom = dragging.room != null;
     dragging = null;
+    ctrl.setOrbitEnabled?.(true);
+    if (wasRoom) ctrl.rebuildPlan?.();
     persist();
     render();
     showClearance(false);
   };
   window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', endDrag);
 
+  function snapFt(v, step = 0.5) { return Math.round(v / step) * step; }
+  function snapRoomDelta(origin, rawDx, rawDy, rooms, index) {
+    let x0 = snapFt(origin[0] + rawDx), y0 = snapFt(origin[1] + rawDy);
+    const w = origin[2] - origin[0], d = origin[3] - origin[1];
+    const snap = 0.75;
+    let adjX = 0, adjY = 0, bestX = snap, bestY = snap;
+    for (let i = 0; i < (rooms || []).length; i++) {
+      if (i === index) continue;
+      const r = rooms[i];
+      if (r[7]?.outside) continue;
+      for (const edge of [r[3], r[5]]) {
+        for (const mine of [x0, x0 + w]) {
+          const delta = edge - mine;
+          if (Math.abs(delta) < bestX) { bestX = Math.abs(delta); adjX = delta; }
+        }
+      }
+      for (const edge of [r[4], r[6]]) {
+        for (const mine of [y0, y0 + d]) {
+          const delta = edge - mine;
+          if (Math.abs(delta) < bestY) { bestY = Math.abs(delta); adjY = delta; }
+        }
+      }
+    }
+    return [snapFt(x0 + adjX) - origin[0], snapFt(y0 + adjY) - origin[1]];
+  }
   function nearestWall(x, y, max = 1.2) {
     const WS = ctrl.getWalls();
     let best = null, bestD = max;

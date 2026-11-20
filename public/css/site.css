@@ -141,3 +141,33 @@ footer.site-foot a{color:inherit}
 #sponsorHud h3{font-size:12.5px;margin:8px 0 4px}
 
 .ex-tagline{font-size:13px;color:var(--muted,#8b939b);margin:4px 0 0;line-height:1.4}
+
+/* --- Build cost estimator --- */
+.cost-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;margin:14px 0 0;padding:10px 12px;background:var(--panel2);border:1px solid var(--line);border-radius:12px}
+.cost-bar-l{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}
+.cost-bar-k{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.cost-zip-wrap{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);margin:0}
+.cost-zip{width:88px;padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--fg);font:inherit;font-variant-numeric:tabular-nums}
+.cost-bar-dot{color:var(--muted);opacity:.7}
+.cost-tiers{display:flex;flex-wrap:wrap;gap:6px}
+.cost-bar-note{font-size:12px;flex:1 1 220px;min-width:180px;margin:0}
+.cost-pill{white-space:nowrap}
+.cost-section{margin-top:22px}
+.cost-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px 24px;margin:0 0 10px}
+.cost-kicker{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.cost-range{font-size:26px;font-weight:750;letter-spacing:.2px;margin:2px 0 4px}
+.cost-meta{font-size:13px;line-height:1.45;text-align:right}
+.cost-note{font-size:13px;margin:0 0 12px;max-width:62em}
+.cost-table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14px}
+.cost-table th,.cost-table td{text-align:left;padding:8px 10px;border-top:1px solid var(--line)}
+.cost-table td:nth-child(2),.cost-table th:nth-child(2),
+.cost-table td:nth-child(3),.cost-table th:nth-child(3){text-align:right}
+.cost-table tfoot th,.cost-table tfoot td{font-weight:700;border-top:1px solid rgba(224,169,90,.35)}
+.cost-table .cost-range-row td{font-weight:650;color:var(--acc2)}
+footer.site-foot{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px}
+footer.site-foot .foot-brand{display:inline-flex;align-items:center;gap:8px;color:inherit;text-decoration:none;font-weight:700}
+footer.site-foot .foot-brand svg{width:18px;height:18px;flex-shrink:0}
+@media (max-width:720px){
+  .cost-range{font-size:22px}
+  .cost-meta{text-align:left}
+}

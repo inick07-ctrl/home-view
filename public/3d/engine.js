@@ -704,7 +704,8 @@ function highlightSel(sel) {
   } else if (sel.kind === 'room') {
     const room = M.rooms[sel.index];
     if (!room) return;
-    addBox(room[3], room[4], room[5], room[6], 0.04, 0.1);
+    addBox(room[3], room[4], room[5], room[6], 0.02, 0.12);
+    addBox(room[3] - 0.08, room[4] - 0.08, room[5] + 0.08, room[6] + 0.08, 0.12, 0.2, hlEdge);
   } else if (sel.kind === 'wall') {
     const w = (M.walls[sel.wallKind] || [])[sel.index];
     if (!w) return;
@@ -881,6 +882,10 @@ function ensureEditor() {
     removeWall: removeWallOp,
     patchWall: patchWallOp,
     addDoorway: addDoorwayOp,
+    setOrbitEnabled: (on) => { if (orbit) orbit.enabled = !!on; },
+    rebuildPlan,
+    getAreas: () => M ? modelAreas(M) : { heated: 0, garage: 0, porch: 0 },
+    getBuildType: () => M?.buildType || 'home',
   });
 }
 
@@ -1057,6 +1062,8 @@ function buildModel(model, opts = {}) {
       }
     },
     car(a, b, c, d, color, type = 'generic', face) {
+      // Default garage vehicles are not auto-rendered. Users place cars in Edit Plan → Items → Garage.
+      return;
       const alongX = (c - a) >= (d - b), L = alongX ? (c - a) : (d - b), Wd = alongX ? (d - b) : (c - a);
       const nose = (face === 'e' || face === 'w' || face === 'n' || face === 's') ? face : (alongX ? 'e' : 's');
       const r = (s0, s1, t0, t1) => {
@@ -1772,6 +1779,9 @@ function syncAreaUi(M) {
   if (porch > 1) bits.push('Porches ' + fmtSf(porch) + ' sf');
   if (sub) { sub.textContent = bits.join(' · '); sub.style.display = bits.length ? '' : 'none'; }
   syncLotStatus();
+  try {
+    window.dispatchEvent(new CustomEvent('peakstead-areas', { detail: { ...modelAreas(M), buildType: M?.buildType || 'home' } }));
+  } catch {}
 }
 
 function loop() {
@@ -1897,6 +1907,9 @@ window.app = {
     orbit.update();
   },
   lookTop: lookTopSafe,
+  getAreas: () => M ? modelAreas(M) : { heated: 0, garage: 0, porch: 0 },
+  getBuildType: () => M?.buildType || 'home',
+  rebuildPlan,
 };
 if (SRC.kind === 'example') await loadExample(params.get('ex') || REGISTRY[0].id);
 else if (SRC.kind === 'draft') loadBuilderDraft();
