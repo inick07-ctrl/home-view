@@ -67,6 +67,13 @@ footer{color:var(--muted);font-size:12.5px;text-align:center;padding:24px}
 @media (max-width:720px){header.top .brand{font-size:15px}}
 @media (max-width:520px){header.top{padding:8px 12px}header.top .brand span{display:none}main{padding:16px 12px 50px}.pill{padding:6px 11px;font-size:13px}h1{font-size:22px}}
 
+.pcard{position:relative}
+.fav-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;flex-shrink:0;border-radius:999px;border:1px solid rgba(255,255,255,.22);background:rgba(20,24,28,.86);color:#f3f1ec;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.28)}
+.fav-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round;overflow:visible}
+.fav-btn:hover{background:rgba(30,36,44,.95);border-color:rgba(224,87,79,.55);color:#ffb4ae}
+.fav-btn.on,.fav-btn[aria-pressed="true"]{color:#fff;background:#c44b45;border-color:#c44b45}
+.fav-btn.on svg,.fav-btn[aria-pressed="true"] svg{fill:#fff;stroke:#fff;stroke-width:1}
+.pcard > .fav-btn{position:absolute;top:14px;right:14px;z-index:2}
 .pcard .ex-body{display:flex;flex-direction:column;gap:8px;text-decoration:none;color:inherit}
 .pcard .ex-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px}
 .p-del-confirm{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding:10px 12px;background:rgba(224,87,79,.12);border:1px solid rgba(224,87,79,.35);border-radius:10px;font-size:13px}

@@ -8,6 +8,10 @@
     <div style="min-width:180px"><label for="newType">Build type</label><select id="newType"></select></div>
     <button class="btn primary" type="submit">+ New project</button>
   </form>
+  <div class="type-filters" id="projFilters" role="tablist" aria-label="Filter projects">
+    <button type="button" class="pill on" data-filter="all">All</button>
+    <button type="button" class="pill" data-filter="favorites">Favorites</button>
+  </div>
   <div class="err" id="err"></div>
   <div class="grid" id="list"><p class="muted">Loading…</p></div>
   <details class="card" style="margin-top:40px"><summary class="muted" style="cursor:pointer">Account</summary>
@@ -21,18 +25,40 @@
 <script type="module">
 import { $, esc, api, me, header, footer, fmtDate } from '/js/common.js';
 import { BUILD_TYPES, buildTypeOptionsHtml, buildTypeLabel, sanitizeBuildType } from '/js/build-types.js';
+import { favButtonHtml, paintFavButton, setProjectFavorite } from '/js/favorites.js';
 const user = await me();
 if (!user) location.replace('/?next=/dashboard');
 header(user, 'dashboard');
 footer();
 $('#newType').innerHTML = buildTypeOptionsHtml('home');
 $('#who').textContent = user.email;
-async function load() {
-  const { projects } = await api('projects');
+let allProjects = [];
+let projFilter = 'all';
+
+function favCount() { return allProjects.filter((p) => p.favorited).length; }
+function paintFilters() {
+  const n = favCount();
+  $('#projFilters').querySelectorAll('[data-filter]').forEach((b) => {
+    b.classList.toggle('on', b.dataset.filter === projFilter);
+    if (b.dataset.filter === 'favorites') b.textContent = n ? `Favorites (${n})` : 'Favorites';
+  });
+}
+
+function showEmptyAll() {
+  $('#list').innerHTML = '<div class="card"><h2>No projects yet</h2><p class="muted">Create your first project above, then add floor plans, photos or a 3D model. Want to see what it looks like? <a href="/examples">Browse the examples</a>.</p></div>';
+}
+
+function renderList() {
   const list = $('#list');
-  if (!projects.length) { list.innerHTML = '<div class="card"><h2>No projects yet</h2><p class="muted">Create your first project above, then add floor plans, photos or a 3D model. Want to see what it looks like? <a href="/examples">Browse the examples</a>.</p></div>'; return; }
+  paintFilters();
+  if (!allProjects.length) { showEmptyAll(); return; }
+  const rows = projFilter === 'favorites' ? allProjects.filter((p) => p.favorited) : allProjects;
+  if (!rows.length) {
+    list.innerHTML = '<div class="card"><h2>No favorites yet</h2><p class="muted">Tap the heart on a project to add it to Favorites. You can also favorite example homes from the <a href="/examples">Examples</a> gallery.</p></div>';
+    return;
+  }
   list.innerHTML = '';
-  for (const p of projects) {
+  for (const p of rows) {
     const img = p.files.find(f => f.kind === 'image' && f.contentType.startsWith('image/'));
     const hasModel = !!p.exampleId || p.files.some(f => f.kind === 'model');
     const thumbSrc = img
@@ -42,7 +68,7 @@ async function load() {
     const card = document.createElement('div'); card.className = 'card pcard';
     const thumb = thumbSrc ? `<img loading="lazy" alt="" src="${thumbSrc}">` : (hasModel ? '3D model' : 'No images yet');
     card.dataset.id = p.id;
-    card.innerHTML = `<a class="ex-body" href="${href}"><div class="thumb">${thumb}</div>
+    card.innerHTML = `${favButtonHtml({ on: !!p.favorited, className: 'fav-btn p-fav' })}<a class="ex-body" href="${href}"><div class="thumb">${thumb}</div>
       <div class="title">${esc(p.name)}</div></a>
       <div class="row ex-actions" style="gap:6px"><span class="badge">${esc(buildTypeLabel(p.buildType))}</span>${hasModel ? '<span class="badge acc">3D</span>' : ''}${p.exampleId ? '<span class="badge">Example</span>' : ''}<span class="badge">${p.files.filter(f => f.kind === 'image').length} images</span>${p.shareToken ? '<span class="badge acc">Shared</span>' : '<span class="badge">Private</span>'}<span class="spacer"></span><a class="muted" style="font-size:12px" href="/project?id=${encodeURIComponent(p.id)}">Details</a><button type="button" class="btn small danger p-del">Delete</button><span class="muted" style="font-size:12px">${fmtDate(p.updatedAt)}</span></div>
       <div class="p-del-confirm" hidden><span>Delete <strong>${esc(p.name)}</strong>? This cannot be undone.</span><span class="spacer"></span><button type="button" class="btn small p-del-no">Cancel</button><button type="button" class="btn small danger p-del-yes">Yes, delete</button></div>`;
@@ -50,13 +76,40 @@ async function load() {
   }
 }
 
-function showEmpty() {
-  $('#list').innerHTML = '<div class="card"><h2>No projects yet</h2><p class="muted">Create your first project above, then add floor plans, photos or a 3D model. Want to see what it looks like? <a href="/examples">Browse the examples</a>.</p></div>';
+async function load() {
+  const { projects } = await api('projects');
+  allProjects = projects;
+  renderList();
 }
+
+$('#projFilters').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-filter]');
+  if (!b) return;
+  projFilter = b.dataset.filter;
+  renderList();
+});
 
 $('#list').addEventListener('click', async (e) => {
   const card = e.target.closest('.pcard');
   if (!card) return;
+  if (e.target.closest('.p-fav')) {
+    e.preventDefault();
+    const proj = allProjects.find((x) => x.id === card.dataset.id);
+    if (!proj) return;
+    const next = !proj.favorited;
+    const btn = card.querySelector('.p-fav');
+    paintFavButton(btn, next);
+    proj.favorited = next;
+    try {
+      const data = await setProjectFavorite(proj.id, next);
+      Object.assign(proj, data.project || { favorited: next });
+      renderList();
+    } catch (err) {
+      paintFavButton(btn, !next);
+      $('#err').textContent = err.message || 'Could not update favorite.';
+    }
+    return;
+  }
   if (e.target.closest('.p-del')) {
     e.preventDefault();
     const box = card.querySelector('.p-del-confirm');
@@ -75,8 +128,8 @@ $('#list').addEventListener('click', async (e) => {
   yes.disabled = true;
   try {
     await api('projects/' + encodeURIComponent(card.dataset.id), { method: 'DELETE' });
-    card.remove();
-    if (!$('#list').querySelector('.pcard')) showEmpty();
+    allProjects = allProjects.filter((x) => x.id !== card.dataset.id);
+    renderList();
   } catch (err) {
     yes.disabled = false;
     $('#err').textContent = err.message || 'Could not delete this project.';

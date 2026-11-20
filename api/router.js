@@ -229,7 +229,10 @@ function publicProject(p, { owner = false } = {}) {
   };
   if (p.exampleId) out.exampleId = p.exampleId;
   if (p.layout) out.layout = p.layout;
-  if (owner) out.shareToken = p.shareToken || null;
+  if (owner) {
+    out.shareToken = p.shareToken || null;
+    out.favorited = !!p.favorited;
+  }
   return out;
 }
 
@@ -394,7 +397,11 @@ const routes = {
         p.layout = layout;
       }
     }
-    p.updatedAt = new Date().toISOString();
+    if (body.favorited !== undefined) p.favorited = !!body.favorited;
+    const favoriteOnly = body.favorited !== undefined
+      && body.name === undefined && body.notes === undefined && body.buildType === undefined
+      && body.share === undefined && body.site === undefined && body.layout === undefined;
+    if (!favoriteOnly) p.updatedAt = new Date().toISOString();
     await writeJSON(projPath(user.id, p.id), p);
     send(res, 200, { project: publicProject(p, { owner: true }) });
   },

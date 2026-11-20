@@ -65,7 +65,13 @@
   #saveWrap .save-ctl{font:inherit;font-size:13px;font-weight:600;white-space:nowrap;border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:6px 12px;background:rgba(255,255,255,.08);color:#f3f1ec;text-decoration:none;cursor:pointer}
   #saveWrap .save-ctl.primary{background:#e0a95a;border-color:#e0a95a;color:#1d1d1d}
   #saveWrap .save-ctl:disabled{opacity:.6;cursor:default}
-  #editPlanBtn{display:none;align-items:center;flex-shrink:0;font:inherit;font-size:13px;font-weight:750;white-space:nowrap;border:1px solid #e0a95a;border-radius:999px;padding:6px 14px;background:#e0a95a;color:#1d1d1d;cursor:pointer;margin-left:auto}
+  .topbar-actions{margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0}
+  #favBtn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;flex-shrink:0;border-radius:999px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08);color:#f3f1ec;cursor:pointer}
+  #favBtn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}
+  #favBtn:hover{border-color:rgba(224,87,79,.55);color:#ffb4ae}
+  #favBtn.on,#favBtn[aria-pressed="true"]{color:#fff;background:#c44b45;border-color:#c44b45}
+  #favBtn.on svg,#favBtn[aria-pressed="true"] svg{fill:#fff;stroke:#fff;stroke-width:1}
+  #editPlanBtn{display:none;align-items:center;flex-shrink:0;font:inherit;font-size:13px;font-weight:750;white-space:nowrap;border:1px solid #e0a95a;border-radius:999px;padding:6px 14px;background:#e0a95a;color:#1d1d1d;cursor:pointer}
   #editPlanBtn:hover{filter:brightness(1.06)}
   #editPlanBtn.on{box-shadow:0 0 0 2px rgba(224,169,90,.45)}
   #bEdit{border-color:#e0a95a !important;font-weight:750}
@@ -74,11 +80,11 @@
   #tabs button{font:inherit;font-size:13px;font-weight:600;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#f3f1ec;padding:6px 14px;border-radius:999px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
   #tabs button.on{background:var(--acc);border-color:var(--acc);color:#1d1d1d}
   #hud,#north{top:calc(var(--tbh, 56px) + 8px) !important}
-  body.embed #topbar,body.embed #saveWrap,body.embed #editPlanBtn{display:none !important}
+  body.embed #topbar,body.embed #saveWrap,body.embed #editPlanBtn,body.embed #favBtn{display:none !important}
   body.embed{--tbh:0px}
   body.embed #hud,body.embed #north{top:12px !important}
   @media (max-width:420px){#topbar .brand{display:none}}
-  @media (max-width:600px){#topbar .brand{display:none}#topbar{padding:6px 8px;gap:6px}#topbar .back,#saveWrap .save-ctl,#editPlanBtn{font-size:12px;padding:5px 10px}#tabs button{font-size:12px;padding:5px 10px}}
+  @media (max-width:600px){#topbar .brand{display:none}#topbar{padding:6px 8px;gap:6px}#topbar .back,#saveWrap .save-ctl,#editPlanBtn{font-size:12px;padding:5px 10px}#favBtn{width:30px;height:30px}#tabs button{font-size:12px;padding:5px 10px}}
 </style>
 <link rel="stylesheet" href="/css/plan-editor.css">
 <script type="importmap">
@@ -91,8 +97,13 @@
   <div class="topbar-row">
     <a id="back" class="back" href="/">←</a>
     <a class="brand" href="/" id="brandName"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.2 1.6 15.8h4.2V28.4h8V19.8h4.4v8.6h8V15.8h4.2L16 2.2z" fill="#e0a95a"/></svg>PeakStead Designs</a>
-    <button type="button" id="editPlanBtn" aria-pressed="false" title="Edit items, rooms, and walls">Edit Plan</button>
-    <div id="saveWrap"></div>
+    <div class="topbar-actions">
+      <button type="button" id="favBtn" class="fav-btn" aria-pressed="false" title="Add to favorites" aria-label="Add to favorites">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.1 20.7c-.3.2-.8.2-1.1 0C6.4 17.3 2 13.4 2 8.9 2 6 4.3 3.8 7.1 3.8c1.6 0 3.1.8 3.9 2 .9-1.2 2.3-2 3.9-2 2.8 0 5.1 2.2 5.1 5.1 0 4.5-4.4 8.4-8.9 11.8z"/></svg>
+      </button>
+      <button type="button" id="editPlanBtn" aria-pressed="false" title="Edit items, rooms, and walls">Edit Plan</button>
+      <div id="saveWrap"></div>
+    </div>
   </div>
   <nav id="tabs" aria-label="Examples"></nav>
 </div>
@@ -175,6 +186,7 @@
 <div id="err"></div>
 <script type="module" src="/3d/engine.js"></script>
 <script type="module" src="/js/viewer-save.js"></script>
+<script type="module" src="/js/viewer-fav.js"></script>
 <script type="module">
 import { mountSponsors } from '/js/sponsors.js';
 mountSponsors({ featured: document.getElementById('sponsorHud') });

@@ -20,6 +20,7 @@
 <script type="module">
 import { $, esc, me, header, toast } from '/js/common.js';
 import { loginUrlFor, saveExample, savedExampleMap, renderSaveControl } from '/js/example-save.js';
+import { favButtonHtml, paintFavButton, isExampleFavorite, toggleExampleFavorite, listExampleFavorites } from '/js/favorites.js';
 import { BUILD_TYPES } from '/js/build-types.js';
 import { mountSponsors } from '/js/sponsors.js';
 import REGISTRY from '/3d/models/registry.js';
@@ -66,23 +67,29 @@ function setType(t) {
   renderList();
 }
 function renderFilters() {
-  const items = [{ id: 'all', label: 'All' }, ...BUILD_TYPES];
+  const n = listExampleFavorites().length;
+  const items = [{ id: 'all', label: 'All' }, { id: 'favorites', label: n ? `Favorites (${n})` : 'Favorites' }, ...BUILD_TYPES];
   filters.innerHTML = items.map(t => `<button type="button" class="pill${typeFilter === t.id ? ' on' : ''}" data-type="${t.id}">${t.label}</button>`).join('');
   filters.querySelectorAll('[data-type]').forEach(b => b.onclick = () => setType(b.dataset.type));
 }
 function renderList() {
   list.innerHTML = '';
   controls.clear();
-  const rows = typeFilter === 'all' ? REGISTRY : REGISTRY.filter(r => (r.type || 'home') === typeFilter);
+  const rows = typeFilter === 'favorites'
+    ? REGISTRY.filter(r => isExampleFavorite(r.id))
+    : typeFilter === 'all' ? REGISTRY : REGISTRY.filter(r => (r.type || 'home') === typeFilter);
   if (!rows.length) {
-    list.innerHTML = '<div class="card"><p class="muted" style="margin:0">No examples in this type yet. Try another filter, or <a href="/#signup">create a project</a> for your own plan.</p></div>';
+    list.innerHTML = typeFilter === 'favorites'
+      ? '<div class="card"><p class="muted" style="margin:0">No favorites yet. Tap the heart on an example to add it here.</p></div>'
+      : '<div class="card"><p class="muted" style="margin:0">No examples in this type yet. Try another filter, or <a href="/#signup">create a project</a> for your own plan.</p></div>';
     return;
   }
   for (const r of rows) {
     const card = document.createElement('div');
     card.className = 'card pcard';
+    card.dataset.id = r.id;
     const typeLabel = (BUILD_TYPES.find(t => t.id === (r.type || 'home')) || {}).label || '';
-    card.innerHTML = `<a class="ex-body" href="/viewer?ex=${esc(r.id)}"><div class="thumb"><img loading="lazy" alt="" src="/img/${esc(r.id)}.jpg"></div><div class="title">${esc(r.name)}</div><div class="ex-tagline">${esc(r.tagline || r.blurb || '')}</div></a><div class="ex-actions"><a class="badge acc" href="/viewer?ex=${esc(r.id)}">Open in 3D</a><span class="badge">${esc(typeLabel)}</span><span class="spacer"></span><span class="save-slot"></span></div>`;
+    card.innerHTML = `${favButtonHtml({ on: isExampleFavorite(r.id), className: 'fav-btn p-fav' })}<a class="ex-body" href="/viewer?ex=${esc(r.id)}"><div class="thumb"><img loading="lazy" alt="" src="/img/${esc(r.id)}.jpg"></div><div class="title">${esc(r.name)}</div><div class="ex-tagline">${esc(r.tagline || r.blurb || '')}</div></a><div class="ex-actions"><a class="badge acc" href="/viewer?ex=${esc(r.id)}">Open in 3D</a><span class="badge">${esc(typeLabel)}</span><span class="spacer"></span><span class="save-slot"></span></div>`;
     const slot = card.querySelector('.save-slot');
     controls.set(r.id, slot);
     list.appendChild(card);
@@ -91,6 +98,18 @@ function renderList() {
 }
 renderFilters();
 renderList();
+list.addEventListener('click', (e) => {
+  const btn = e.target.closest('.p-fav');
+  if (!btn) return;
+  e.preventDefault();
+  const card = btn.closest('.pcard');
+  const id = card?.dataset.id;
+  if (!id) return;
+  const on = toggleExampleFavorite(id);
+  paintFavButton(btn, on);
+  if (typeFilter === 'favorites' && !on) renderList();
+  else renderFilters();
+});
 mountSponsors({ strip: $('#sponsorStrip') });
 
 const saveAllBtn = $('#saveAll');
