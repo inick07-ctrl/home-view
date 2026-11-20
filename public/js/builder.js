@@ -7,7 +7,9 @@ import {
   ROOM_TYPES, TYPE_BY_ID, TEMPLATES, templateById, defaultSizeKey, newBlock, newId,
   rotateBlock, snapGrid, snapPlacement, findOverlaps, onLot, isStaging, overlapArea,
   compileModel, serializeModel, planStats, formatDims, STAGING_TOP,
+  blockEdges, addRemovedWall,
 } from '/js/builder-catalog.js';
+import { extrasFromItems } from '/js/yard-extras.js';
 
 const LS_STATE = 'peakstead-builder-v1';
 const LS_MODEL = 'peakstead-builder-draft-model';
@@ -32,6 +34,8 @@ let camera = { x: -4, y: -28, scale: 16 }; // world origin in px, px/ft
 let drag = null; // { kind, id, ox, oy, start, handle }
 let guide = null;
 let hoverId = null;
+let selectedWall = null;
+let hoverWall = null;
 let history = [];
 let future = [];
 let dirty3d = true;
@@ -113,7 +117,8 @@ function updateStats() {
   const s = planStats(blocks);
   const overlaps = countOverlaps();
   const prefs = loadPrefs();
-  const est = s.rooms ? estimateBuild({ heatedSqFt: s.heated, garageSqFt: s.garage, porchSqFt: s.porch || 0, buildType: 'home', zip: prefs.zip, tier: prefs.tier }) : null;
+  const extras = extrasFromBuilder(blocks);
+  const est = s.rooms ? estimateBuild({ heatedSqFt: s.heated, garageSqFt: s.garage, porchSqFt: s.porch || 0, buildType: 'home', zip: prefs.zip, tier: prefs.tier, extras }) : null;
   statsEl.innerHTML = s.rooms
     ? `<span class="sf"><b>${s.heated.toLocaleString()}</b> sf heated</span>` +
       (s.garage ? `<span><b>${s.garage.toLocaleString()}</b> sf garage</span>` : '') +
@@ -127,7 +132,96 @@ function updateStats() {
   } else warnEl.hidden = true;
 }
 
+function extrasFromBuilder(list) {
+  let poolSf = 0, spaCount = 0, solarKw = 0;
+  for (const b of (list || []).filter(onLot)) {
+    const typ = TYPE_BY_ID[b.type] || {};
+    if (typ.feature === 'pool') {
+      if (b.sizeKey === 'spa') spaCount += 1;
+      else poolSf += (b.w || 0) * (b.d || 0);
+    } else if (typ.feature === 'solar-ground' || typ.feature === 'solar-roof') {
+      solarKw += (parseInt(b.sizeKey, 10) || 12) * 0.4;
+    }
+  }
+  return { poolSf, spaCount, solarKw };
+}
+
+function distToEdge(wx, wy, e) {
+  if (e.horiz) {
+    if (wx < Math.min(e.a, e.b) || wx > Math.max(e.a, e.b)) {
+      const cx = (e.a + e.b) / 2;
+      return Math.hypot(wx - cx, wy - e.c);
+    }
+    return Math.abs(wy - e.c);
+  }
+  if (wy < Math.min(e.a, e.b) || wy > Math.max(e.a, e.b)) {
+    const cy = (e.a + e.b) / 2;
+    return Math.hypot(wx - e.c, wy - cy);
+  }
+  return Math.abs(wx - e.c);
+}
+
+function wallAt(wx, wy, maxFt = 0.7) {
+  let best = null, bestD = maxFt;
+  for (const b of blocks.filter(onLot)) {
+    if ((TYPE_BY_ID[b.type] || {}).feature) continue;
+    const edges = blockEdges(b);
+    for (const e of Object.values(edges)) {
+      const d = distToEdge(wx, wy, e);
+      if (d < bestD) {
+        bestD = d;
+        best = { blockId: b.id, side: e.side, s: e.a, e: e.b, horiz: e.horiz, c: e.c };
+      }
+    }
+  }
+  if (best) {
+    const b = blocks.find((x) => x.id === best.blockId);
+    const other = neighborOnSide(b, best.side);
+    if (other) {
+      best.otherId = other.block.id;
+      best.otherSide = other.side;
+      best.os = other.s;
+      best.oe = other.e;
+    }
+  }
+  return best;
+}
+
+function neighborOnSide(b, side) {
+  if (!b) return null;
+  const edges = blockEdges(b);
+  const e = edges[side];
+  for (const o of blocks.filter(onLot)) {
+    if (o.id === b.id || (TYPE_BY_ID[o.type] || {}).feature) continue;
+    const oe = blockEdges(o);
+    const opp = { n: 's', s: 'n', e: 'w', w: 'e' }[side];
+    const f = oe[opp];
+    if (!f) continue;
+    if (Math.abs(f.c - e.c) > 0.6) continue;
+    const overlap = Math.min(e.b, f.b) - Math.max(e.a, f.a);
+    if (overlap > 1) return { block: o, side: opp, s: Math.max(e.a, f.a), e: Math.min(e.b, f.b) };
+  }
+  return null;
+}
+
+function removeSelectedWall() {
+  if (!selectedWall) return;
+  const b = blocks.find((x) => x.id === selectedWall.blockId);
+  if (!b) return;
+  pushHistory();
+  const next = addRemovedWall(b, selectedWall.side, selectedWall.s, selectedWall.e);
+  Object.assign(b, next);
+  if (selectedWall.otherId) {
+    const o = blocks.find((x) => x.id === selectedWall.otherId);
+    if (o) Object.assign(o, addRemovedWall(o, selectedWall.otherSide, selectedWall.os ?? selectedWall.s, selectedWall.oe ?? selectedWall.e));
+  }
+  selectedWall = null;
+  persist();
+  render();
+}
+
 function countOverlaps() {
+
   const lot = blocks.filter(onLot);
   let n = 0;
   for (let i = 0; i < lot.length; i++) {
@@ -216,6 +310,7 @@ function render() {
   ctx.fillText('LOT', o.x + 6, o.y + 14);
 
   for (const b of blocks) drawBlock(b, b.id === selectedId, b.id === hoverId);
+  drawWallMarks();
   if (guide) drawGuide(guide);
   drawInspector();
 }
@@ -238,7 +333,27 @@ function drawGrid(w, h) {
   ctx.stroke();
 }
 
+function strokeWall(w, color, width) {
+  if (!w) return;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'square';
+  const a = w.horiz ? toScreen(w.s, w.c) : toScreen(w.c, w.s);
+  const b = w.horiz ? toScreen(w.e, w.c) : toScreen(w.c, w.e);
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  ctx.restore();
+}
+
+function drawWallMarks() {
+  if (hoverWall && (!selectedWall || hoverWall.blockId !== selectedWall.blockId || hoverWall.side !== selectedWall.side)) {
+    strokeWall(hoverWall, 'rgba(224,169,90,.85)', 5);
+  }
+  if (selectedWall) strokeWall(selectedWall, '#e0a95a', 7);
+}
+
 function drawBlock(b, sel, hover) {
+
   const t = TYPE_BY_ID[b.type] || {};
   const p = toScreen(b.x, b.y);
   const w = b.w * camera.scale, h = b.d * camera.scale;
@@ -355,6 +470,19 @@ function blockAt(wx, wy) {
 
 /* ---------- inspector ---------- */
 function drawInspector() {
+  if (selectedWall) {
+    inspector.hidden = false;
+    const b = blocks.find((x) => x.id === selectedWall.blockId);
+    const name = b ? b.name : 'Wall';
+    const kind = selectedWall.otherId ? 'Interior wall' : 'Exterior wall';
+    inspector.innerHTML = `<h3>${esc(kind)}</h3>
+      <p class="muted" style="margin:0 0 8px">${esc(name)} · ${selectedWall.side.toUpperCase()} edge</p>
+      <div class="acts">
+        <button type="button" class="btn small danger" data-act="del-wall">Remove wall</button>
+      </div>
+      <p class="muted" style="margin:8px 0 0">Rooms stay in place. Undo or Save as usual.</p>`;
+    return;
+  }
   const b = selected();
   if (!b) { inspector.hidden = true; return; }
   inspector.hidden = false;
@@ -376,6 +504,7 @@ function drawInspector() {
 inspector.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-act]');
   if (!btn) return;
+  if (btn.dataset.act === 'del-wall') { removeSelectedWall(); return; }
   const b = selected(); if (!b) return;
   if (btn.dataset.act === 'rotate') rotateSelected();
   if (btn.dataset.act === 'dup') duplicateSelected();
@@ -422,6 +551,7 @@ function duplicateSelected() {
   persist(); render();
 }
 function deleteSelected() {
+  if (selectedWall) { removeSelectedWall(); return; }
   const b = selected(); if (!b) return;
   pushHistory();
   blocks = blocks.filter((x) => x.id !== b.id);
@@ -449,9 +579,18 @@ canvas.addEventListener('pointerdown', (e) => {
       return;
     }
   }
+  const edge = wallAt(w.x, w.y, 0.65);
+  if (edge) {
+    selectedWall = edge;
+    selectedId = null;
+    drag = null;
+    render();
+    return;
+  }
   const hit = blockAt(w.x, w.y);
   if (hit) {
     selectedId = hit.id;
+    selectedWall = null;
     pushHistory();
     drag = { kind: 'move', id: hit.id, ox: w.x - hit.x, oy: w.y - hit.y };
     canvas.setPointerCapture(e.pointerId);
@@ -460,6 +599,7 @@ canvas.addEventListener('pointerdown', (e) => {
     return;
   }
   selectedId = null;
+  selectedWall = null;
   startPan(e);
   render();
 });
@@ -475,12 +615,17 @@ canvas.addEventListener('pointermove', (e) => {
   const p = canvasPos(e);
   const w = toWorld(p.x, p.y);
   if (!drag) {
+    const edge = wallAt(w.x, w.y, 0.7);
     const hit = blockAt(w.x, w.y);
     const cur = hit?.id || null;
-    if (cur !== hoverId) { hoverId = cur; render(); }
+    const wallKey = edge ? edge.blockId + edge.side : null;
+    const prevKey = hoverWall ? hoverWall.blockId + hoverWall.side : null;
+    if (cur !== hoverId || wallKey !== prevKey) { hoverId = cur; hoverWall = edge; render(); }
     if (selected()) {
       const h = handleAt(selected(), p.x, p.y);
-      canvas.style.cursor = h ? resizeCursor(h) : (hit ? 'grab' : 'grab');
+      canvas.style.cursor = h ? resizeCursor(h) : (edge ? 'pointer' : (hit ? 'grab' : 'grab'));
+    } else {
+      canvas.style.cursor = edge ? 'pointer' : (hit ? 'grab' : 'grab');
     }
     return;
   }
@@ -710,7 +855,26 @@ $('#open3d').onclick = () => {
 /* ---------- save to projects ---------- */
 const safeName = (n) => n.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+/, '').slice(-80) || 'file';
 
+async function captureBuilderThumb() {
+  const lot = blocks.filter(onLot);
+  const src = canvas;
+  const out = document.createElement('canvas');
+  out.width = 1000; out.height = 625;
+  const g = out.getContext('2d');
+  g.fillStyle = '#14191e';
+  g.fillRect(0, 0, 1000, 625);
+  if (!lot.length) {
+    return await new Promise((resolve) => out.toBlob(resolve, 'image/jpeg', 0.86));
+  }
+  // Redraw current canvas scaled into the card.
+  const r = src.getBoundingClientRect();
+  g.drawImage(src, 0, 0, src.width, src.height, 0, 0, 1000, 625);
+  void r;
+  return await new Promise((resolve) => out.toBlob(resolve, 'image/jpeg', 0.86));
+}
+
 async function saveToProjects() {
+
   const model = currentModel();
   if (!model) { toast('Place a room on the lot first'); return; }
   writeDraft(model);
@@ -731,6 +895,20 @@ async function saveToProjects() {
     await api(`projects/${encodeURIComponent(project.id)}/files`, {
       method: 'POST', body: { pathname: blob.pathname, name: file.name, kind: 'model' },
     });
+    try {
+      const thumbBlob = await captureBuilderThumb();
+      if (thumbBlob && user) {
+        const tf = new File([thumbBlob], 'thumb.jpg', { type: 'image/jpeg' });
+        const up = await upload(`files/${user.id}/${project.id}/thumb.jpg`, tf, {
+          access: 'private', handleUploadUrl: '/api/upload',
+          clientPayload: JSON.stringify({ pid: project.id, kind: 'thumb' }),
+          contentType: 'image/jpeg',
+        });
+        await api(`projects/${encodeURIComponent(project.id)}/files`, {
+          method: 'POST', body: { pathname: up.pathname, name: 'thumb.jpg', kind: 'thumb' },
+        });
+      }
+    } catch (err) { console.warn('Could not save builder thumbnail', err); }
     toast('Saved to My projects');
     location.href = '/viewer?p=' + encodeURIComponent(project.id);
   } catch (e) {

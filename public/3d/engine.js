@@ -5,13 +5,13 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import REGISTRY from './models/registry.js';
 import { parcelDefaults, lotStats, formatLotArea, worldRings, buildableRings, xfHouse, houseFromWorld } from '../js/parcel.js';
-import { sanitizeWalls, clipCounters, autoFurnish, installFurniture, buildItemMesh, makeItem, itemRect, clearanceHit } from './furniture.js';
-import { mountPlanEditor, cloneWalls, cloneRooms, cloneItems, loadLocalLayout, sanitizeLayout } from './plan-editor.js';
+import { sanitizeWalls, clipCounters, autoFurnish, installFurniture, buildItemMesh, makeItem, itemRect, clearanceHit, isCoveredPorch, isPorchLike } from './furniture.js';
+import { mountPlanEditor, cloneWalls, cloneRooms, cloneItems, cloneRoofs, loadLocalLayout, sanitizeLayout } from './plan-editor.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('c');
 let renderer;
-try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true }); }
+try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true }); }
 catch (e) { const er = $('err'); er.style.display = 'flex'; er.textContent = 'Your browser could not start WebGL, which this 3D model needs.'; throw e; }
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
@@ -631,6 +631,7 @@ function modelWithLayout(source, layout) {
     ...source,
     rooms: layout?.rooms ? cloneRooms(layout.rooms) : cloneRooms(planOriginal ? planOriginal.rooms : source.rooms),
     walls: layout?.walls ? cloneWalls(layout.walls) : cloneWalls((planOriginal ? planOriginal.walls : source.walls)),
+    roofs: layout?.roofs ? cloneRoofs(layout.roofs) : cloneRoofs((planOriginal ? planOriginal.roofs : source.roofs) || source.roofs),
   };
 }
 function currentPlanId() {
@@ -657,7 +658,7 @@ function wallsOnRoom(WS, room, slack = 0.6) {
 }
 function translateSeg(w, dx, dy) { w[0] += dx; w[1] += dy; w[2] += dx; w[3] += dy; }
 function captureLayout() {
-  activeLayout = { version: 1, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls) };
+  activeLayout = { version: 1, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs) };
   return activeLayout;
 }
 function rebuildPlan() {
@@ -673,7 +674,9 @@ function refreshItems() {
   const ctx = { Wx, Wz, ceiling: (M?.wallH || 9) };
   for (const rec of currentItems) {
     const mesh = buildItemMesh(rec, ctx);
-    if (mesh) itemsGroup.add(mesh);
+    if (!mesh) continue;
+    if (mesh.userData.mount === 'roof') mesh.visible = !!roofOn;
+    itemsGroup.add(mesh);
   }
   itemsGroup.visible = itemsOn;
   if (solids && M) {
@@ -684,6 +687,12 @@ function setItemsList(items, { soft } = {}) {
   currentItems = cloneItems(items);
   if (activeLayout) activeLayout.items = cloneItems(items);
   refreshItems();
+  try { dispatchEvent(new CustomEvent('peakstead-areas')); } catch {}
+}
+function addItemOp(type, opts = {}) {
+  const rec = makeItem(type, opts);
+  setItemsList([...(currentItems || []), rec]);
+  return rec;
 }
 function highlightSel(sel) {
   if (!highlightGroup) return;
@@ -706,11 +715,23 @@ function highlightSel(sel) {
     if (!room) return;
     addBox(room[3], room[4], room[5], room[6], 0.02, 0.12);
     addBox(room[3] - 0.08, room[4] - 0.08, room[5] + 0.08, room[6] + 0.08, 0.12, 0.2, hlEdge);
+    if (isPorchLike(room)) {
+      const midX = (room[3] + room[5]) / 2, midY = (room[4] + room[6]) / 2;
+      const handles = [
+        ['w', room[3], midY], ['e', room[5], midY], ['n', midX, room[4]], ['s', midX, room[6]],
+      ];
+      for (const [edge, x, y] of handles) {
+        const m = addBox(x - 0.35, y - 0.35, x + 0.35, y + 0.35, 0.15, 1.15, hlEdge);
+        m.userData.resizeEdge = edge;
+        m.userData.resizeRoom = sel.index;
+      }
+    }
   } else if (sel.kind === 'wall') {
     const w = (M.walls[sel.wallKind] || [])[sel.index];
     if (!w) return;
-    const t = 0.28;
-    addBox(w[0] - t, w[1] - t, w[2] + t, w[3] + t, 0, 4.2);
+    const t = sel.hover ? 0.18 : 0.28;
+    const h = sel.hover ? 3.2 : 4.2;
+    addBox(w[0] - t, w[1] - t, w[2] + t, w[3] + t, 0, h, sel.hover ? hlEdge : hlMat);
   }
 }
 function patchRoomOp(index, patch) {
@@ -721,6 +742,16 @@ function patchRoomOp(index, patch) {
   if (patch.floor != null) room[2] = patch.floor;
   if (patch.w != null) room[5] = room[3] + Math.max(3, +patch.w);
   if (patch.d != null) room[6] = room[4] + Math.max(3, +patch.d);
+  if (Array.isArray(patch.resizeTo) && patch.resizeTo.length === 4 && patch.resizeTo.every(Number.isFinite)) {
+    const [a, b, c, d] = patch.resizeTo;
+    const x0 = Math.min(a, c), y0 = Math.min(b, d), x1 = Math.max(a, c), y1 = Math.max(b, d);
+    if (x1 - x0 >= 3 && y1 - y0 >= 3) {
+      room[3] = x0; room[4] = y0; room[5] = x1; room[6] = y1;
+    }
+  }
+  if (patch.w != null || patch.d != null || patch.resizeTo) {
+    room[1] = `${Math.round((room[5] - room[3]) * 10) / 10}' x ${Math.round((room[6] - room[4]) * 10) / 10}'`;
+  }
   let dx = patch.dx || 0, dy = patch.dy || 0;
   if (patch.x0 != null && patch.move) dx = +patch.x0 - before[3];
   if (patch.y0 != null && patch.move) dy = +patch.y0 - before[4];
@@ -733,8 +764,51 @@ function patchRoomOp(index, patch) {
     }
     for (const { w } of wallsOnRoom(M.walls, before)) translateSeg(w, dx, dy);
   }
+  if (room[5] !== before[5] || room[6] !== before[6] || room[3] !== before[3] || room[4] !== before[4]) {
+    syncPorchGeometry(before, room);
+  }
   if (!patch.soft) rebuildPlan();
   else { captureLayout(); refreshItems(); syncAreaUi(M); }
+}
+
+function roofOverlapsRoom(rf, room, slack = 1.25) {
+  if (!rf) return false;
+  const ax0 = Math.min(rf.x0, rf.x1) - slack, ay0 = Math.min(rf.y0, rf.y1) - slack;
+  const ax1 = Math.max(rf.x0, rf.x1) + slack, ay1 = Math.max(rf.y0, rf.y1) + slack;
+  const bx0 = Math.min(room[3], room[5]), by0 = Math.min(room[4], room[6]);
+  const bx1 = Math.max(room[3], room[5]), by1 = Math.max(room[4], room[6]);
+  return ax0 < bx1 && ax1 > bx0 && ay0 < by1 && ay1 > by0;
+}
+
+function syncPorchGeometry(before, after) {
+  const dx0 = after[3] - before[3], dy0 = after[4] - before[4];
+  const dx1 = after[5] - before[5], dy1 = after[6] - before[6];
+  const tol = 1.6;
+  for (const rf of (M.roofs || [])) {
+    if (!roofOverlapsRoom(rf, before, 1.4)) continue;
+    if (Math.abs(rf.x0 - before[3]) < tol) rf.x0 += dx0;
+    if (Math.abs(rf.y0 - before[4]) < tol) rf.y0 += dy0;
+    if (Math.abs(rf.x1 - before[5]) < tol) rf.x1 += dx1;
+    if (Math.abs(rf.y1 - before[6]) < tol) rf.y1 += dy1;
+  }
+  // Resize (not just translate) walls that sat on a moved edge.
+  if (dx0 || dy0 || dx1 || dy1) {
+    for (const { w } of wallsOnRoom(M.walls, before, 0.75)) {
+      const mx = (w[0] + w[2]) / 2, my = (w[1] + w[3]) / 2;
+      const horiz = Math.abs(w[2] - w[0]) >= Math.abs(w[3] - w[1]);
+      if (horiz) {
+        if (Math.abs(my - before[4]) < 0.75) { w[1] += dy0; w[3] += dy0; }
+        else if (Math.abs(my - before[6]) < 0.75) { w[1] += dy1; w[3] += dy1; }
+        if (Math.abs(w[0] - before[3]) < 0.9) w[0] += dx0;
+        if (Math.abs(w[2] - before[5]) < 0.9) w[2] += dx1;
+      } else {
+        if (Math.abs(mx - before[3]) < 0.75) { w[0] += dx0; w[2] += dx0; }
+        else if (Math.abs(mx - before[5]) < 0.75) { w[0] += dx1; w[2] += dx1; }
+        if (Math.abs(w[1] - before[4]) < 0.9) w[1] += dy0;
+        if (Math.abs(w[3] - before[6]) < 0.9) w[3] += dy1;
+      }
+    }
+  }
 }
 function removeRoomOp(index) {
   const room = M.rooms[index];
@@ -789,6 +863,58 @@ function addRoomOp(x0, y0, w, d) {
   rebuildPlan();
   return M.rooms.length - 1;
 }
+
+function addPorchPosts(kit, model) {
+  if (!kit || typeof kit.block !== 'function') return;
+  const rooms = model.rooms || [];
+  const post = (x, y, h = 8.2) => kit.block(x - 0.28, y - 0.28, x + 0.28, y + 0.28, 0, h, '#d8c8a8', { solid: true });
+  const shared = (room, side) => {
+    for (const o of rooms) {
+      if (o === room || (o[7] && o[7].outside)) continue;
+      const ox0 = o[3], oy0 = o[4], ox1 = o[5], oy1 = o[6];
+      if (side === 'n' && Math.abs(room[4] - oy1) < 0.7) {
+        if (Math.min(room[5], ox1) - Math.max(room[3], ox0) > 1) return true;
+      }
+      if (side === 's' && Math.abs(room[6] - oy0) < 0.7) {
+        if (Math.min(room[5], ox1) - Math.max(room[3], ox0) > 1) return true;
+      }
+      if (side === 'w' && Math.abs(room[3] - ox1) < 0.7) {
+        if (Math.min(room[6], oy1) - Math.max(room[4], oy0) > 1) return true;
+      }
+      if (side === 'e' && Math.abs(room[5] - ox0) < 0.7) {
+        if (Math.min(room[6], oy1) - Math.max(room[4], oy0) > 1) return true;
+      }
+    }
+    return false;
+  };
+  for (const r of rooms) {
+    if (!isCoveredPorch(r)) continue;
+    const x0 = r[3], y0 = r[4], x1 = r[5], y1 = r[6];
+    const inset = 0.45;
+    const pts = [];
+    const addLine = (ax, ay, bx, by) => {
+      const len = Math.hypot(bx - ax, by - ay);
+      const n = Math.max(2, Math.round(len / 8.5) + 1);
+      for (let i = 0; i < n; i++) {
+        const t = n === 1 ? 0.5 : i / (n - 1);
+        pts.push([ax + (bx - ax) * t, ay + (by - ay) * t]);
+      }
+    };
+    if (!shared(r, 'n')) addLine(x0 + inset, y0 + inset, x1 - inset, y0 + inset);
+    if (!shared(r, 's')) addLine(x0 + inset, y1 - inset, x1 - inset, y1 - inset);
+    if (!shared(r, 'w')) addLine(x0 + inset, y0 + inset, x0 + inset, y1 - inset);
+    if (!shared(r, 'e')) addLine(x1 - inset, y0 + inset, x1 - inset, y1 - inset);
+    // corners always if any free edge
+    const seen = new Set();
+    for (const [x, y] of pts) {
+      const key = x.toFixed(2) + ',' + y.toFixed(2);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      post(x, y);
+    }
+  }
+}
+
 function addDoorwayOp(kind, index) {
   const w = (M.walls[kind] || [])[index];
   if (!w) return;
@@ -846,6 +972,51 @@ async function saveLayoutRemote(layout) {
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.error || 'Could not save layout');
 }
+
+function hitRoof(ndc) {
+  if (!roof || !roof.visible) return null;
+  const rc = new THREE.Raycaster();
+  rc.setFromCamera(ndc, camera);
+  const hits = rc.intersectObjects(roof.children, true);
+  const hit = hits.find((h) => {
+    let o = h.object;
+    while (o) {
+      if (o.userData && o.userData.roofSurface) return true;
+      o = o.parent;
+    }
+    return false;
+  }) || hits[0];
+  if (!hit) return null;
+  let spec = null, obj = hit.object;
+  while (obj) {
+    if (obj.userData && obj.userData.roofSpec) { spec = obj.userData.roofSpec; break; }
+    obj = obj.parent;
+  }
+  const n = hit.face && hit.object ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : new THREE.Vector3(0, 1, 0);
+  const pitch = Math.max(0, Math.min(70, (Math.acos(Math.min(1, Math.max(-1, n.y))) * 180) / Math.PI));
+  const along = Math.abs(n.x) > Math.abs(n.z) ? 'y' : 'x';
+  return { point: hit.point.clone(), normal: n, pitch, along, spec };
+}
+
+function captureThumb({ width = 1000, height = 625 } = {}) {
+  if (!renderer) return Promise.reject(new Error('No renderer'));
+  const prevW = canvas.width, prevH = canvas.height;
+  // Capture the current view into a cropped JPEG.
+  renderer.render(scene, camera);
+  const src = renderer.domElement;
+  const out = document.createElement('canvas');
+  out.width = width;
+  out.height = height;
+  const ctx = out.getContext('2d');
+  const sw = src.width, sh = src.height;
+  const scale = Math.max(width / sw, height / sh);
+  const dw = sw * scale, dh = sh * scale;
+  ctx.drawImage(src, (width - dw) / 2, (height - dh) / 2, dw, dh);
+  return new Promise((resolve, reject) => {
+    out.toBlob((b) => b ? resolve(b) : reject(new Error('Could not capture thumbnail')), 'image/jpeg', 0.86);
+  });
+}
+
 function ensureEditor() {
   mountPlanEditor({
     canvas,
@@ -886,6 +1057,13 @@ function ensureEditor() {
     rebuildPlan,
     getAreas: () => M ? modelAreas(M) : { heated: 0, garage: 0, porch: 0 },
     getBuildType: () => M?.buildType || 'home',
+    getRoofs: () => M?.roofs || [],
+    roofGroup: () => roof,
+    highlightGroup: () => highlightGroup,
+    renderer: () => renderer,
+    scene: () => scene,
+    captureThumb,
+    hitRoof,
   });
 }
 
@@ -1222,6 +1400,17 @@ function buildModel(model, opts = {}) {
   highlightGroup = new THREE.Group(); highlightGroup.name = 'highlight'; highlightGroup.renderOrder = 2; root.add(highlightGroup);
   const detected = {};
   installFurniture(kit, { rooms: M.rooms, WS, detected, Wx, Wz, itemsGroup, ceiling: H });
+  const _kitBlock = kit.block ? kit.block.bind(kit) : null;
+  if (_kitBlock) {
+    kit.block = (a, b, c, d, z0, z1, color, opts) => {
+      const w = Math.abs(c - a), dep = Math.abs(d - b), h = (z1 || 0) - (z0 || 0);
+      const cx = (a + c) / 2, cy = (b + d) / 2;
+      if (h >= 6 && w <= 1.25 && dep <= 1.25 && (M.rooms || []).some((r) => isCoveredPorch(r) && cx >= r[3] && cx <= r[5] && cy >= r[4] && cy <= r[6])) {
+        return;
+      }
+      return _kitBlock(a, b, c, d, z0, z1, color, opts);
+    };
+  }
   if (typeof M.furnish === 'function') M.furnish(kit);
   else if (Array.isArray(M.furnish)) { // JSON models: a list of [method, ...args] calls on the kit
     for (const op of M.furnish) {
@@ -1230,6 +1419,7 @@ function buildModel(model, opts = {}) {
       try { kit[op[0]](...args); } catch (e) { console.warn('skipped furnish op', op, e); }
     }
   }
+  addPorchPosts(kit, M);
   if (currentStyle === 'english-country') applyEnglishCountry(kit, st, H, WS);
   // Convert leftover wall-counter slabs into detailed items, then auto-furnish (or restore saved items).
   const fromCounters = [];
@@ -1245,9 +1435,14 @@ function buildModel(model, opts = {}) {
     auto = auto.filter(it => it.type !== 'island' && it.type !== 'counter' && it.type !== 'barstool');
   }
   defaultItems = [...auto, ...(detected.counters || []), ...fromCounters, ...(detected.placed || [])];
+  if (Array.isArray(M.placedItems) && M.placedItems.length) {
+    for (const raw of M.placedItems) {
+      try { defaultItems.push(makeItem(raw.type, raw)); } catch (e) { console.warn('skipped placed item', raw, e); }
+    }
+  }
   if (layout?.items) currentItems = cloneItems(layout.items);
   else currentItems = cloneItems(defaultItems);
-  activeLayout = { version: 1, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls) };
+  activeLayout = { version: 1, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs) };
   refreshItems();
   ensureEditor();
   syncAreaUi(M);
@@ -1274,7 +1469,7 @@ function buildModel(model, opts = {}) {
       }
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); g.computeVertexNormals();
-      const top = new THREE.Mesh(g, roofTop); top.castShadow = true; top.receiveShadow = true;
+      const top = new THREE.Mesh(g, roofTop); top.castShadow = true; top.receiveShadow = true; top.userData.roofSurface = true; top.userData.roofSpec = rf;
       roof.add(top, new THREE.Mesh(g, roofUnder));
       continue;
     }
@@ -1302,7 +1497,7 @@ function buildModel(model, opts = {}) {
     quad(P(a[1], b[0], eaveB), P(a[1], b[1], eaveB), P(mid, b[1], ridge), P(mid, b[0], ridge));
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); g.computeVertexNormals();
-    const top = new THREE.Mesh(g, roofTop); top.castShadow = true; top.receiveShadow = true;
+    const top = new THREE.Mesh(g, roofTop); top.castShadow = true; top.receiveShadow = true; top.userData.roofSurface = true; top.userData.roofSpec = rf;
     const under = new THREE.Mesh(g, roofUnder);
     roof.add(top, under);
     // gable end triangles (A-frame: full-height from the floor; otherwise sit on the wall eave)
@@ -1481,7 +1676,14 @@ function setMode(m, instant = false) {
     if (isTouch) $('pad').style.display = 'grid'; else $('walkmsg').style.display = 'block';
   }
 }
-function setRoof(v) { roofOn = v; if (roof) roof.visible = v; if (ceilings) ceilings.visible = v; setBtn('bRoof', v); if (v && cutOn) setCut(false); }
+function setRoof(v) {
+  roofOn = v;
+  if (roof) roof.visible = v;
+  if (ceilings) ceilings.visible = v;
+  if (itemsGroup) itemsGroup.traverse((o) => { if (o.userData && o.userData.mount === 'roof') o.visible = !!v; });
+  setBtn('bRoof', v);
+  if (v && cutOn) setCut(false);
+}
 function setLabels(v) { labelsOn = v; if (labels) { labels.visible = v; labels.children.forEach(o => { o.visible = v; }); } setBtn('bLabels', v); }
 function setCut(v) { cutOn = v; if (wallsCut) { wallsCut.visible = v; wallsFull.visible = !v; } setBtn('bCut', v); if (v && roofOn) setRoof(false); }
 function setPlan(v) { planOn = v; if (planOverlay) planOverlay.visible = v; setBtn('bPlan', v); }
@@ -1900,6 +2102,7 @@ window.app = {
   planToWorld: (fx, fy) => [Wx(fx), Wz(fy)],
   getRooms: () => M?.rooms || [],
   getItems: () => currentItems,
+  addItem: addItemOp,
   lookAtPlan: (fx, fy, dist = 22, height = 9) => {
     const wx = Wx(fx), wz = Wz(fy);
     orbit.target.set(wx, 1.4, wz);
@@ -1909,6 +2112,8 @@ window.app = {
   lookTop: lookTopSafe,
   getAreas: () => M ? modelAreas(M) : { heated: 0, garage: 0, porch: 0 },
   getBuildType: () => M?.buildType || 'home',
+  getRoofs: () => M?.roofs || [],
+  captureThumb,
   rebuildPlan,
 };
 if (SRC.kind === 'example') await loadExample(params.get('ex') || REGISTRY[0].id);

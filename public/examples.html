@@ -27,6 +27,7 @@ import { mountSponsors } from '/js/sponsors.js';
 import REGISTRY from '/3d/models/registry.js';
 import { areasForExample } from '/js/example-areas.js';
 import { loadPrefs, savePrefs, estimateBuild, renderZipTierBar, estimatePillHtml } from '/js/cost-estimator.js';
+import { exampleThumbSources, bindThumbImg } from '/js/plan-thumb.js';
 
 const params = new URLSearchParams(location.search);
 let { user, byId } = await savedExampleMap();
@@ -104,10 +105,11 @@ function renderList() {
     card.dataset.id = r.id;
     const typeLabel = (BUILD_TYPES.find(t => t.id === (r.type || 'home')) || {}).label || '';
     const est = exampleEstimate(r.id, r.type || 'home');
-    card.innerHTML = `${favButtonHtml({ on: isExampleFavorite(r.id), className: 'fav-btn p-fav' })}<a class="ex-body" href="/viewer?ex=${esc(r.id)}"><div class="thumb"><img loading="lazy" alt="" src="/img/${esc(r.id)}.jpg"></div><div class="title">${esc(r.name)}</div><div class="ex-tagline">${esc(r.tagline || r.blurb || '')}</div></a><div class="ex-actions"><a class="badge acc" href="/viewer?ex=${esc(r.id)}">Open in 3D</a><span class="badge">${esc(typeLabel)}</span>${estimatePillHtml(est)}<span class="spacer"></span><span class="save-slot"></span></div>`;
+    card.innerHTML = `${favButtonHtml({ on: isExampleFavorite(r.id), className: 'fav-btn p-fav' })}<a class="ex-body" href="/viewer?ex=${esc(r.id)}"><div class="thumb"><img loading="lazy" alt="${esc(r.name)}" data-thumb="1"></div><div class="title">${esc(r.name)}</div><div class="ex-tagline">${esc(r.tagline || r.blurb || '')}</div></a><div class="ex-actions"><a class="badge acc" href="/viewer?ex=${esc(r.id)}">Open in 3D</a><span class="badge">${esc(typeLabel)}</span>${estimatePillHtml(est)}<span class="spacer"></span><span class="save-slot"></span></div>`;
     const slot = card.querySelector('.save-slot');
     controls.set(r.id, slot);
     list.appendChild(card);
+    bindThumbImg(card.querySelector('img[data-thumb]'), exampleThumbSources(r.id, r.name));
     paint(r.id);
   }
 }

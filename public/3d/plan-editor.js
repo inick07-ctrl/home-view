@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import {
   CATALOG, CATEGORIES, FINISHES, makeItem, itemRect, clearanceHit, isHallName,
-  newItemId, roomOfPoint,
+  newItemId, roomOfPoint, isOutdoorItem, isPorchLike, isCoveredPorch,
 } from './furniture.js';
 
 const STORE_PREFIX = 'peakstead-plan-v1:';
@@ -34,6 +34,9 @@ export function cloneRooms(rooms) {
 }
 export function cloneItems(items) {
   return (items || []).map((it) => ({ ...it }));
+}
+export function cloneRoofs(roofs) {
+  return (roofs || []).map((rf) => (rf && typeof rf === 'object' ? { ...rf } : rf)).filter(Boolean);
 }
 
 function wallId(kind, i) { return `${kind}-${i}`; }
@@ -87,8 +90,17 @@ export function sanitizeLayout(raw) {
     }
     walls = copy;
   }
-  if (!items && !rooms && !walls) return null;
-  return { version: 1, items, rooms, walls };
+  let roofs;
+  if (Array.isArray(raw.roofs)) {
+    roofs = raw.roofs.slice(0, 80).map((rf) => {
+      if (!rf || typeof rf !== 'object') return null;
+      const x0 = +rf.x0, y0 = +rf.y0, x1 = +rf.x1, y1 = +rf.y1;
+      if (![x0, y0, x1, y1].every(Number.isFinite)) return null;
+      return { ...rf, x0, y0, x1, y1 };
+    }).filter(Boolean);
+  }
+  if (!items && !rooms && !walls && !roofs) return null;
+  return { version: 1, items, rooms, walls, roofs };
 }
 
 export function mountPlanEditor(ctrl) {
@@ -126,6 +138,7 @@ export function mountPlanEditor(ctrl) {
       items: cloneItems(ctrl.getItems()),
       rooms: cloneRooms(ctrl.getRooms()),
       walls: cloneWalls(ctrl.getWalls()),
+      roofs: cloneRoofs(ctrl.getRoofs ? ctrl.getRoofs() : []),
     };
   }
   function pushUndo() {
@@ -226,12 +239,39 @@ export function mountPlanEditor(ctrl) {
     ctrl.highlight(null);
     persist();
   }
+  function deleteSelected() {
+    if (!selected || !canEdit()) return;
+    if (selected.kind === 'wall') {
+      pushUndo();
+      ctrl.removeWall(selected.wallKind, selected.index);
+      select(null);
+      persist();
+      render();
+      return;
+    }
+    if (selected.kind === 'item') {
+      pushUndo();
+      ctrl.setItems(ctrl.getItems().filter((x) => x.id !== selected.id));
+      select(null);
+      persist();
+      render();
+      return;
+    }
+  }
   drawer.querySelector('[data-act=undo]').onclick = undoLast;
+
   window.addEventListener('keydown', (ev) => {
     if (!drawer.classList.contains('open') || !canEdit()) return;
+    const typing = ev.target && /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName);
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z' && !ev.shiftKey) {
       ev.preventDefault();
       undoLast();
+      return;
+    }
+    if (typing) return;
+    if ((ev.key === 'Delete' || ev.key === 'Backspace') && selected) {
+      ev.preventDefault();
+      deleteSelected();
     }
   });
   drawer.querySelector('[data-act=reset]').onclick = () => {
@@ -245,7 +285,7 @@ export function mountPlanEditor(ctrl) {
     $('editStatus').textContent = 'Reset to the original layout';
     if (ctrl.src?.kind === 'project' && ctrl.saveRemote) ctrl.saveRemote(null).catch(() => {});
   };
-  drawer.querySelector('[data-act=save]').onclick = () => persist();
+  drawer.querySelector('[data-act=save]').onclick = () => { persist(); if (ctrl.captureThumb && ctrl.src?.kind === 'project') uploadProjectThumb(ctrl).catch(() => {}); };
   drawer.querySelectorAll('#editTabs button').forEach((b) => {
     b.onclick = () => { tab = b.dataset.tab; placing = null; drawingWall = null; render(); };
   });
@@ -269,7 +309,8 @@ export function mountPlanEditor(ctrl) {
     const groups = new Map();
     for (const it of items) {
       const room = roomOfPoint(rooms, it.x, it.y);
-      const g = room ? room[0] : 'Unplaced';
+      const typ = CATALOG[it.type];
+      const g = typ?.outdoor || typ?.category === 'pool' || typ?.category === 'solar' ? 'Yard / lot' : (room ? room[0] : 'Unplaced');
       if (!groups.has(g)) groups.set(g, []);
       groups.get(g).push(it);
     }
@@ -389,7 +430,13 @@ export function mountPlanEditor(ctrl) {
       for (const [id, t] of Object.entries(CATALOG)) {
         if (t.category !== cat) continue;
         const b = el('button', { type: 'button', text: t.name, class: placing === id ? 'primary' : '' });
-        b.onclick = () => { placing = placing === id ? null : id; paintTypes(); $('editHint').textContent = placing ? 'Click the floor in the 3D view to place the ' + t.name.toLowerCase() + '.' : 'Click an item in the list or in the 3D view.'; };
+        b.onclick = () => {
+          placing = placing === id ? null : id;
+          paintTypes();
+          if (!placing) { $('editHint').textContent = 'Click an item in the list or in the 3D view.'; return; }
+          const mount = t.mount === 'roof' ? 'Click a roof plane in the 3D view to snap the ' + t.name.toLowerCase() + ' to the pitch.' : (t.outdoor || t.category === 'pool' || t.category === 'solar' ? 'Click the lawn or lot to place the ' + t.name.toLowerCase() + '.' : 'Click the floor in the 3D view to place the ' + t.name.toLowerCase() + '.');
+          $('editHint').textContent = mount;
+        };
         types.appendChild(b);
       }
     };
@@ -408,7 +455,7 @@ export function mountPlanEditor(ctrl) {
     const it = items.find((x) => x.id === id);
     if (!it) return;
     const next = { ...it, ...patch };
-    const hit = clearanceHit(itemRect(next), ctrl.getRooms(), ctrl.getWalls(), 0.05);
+    const hit = isOutdoorItem(it.type) ? null : clearanceHit(itemRect(next), ctrl.getRooms(), ctrl.getWalls(), 0.05);
     showClearance(!!hit, hit?.kind);
     if (hit && (patch.x != null || patch.y != null || patch.rot != null || patch.w != null || patch.d != null)) {
       // still allow, but warn — user asked for live feedback; block only on hallway/doorway
@@ -424,7 +471,7 @@ export function mountPlanEditor(ctrl) {
 
   function renderRooms(body) {
     const rooms = ctrl.getRooms();
-    body.appendChild(el('p', { id: 'editHint', text: canEdit() ? 'Click any room in 3D and drag to move it. Resize, rename, or nudge it here — furniture and walls inside the room come along.' : 'View only.' }));
+    body.appendChild(el('p', { id: 'editHint', text: canEdit() ? 'Click any room in 3D and drag to move it. Porches, patios, and decks also have edge handles so you can shorten or extend them. Resize, rename, or nudge here — furniture, walls, and porch roofs come along.' : 'View only.' }));
     const list = el('div', { id: 'editList' });
     rooms.forEach((r, i) => {
       if (r[7]?.noLabel && !r[0]) return;
@@ -513,7 +560,7 @@ export function mountPlanEditor(ctrl) {
 
   function renderWalls(body) {
     const WS = ctrl.getWalls();
-    body.appendChild(el('p', { id: 'editHint', text: canEdit() ? 'Select a wall to cut a doorway, move it, or remove it. Add a wall, then click two points on the floor.' : 'View only.' }));
+    body.appendChild(el('p', { id: 'editHint', text: canEdit() ? 'Click a wall in 3D to select it (hover highlights it). Press Delete or use Remove wall. Add a wall, then click two points on the floor.' : 'View only.' }));
     const list = el('div', { id: 'editList' });
     const addKind = (kind, label) => {
       (WS[kind] || []).forEach((w, i) => {
@@ -557,7 +604,7 @@ export function mountPlanEditor(ctrl) {
     const acts = el('div', { class: 'row' });
     const door = el('button', { type: 'button', text: 'Add doorway' });
     door.onclick = () => { pushUndo(); ctrl.addDoorway(kind, index); persist(); render(); };
-    const del = el('button', { type: 'button', class: 'danger', text: 'Remove / cut out wall' });
+    const del = el('button', { type: 'button', class: 'danger', text: 'Remove wall' });
     del.onclick = () => {
       pushUndo();
       ctrl.removeWall(kind, index);
@@ -638,19 +685,59 @@ export function mountPlanEditor(ctrl) {
       }
       return;
     }
-    if (placing && placing[0] !== '_' && at.kind === 'floor') {
-      ev.preventDefault(); ev.stopPropagation();
-      const t = CATALOG[placing];
-      const rec = makeItem(placing, { x: at.x, y: at.y, rot: 0 });
-      const hitC = t.category === 'garage' ? null : clearanceHit(itemRect(rec), ctrl.getRooms(), ctrl.getWalls(), 0.05);
-      showClearance(!!hitC, hitC?.kind);
-      if (hitC) return;
-      pushUndo();
-      ctrl.setItems([...ctrl.getItems(), rec]);
-      placing = null;
-      select({ kind: 'item', id: rec.id });
-      persist();
-      return;
+    if (placing && placing[0] !== '_') {
+      const typ = CATALOG[placing];
+      if (typ?.mount === 'roof') {
+        const recNdc = new THREE.Vector2();
+        const box = canvas.getBoundingClientRect();
+        recNdc.x = ((ev.clientX - box.left) / box.width) * 2 - 1;
+        recNdc.y = -((ev.clientY - box.top) / box.height) * 2 + 1;
+        const rh = ctrl.hitRoof?.(recNdc);
+        if (!rh) {
+          ev.preventDefault(); ev.stopPropagation();
+          if ($('editHint')) $('editHint').textContent = 'Click a roof plane to place the ' + typ.name.toLowerCase() + '.';
+          return;
+        }
+        ev.preventDefault(); ev.stopPropagation();
+        pushUndo();
+        const rec = makeItem(placing, {
+          x: rh.point.x + ctrl.CX(), y: rh.point.z + ctrl.CZ(), z: rh.point.y,
+          pitch: rh.pitch, along: rh.along, rot: 0,
+        });
+        ctrl.setItems([...ctrl.getItems(), rec]);
+        placing = null;
+        select({ kind: 'item', id: rec.id });
+        persist();
+        return;
+      }
+      if (at.kind === 'floor' || typ?.outdoor) {
+        const x = at.x, y = at.y;
+        if (x == null) return;
+        ev.preventDefault(); ev.stopPropagation();
+        const rec = makeItem(placing, { x, y, rot: 0 });
+        const hitC = isOutdoorItem(placing) ? null : clearanceHit(itemRect(rec), ctrl.getRooms(), ctrl.getWalls(), 0.05);
+        showClearance(!!hitC, hitC?.kind);
+        if (hitC) return;
+        pushUndo();
+        ctrl.setItems([...ctrl.getItems(), rec]);
+        placing = null;
+        select({ kind: 'item', id: rec.id });
+        persist();
+        return;
+      }
+    }
+    if (!placing) {
+      const handle = hitResizeHandle(ev);
+      if (handle) {
+        ev.preventDefault(); ev.stopPropagation();
+        try { ev.target.setPointerCapture?.(ev.pointerId); } catch {}
+        const r = ctrl.getRooms()[handle.room];
+        tab = 'rooms';
+        select({ kind: 'room', index: handle.room });
+        dragging = { resize: handle.room, edge: handle.edge, startX: at.x, startY: at.y, origin: [r[3], r[4], r[5], r[6]], start: currentLayout() };
+        ctrl.setOrbitEnabled?.(false);
+        return;
+      }
     }
     if (at.kind === 'item') {
       ev.preventDefault(); ev.stopPropagation();
@@ -663,7 +750,15 @@ export function mountPlanEditor(ctrl) {
     }
     if (at.kind === 'floor') {
       const rooms = ctrl.getRooms();
-      const room = roomOfPoint(rooms, at.x, at.y);
+      const wallMax = tab === 'walls' ? 1.8 : 0.65;
+      const found = !placing ? nearestWall(at.x, at.y, wallMax) : null;
+      const room = roomAtPlan(rooms, at.x, at.y);
+      if (found && (tab === 'walls' || !room)) {
+        ev.preventDefault(); ev.stopPropagation();
+        if (tab !== 'walls') tab = 'walls';
+        select(found);
+        return;
+      }
       if (room && !placing) {
         ev.preventDefault(); ev.stopPropagation();
         try { ev.target.setPointerCapture?.(ev.pointerId); } catch {}
@@ -675,24 +770,32 @@ export function mountPlanEditor(ctrl) {
         ctrl.setOrbitEnabled?.(false);
         return;
       }
-      if (tab === 'walls') {
-        const found = nearestWall(at.x, at.y);
-        if (found) {
-          ev.preventDefault(); ev.stopPropagation();
-          select(found);
-        }
+      if (found) {
+        ev.preventDefault(); ev.stopPropagation();
+        if (tab !== 'walls') tab = 'walls';
+        select(found);
       }
     }
   }, true);
 
   canvas.addEventListener('pointermove', (ev) => {
     if (!dragging) {
-      if (placing && drawer.classList.contains('open')) {
-        const at = eventToPlan(ev);
-        if (at?.kind === 'floor' && placing[0] !== '_') {
-          const rec = makeItem(placing, { x: at.x, y: at.y });
-          const hitC = clearanceHit(itemRect(rec), ctrl.getRooms(), ctrl.getWalls(), 0.05);
-          showClearance(!!hitC, hitC?.kind);
+      if (drawer.classList.contains('open') && canEdit()) {
+        if (placing && placing[0] !== '_') {
+          const at = eventToPlan(ev);
+          if (at?.kind === 'floor') {
+            const rec = makeItem(placing, { x: at.x, y: at.y });
+            const hitC = isOutdoorItem(placing) ? null : clearanceHit(itemRect(rec), ctrl.getRooms(), ctrl.getWalls(), 0.05);
+            showClearance(!!hitC, hitC?.kind);
+          }
+        } else if (tab === 'walls') {
+          const at = eventToPlan(ev);
+          const w = at && at.x != null ? nearestWall(at.x, at.y, 1.8) : null;
+          if (w) {
+            const isSel = selected?.kind === 'wall' && selected.wallKind === w.wallKind && selected.index === w.index;
+            ctrl.highlight(isSel ? selected : { ...w, hover: true });
+          } else if (selected?.kind === 'wall') ctrl.highlight(selected);
+          else ctrl.highlight(null);
         }
       }
       return;
@@ -710,11 +813,24 @@ export function mountPlanEditor(ctrl) {
       it.x = plan.x;
       it.y = plan.y;
       const typ = CATALOG[it.type];
-      const hitC = typ?.category === 'garage' ? null : clearanceHit(itemRect(it), ctrl.getRooms(), ctrl.getWalls(), 0.05);
+      const hitC = typ && isOutdoorItem(it.type) ? null : clearanceHit(itemRect(it), ctrl.getRooms(), ctrl.getWalls(), 0.05);
       showClearance(!!hitC, hitC?.kind);
       if (hitC) return;
       ctrl.setItems(items, { soft: true });
       ctrl.highlight({ kind: 'item', id: it.id });
+    } else if (dragging.resize != null) {
+      const o = dragging.origin;
+      let x0 = o[0], y0 = o[1], x1 = o[2], y1 = o[3];
+      const min = 3;
+      if (dragging.edge === 'w') x0 = Math.min(snapFt(plan.x), x1 - min);
+      if (dragging.edge === 'e') x1 = Math.max(snapFt(plan.x), x0 + min);
+      if (dragging.edge === 'n') y0 = Math.min(snapFt(plan.y), y1 - min);
+      if (dragging.edge === 's') y1 = Math.max(snapFt(plan.y), y0 + min);
+      const cur = ctrl.getRooms()[dragging.resize];
+      if (cur && (cur[3] !== x0 || cur[4] !== y0 || cur[5] !== x1 || cur[6] !== y1)) {
+        ctrl.patchRoom(dragging.resize, { resizeTo: [x0, y0, x1, y1], soft: true });
+      }
+      ctrl.highlight({ kind: 'room', index: dragging.resize });
     } else if (dragging.room != null) {
       const rooms = ctrl.getRooms();
       const [dx, dy] = snapRoomDelta(dragging.origin, plan.x - dragging.startX, plan.y - dragging.startY, rooms, dragging.room);
@@ -735,7 +851,7 @@ export function mountPlanEditor(ctrl) {
       undo.push(moved);
       if (undo.length > 40) undo.shift();
     }
-    const wasRoom = dragging.room != null;
+    const wasRoom = dragging.room != null || dragging.resize != null;
     dragging = null;
     ctrl.setOrbitEnabled?.(true);
     if (wasRoom) ctrl.rebuildPlan?.();
@@ -771,7 +887,37 @@ export function mountPlanEditor(ctrl) {
     }
     return [snapFt(x0 + adjX) - origin[0], snapFt(y0 + adjY) - origin[1]];
   }
+  function roomAtPlan(rooms, x, y) {
+    let outdoor = null;
+    for (const r of rooms || []) {
+      if (x >= r[3] && x <= r[5] && y >= r[4] && y <= r[6]) {
+        if ((r[7] && r[7].outside) || isPorchLike(r)) outdoor = r;
+        else return r;
+      }
+    }
+    return outdoor;
+  }
+  function hitResizeHandle(ev) {
+    const group = ctrl.highlightGroup?.();
+    if (!group || !group.children.length) return null;
+    const box = canvas.getBoundingClientRect();
+    ndc.x = ((ev.clientX - box.left) / box.width) * 2 - 1;
+    ndc.y = -((ev.clientY - box.top) / box.height) * 2 + 1;
+    raycaster.setFromCamera(ndc, ctrl.camera);
+    const hits = raycaster.intersectObjects(group.children, true);
+    for (const h of hits) {
+      let o = h.object;
+      while (o) {
+        if (o.userData && o.userData.resizeEdge != null) {
+          return { edge: o.userData.resizeEdge, room: o.userData.resizeRoom };
+        }
+        o = o.parent;
+      }
+    }
+    return null;
+  }
   function nearestWall(x, y, max = 1.2) {
+
     const WS = ctrl.getWalls();
     let best = null, bestD = max;
     for (const kind of ['int', 'ext']) {
@@ -840,4 +986,30 @@ function buildDrawer() {
   );
   d.append(header, tabs, el('div', { id: 'editBody' }), el('div', { id: 'editStatus', text: '' }));
   return d;
+}
+
+
+async function uploadProjectThumb(ctrl) {
+  if (!ctrl?.captureThumb || ctrl.src?.kind !== 'project' || !ctrl.src.id) return;
+  try {
+    const { upload } = await import('/js/blob-client.js');
+    const { me, api } = await import('/js/common.js');
+    const user = await me();
+    if (!user) return;
+    const blob = await ctrl.captureThumb();
+    if (!blob) return;
+    const file = new File([blob], 'thumb.jpg', { type: 'image/jpeg' });
+    const up = await upload(`files/${user.id}/${ctrl.src.id}/thumb.jpg`, file, {
+      access: 'private',
+      handleUploadUrl: '/api/upload',
+      clientPayload: JSON.stringify({ pid: ctrl.src.id, kind: 'thumb' }),
+      contentType: 'image/jpeg',
+    });
+    await api('projects/' + encodeURIComponent(ctrl.src.id) + '/files', {
+      method: 'POST',
+      body: { pathname: up.pathname, name: 'thumb.jpg', kind: 'thumb' },
+    });
+  } catch (e) {
+    console.warn('Could not save project thumbnail', e);
+  }
 }

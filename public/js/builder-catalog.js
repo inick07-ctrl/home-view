@@ -52,6 +52,14 @@ export const ROOM_TYPES = [
     sizes: { compact: [4, 12], large: [4, 20] } },
   { id: 'porch', name: 'Covered Porch', group: 'Connect', floor: 'porch', color: '#c9b897', outside: true,
     sizes: { compact: [16, 8], large: [24, 10] } },
+  { id: 'patio', name: 'Patio / Deck', group: 'Connect', floor: 'terrace', color: '#b9a890', outside: true,
+    sizes: { compact: [12, 10], medium: [16, 12], large: [24, 14] } },
+  { id: 'pool', name: 'Pool', group: 'Yard', floor: 'water', color: '#3a7ca5', outside: true, feature: 'pool',
+    sizes: { plunge: [12, 8], small: [24, 12], medium: [32, 16], large: [40, 20], kidney: [32, 16], spa: [8, 8] } },
+  { id: 'solar-ground', name: 'Ground solar array', group: 'Yard', floor: 'concrete', color: '#1e2a38', outside: true, feature: 'solar-ground',
+    sizes: { '8-panel': [20, 10], '12-panel': [24, 12], '20-panel': [34, 14] } },
+  { id: 'solar-roof', name: 'Roof solar array', group: 'Yard', floor: 'concrete', color: '#243044', outside: true, feature: 'solar-roof',
+    sizes: { '6-panel': [18, 8], '12-panel': [24, 12], '20-panel': [28, 14], '30-panel': [34, 16] } },
 ];
 
 export const TYPE_BY_ID = Object.fromEntries(ROOM_TYPES.map((t) => [t.id, t]));
@@ -151,6 +159,7 @@ export function starterParts() {
     newBlock('bathroom', 'medium', 13, STAGING_TOP + 2, { staging: true }),
     newBlock('hallway', 'compact', 21, STAGING_TOP + 2, { staging: true }),
     newBlock('porch', 'compact', 27, STAGING_TOP + 4, { staging: true }),
+    newBlock('patio', 'compact', 46, STAGING_TOP + 4, { staging: true }),
   ];
 }
 
@@ -304,16 +313,42 @@ function preferredFront(block, sides) {
 export function compileModel(allBlocks, meta = {}) {
   const blocks = allBlocks.filter(onLot);
   const walls = makeWalls();
-  const adj = findAdjacencies(blocks);
+    const adj = findAdjacencies(blocks.filter((b) => !(TYPE_BY_ID[b.type] || {}).feature));
   const rooms = [];
   const slabs = [];
   const ceilings = [];
   const furnish = [];
+  const placedItems = [];
   const wallH = meta.wallH || 9;
+
+  const featureType = (b) => (TYPE_BY_ID[b.type] || {}).feature || null;
+  const poolSizeToItem = (b) => {
+    const map = { plunge: 'poolPlunge', small: 'poolSmall', medium: 'poolMedium', large: 'poolLarge', kidney: 'poolKidney', spa: 'hotTub' };
+    return map[b.sizeKey] || 'poolMedium';
+  };
+  const solarSizeToItem = (b, ground) => {
+    const n = parseInt(b.sizeKey, 10) || (ground ? 12 : 12);
+    if (ground) return n >= 20 ? 'solarGround20' : n >= 12 ? 'solarGround12' : 'solarGround8';
+    return n >= 30 ? 'solarRoof30' : n >= 20 ? 'solarRoof20' : n >= 12 ? 'solarRoof12' : 'solarRoof6';
+  };
 
   for (const b of blocks) {
     const t = TYPE_BY_ID[b.type] || {};
-    const outside = !!t.outside || /porch/i.test(b.name);
+    if (t.feature) {
+      const item = {
+        type: t.feature === 'pool' ? poolSizeToItem(b) : solarSizeToItem(b, t.feature === 'solar-ground'),
+        x: b.x + b.w / 2,
+        y: b.y + b.d / 2,
+        w: b.w,
+        d: b.d,
+        rot: b.rot || 0,
+      };
+      if (t.feature === 'pool' && b.sizeKey === 'kidney') item.variant = 'kidney';
+      if (t.feature === 'pool' && b.sizeKey === 'spa') item.variant = 'spa';
+      placedItems.push(item);
+      continue;
+    }
+    const outside = !!t.outside || /porch|patio|deck/i.test(b.name);
     const vaulted = /living|family/i.test(b.name) && Math.max(b.w, b.d) >= 16;
     const opts = { };
     if (outside) opts.outside = true;
@@ -330,6 +365,7 @@ export function compileModel(allBlocks, meta = {}) {
 
   for (const b of blocks) {
     const t = TYPE_BY_ID[b.type] || {};
+    if (t.feature) continue;
     const outside = !!t.outside;
     const sides = edgeOpenings(b, adj);
     const edges = {
@@ -348,6 +384,7 @@ export function compileModel(allBlocks, meta = {}) {
           emittedOpen.add(key);
           const e = edges[side];
           const doors = [[op.s, op.e, 8]];
+          if (spanRemoved(b, side, op.s, op.e)) continue;
           if (e.horiz) walls.seg(op.s, e.c, op.e, e.c, { ext: true, h: wallH, doors });
           else walls.seg(e.c, op.s, e.c, op.e, { ext: true, h: wallH, doors });
         }
@@ -383,9 +420,13 @@ export function compileModel(allBlocks, meta = {}) {
       let cur = e.a;
       const emitSolid = (s, ee, ext) => {
         if (ee - s < 0.2) return;
-        const windows = (!ext || isGarage) ? [] : addWindows(ee - s, s, ee);
-        if (e.horiz) walls.seg(s, e.c, ee, e.c, { ext, h: wallH, windows });
-        else walls.seg(e.c, s, e.c, ee, { ext, h: wallH, windows });
+        const leftovers = subtractRemoved(b, side, s, ee);
+        for (const [ss, ee2] of leftovers) {
+          if (ee2 - ss < 0.2) continue;
+          const windows = (!ext || isGarage) ? [] : addWindows(ee2 - ss, ss, ee2);
+          if (e.horiz) walls.seg(ss, e.c, ee2, e.c, { ext, h: wallH, windows });
+          else walls.seg(e.c, ss, e.c, ee2, { ext, h: wallH, windows });
+        }
       };
       for (const cut of cuts) {
         // Solid leftover before this opening is exterior unless it sits inside a shared interval
@@ -433,11 +474,33 @@ export function compileModel(allBlocks, meta = {}) {
     ceilings,
     roofs,
     furnish,
+    placedItems,
     _format: 'Home View model v1',
   };
 }
 
+function spanRemoved(block, side, s, e) {
+  const cuts = block.removedWalls || [];
+  return cuts.some((r) => r.side === side && Math.min(e, r.e) - Math.max(s, r.s) > 0.4);
+}
+
+function subtractRemoved(block, side, s, e) {
+  const cuts = (block.removedWalls || []).filter((r) => r.side === side).sort((a, b) => a.s - b.s);
+  if (!cuts.length) return [[s, e]];
+  const out = [];
+  let cur = s;
+  for (const c of cuts) {
+    const a = Math.max(s, c.s), b = Math.min(e, c.e);
+    if (b - a < 0.2) continue;
+    if (a > cur + 0.2) out.push([cur, a]);
+    cur = Math.max(cur, b);
+  }
+  if (e - cur > 0.2) out.push([cur, e]);
+  return out;
+}
+
 function isCovered(block, side, s, e, adj) {
+
   if (e - s < 0.2) return false;
   const mid = (s + e) / 2;
   for (const h of adj) {
@@ -467,7 +530,7 @@ function buildRoofs(blocks, wallH) {
   const roofs = [];
   const porches = blocks.filter((b) => /porch/i.test(b.name));
   const garages = blocks.filter((b) => /garage/i.test(b.name));
-  const main = blocks.filter((b) => !/porch|garage/i.test(b.name));
+  const main = blocks.filter((b) => !/porch|garage|patio|deck|pool|solar/i.test(b.name) && !(TYPE_BY_ID[b.type] || {}).feature);
   const bbox = (list) => {
     if (!list.length) return null;
     return {
@@ -520,8 +583,10 @@ export function planStats(allBlocks) {
   let heated = 0, garage = 0, porch = 0;
   for (const b of blocks) {
     const sf = b.w * b.d;
+    const typ = TYPE_BY_ID[b.type] || {};
+    if (typ.feature) continue;
     if (/garage/i.test(b.name)) garage += sf;
-    else if (/porch/i.test(b.name)) porch += sf;
+    else if (/porch|patio|deck/i.test(b.name) || typ.outside) porch += sf;
     else heated += sf;
   }
   const xs = blocks.flatMap((b) => [b.x, b.x + b.w]);
@@ -545,4 +610,21 @@ export function serializeModel(model) {
   for (const k of ['ext', 'int', 'win', 'door', 'counter']) out.walls[k] = Array.isArray(walls[k]) ? walls[k] : [];
   delete out.walls.seg;
   return out;
+}
+
+export function blockEdges(b) {
+  return {
+    n: { side: 'n', horiz: true, c: b.y, a: b.x, b: b.x + b.w },
+    s: { side: 's', horiz: true, c: b.y + b.d, a: b.x, b: b.x + b.w },
+    w: { side: 'w', horiz: false, c: b.x, a: b.y, b: b.y + b.d },
+    e: { side: 'e', horiz: false, c: b.x + b.w, a: b.y, b: b.y + b.d },
+  };
+}
+
+export function addRemovedWall(block, side, s, e) {
+  const next = { ...(block || {}) };
+  const list = Array.isArray(block.removedWalls) ? block.removedWalls.map((x) => ({ ...x })) : [];
+  list.push({ side, s: Math.min(s, e), e: Math.max(s, e) });
+  next.removedWalls = list;
+  return next;
 }

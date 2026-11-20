@@ -20,6 +20,12 @@ export const HEATED_RATE = { home: 180, tiny: 280, aframe: 165, trailer: 110, ad
 export const GARAGE_RATE = 60; // attached garage mid ($35–$70 typical)
 export const PORCH_RATE = 70;  // covered porch / deck mid ($40–$120)
 
+/** Typical 2025–2026 US planning rates, land excluded. Pool is in-ground $/sf of footprint; spa is a lump sum; solar is $/W DC. */
+export const POOL_RATE = 85;
+export const SPA_COST = 12500;
+export const SOLAR_PER_WATT = 3.00;
+
+
 // Allocation of the heated-structure cost, adapted from NAHB 2024 Cost of
 // Constructing a Home (shares of construction cost, land excluded).
 export const BREAKDOWN = [
@@ -317,6 +323,7 @@ export function savePrefs({ zip, tier } = {}) {
 export function estimateBuild({
   heatedSqFt = 0, garageSqFt = 0, porchSqFt = 0,
   buildType = 'home', zip = '', tier = 'standard', location,
+  extras = {},
 } = {}) {
   const loc = location || resolveLocation(zip);
   const t = TIERS.find((x) => x.id === sanitizeTier(tier)) || TIERS[1];
@@ -330,7 +337,16 @@ export function estimateBuild({
   const heatedCost = heatedSf * heatedRate;
   const garageCost = garageSf * garageRate;
   const porchCost = porchSf * porchRate;
-  const mid = heatedCost + garageCost + porchCost;
+  const poolSf = Math.max(0, Number(extras.poolSf) || 0);
+  const spaCount = Math.max(0, Number(extras.spaCount) || 0);
+  const solarKw = Math.max(0, Number(extras.solarKw) || 0);
+  const poolRate = POOL_RATE * (t.id === 'economy' ? 0.80 : t.id === 'custom' ? 1.35 : 1) * loc.multiplier;
+  const spaEach = SPA_COST * (t.id === 'economy' ? 0.85 : t.id === 'custom' ? 1.25 : 1) * loc.multiplier;
+  const solarWatt = SOLAR_PER_WATT * (t.id === 'economy' ? 0.85 : t.id === 'custom' ? 1.15 : 1) * loc.multiplier;
+  const poolCost = poolSf * poolRate;
+  const spaCost = spaCount * spaEach;
+  const solarCost = solarKw * 1000 * solarWatt;
+  const mid = heatedCost + garageCost + porchCost + poolCost + spaCost + solarCost;
   const low = mid * 0.88;
   const high = mid * 1.14;
   const items = BREAKDOWN.map((b) => {
@@ -346,6 +362,9 @@ export function estimateBuild({
       pct: mid > 0 ? amount / mid : 0,
     });
   }
+  if (poolCost > 0) items.push({ id: 'pool', label: 'In-ground pool', amount: poolCost, pct: mid > 0 ? poolCost / mid : 0 });
+  if (spaCost > 0) items.push({ id: 'spa', label: 'Hot tub / spa', amount: spaCost, pct: mid > 0 ? spaCost / mid : 0 });
+  if (solarCost > 0) items.push({ id: 'solar', label: `Solar PV (${solarKw.toFixed(1)} kW)`, amount: solarCost, pct: mid > 0 ? solarCost / mid : 0 });
   return {
     heatedSqFt: heatedSf,
     garageSqFt: garageSf,
@@ -361,6 +380,12 @@ export function estimateBuild({
     heatedCost,
     garageCost,
     porchCost,
+    poolCost,
+    spaCost,
+    solarCost,
+    poolSf,
+    spaCount,
+    solarKw,
     mid,
     low,
     high,

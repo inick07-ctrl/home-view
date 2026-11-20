@@ -1,6 +1,7 @@
 // PeakStead Designs — detailed furniture, doorway/hallway clearance, and auto-layout.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { YARD_CATEGORIES, YARD_CATALOG } from './yard-items.js';
 
 export const CATEGORIES = [
   { id: 'living', name: 'Living' },
@@ -12,6 +13,7 @@ export const CATEGORIES = [
   { id: 'patio', name: 'Patio' },
   { id: 'garage', name: 'Garage' },
   { id: 'decor', name: 'Decor' },
+  ...YARD_CATEGORIES,
 ];
 
 export const VEHICLE_FINISHES = {
@@ -794,6 +796,8 @@ export const CATALOG = {
   sportsCar: { name: 'Sports Car', category: 'garage', w: 14.6, d: 6.0, h: 4.2, finishes: Object.keys(VEHICLE_FINISHES), build: buildSportsCar },
 };
 
+Object.assign(CATALOG, YARD_CATALOG);
+
 export function itemFootprint(rec) {
   const t = CATALOG[rec.type] || CATALOG.sofa;
   const w = rec.w || t.w, d = rec.d || t.d;
@@ -1019,6 +1023,10 @@ export function makeItem(type, opts = {}) {
     onCounter: opts.onCounter,
     upper: opts.upper,
     z: opts.z != null ? +opts.z : 0,
+    pitch: opts.pitch != null ? +opts.pitch : undefined,
+    along: opts.along,
+    panels: opts.panels,
+    poolKind: opts.poolKind || opts.variant,
   };
 }
 
@@ -1031,15 +1039,42 @@ export function buildItemMesh(rec, ctx) {
   t.build(g, rec);
   // hang pendants from a typical ceiling
   if (rec.type === 'pendant') g.position.y = 0; // builder already uses local y; we'll lift the group below
+  const typ = CATALOG[rec.type] || t;
   const baseZ = rec.z || 0;
-  const lift = rec.type === 'pendant' ? baseZ + ((ctx?.ceiling || 8.2) - 2.0) : baseZ;
+  let lift = rec.type === 'pendant' ? baseZ + ((ctx?.ceiling || 8.2) - 2.0) : baseZ;
+  if (typ.mount === 'roof' && rec.z != null) lift = rec.z;
   const { Wx, Wz } = ctx;
   g.position.set(Wx(rec.x), lift, Wz(rec.y));
   g.rotation.y = -((rec.rot || 0) * Math.PI) / 180;
+  if (typ.mount === 'roof' && rec.pitch && rec.along !== 'lock') {
+    // rec.pitch is the roof slope in degrees; along 'x' means ridge runs east-west (tilt around X).
+    const rad = (rec.pitch * Math.PI) / 180;
+    if (rec.along === 'y') g.rotation.z += rad;
+    else g.rotation.x -= rad;
+  }
+  if (typ.mount === 'roof') g.userData.mount = 'roof';
   return g;
 }
 
+export function isPorchLike(room) {
+  if (!room) return false;
+  const n = (String(room[0] || '') + ' ' + String(room[2] || '')).toLowerCase();
+  return !!(room[7] && room[7].outside) || /porch|patio|deck|terrace/.test(n);
+}
+export function isCoveredPorch(room) {
+  if (!isPorchLike(room)) return false;
+  const n = String(room[0] || '').toLowerCase();
+  if (/uncovered|open patio|open deck/.test(n)) return false;
+  if (/patio|deck|terrace/.test(n) && !/cover|porch/.test(n)) return false;
+  return /porch|cover/.test(n) || String(room[2] || '') === 'porch';
+}
+export function isOutdoorItem(type) {
+  const c = (CATALOG[type] || {}).category;
+  return c === 'garage' || c === 'patio' || c === 'pool' || c === 'solar';
+}
+
 export function roomOfPoint(rooms, x, y) {
+
   for (const r of rooms || []) {
     if (r[7]?.outside) continue;
     if (x >= r[3] && x <= r[5] && y >= r[4] && y <= r[6]) return r;

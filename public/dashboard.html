@@ -28,6 +28,7 @@ import { $, esc, api, me, header, footer, fmtDate } from '/js/common.js';
 import { BUILD_TYPES, buildTypeOptionsHtml, buildTypeLabel, sanitizeBuildType } from '/js/build-types.js';
 import { favButtonHtml, paintFavButton, setProjectFavorite } from '/js/favorites.js';
 import { loadPrefs, savePrefs, estimateBuild, renderZipTierBar, estimatePillHtml } from '/js/cost-estimator.js';
+import { projectThumbSources, bindThumbImg } from '/js/plan-thumb.js';
 const user = await me();
 if (!user) location.replace('/?next=/dashboard');
 header(user, 'dashboard');
@@ -71,20 +72,17 @@ function renderList() {
   }
   list.innerHTML = '';
   for (const p of rows) {
-    const img = p.files.find(f => f.kind === 'image' && f.contentType.startsWith('image/'));
-    const hasModel = !!p.exampleId || p.files.some(f => f.kind === 'model');
-    const thumbSrc = img
-      ? `/api/projects/${encodeURIComponent(p.id)}/files/${encodeURIComponent(img.id)}`
-      : (p.exampleId ? `/img/${encodeURIComponent(p.exampleId)}.jpg` : '');
+    const hasModel = !!p.exampleId || p.files.some(f => f.kind === 'model' || f.kind === 'thumb');
     const href = hasModel ? '/viewer?p=' + encodeURIComponent(p.id) : '/project?id=' + encodeURIComponent(p.id);
     const card = document.createElement('div'); card.className = 'card pcard';
-    const thumb = thumbSrc ? `<img loading="lazy" alt="" src="${thumbSrc}">` : (hasModel ? '3D model' : 'No images yet');
+    const thumb = `<img loading="lazy" alt="${esc(p.name || 'Project')}" data-thumb="1">`;
     card.dataset.id = p.id;
     card.innerHTML = `${favButtonHtml({ on: !!p.favorited, className: 'fav-btn p-fav' })}<a class="ex-body" href="${href}"><div class="thumb">${thumb}</div>
       <div class="title">${esc(p.name)}</div></a>
       <div class="row ex-actions" style="gap:6px"><span class="badge">${esc(buildTypeLabel(p.buildType))}</span>${hasModel ? '<span class="badge acc">3D</span>' : ''}${p.exampleId ? '<span class="badge">Example</span>' : ''}${estimatePillHtml(projectEstimate(p), { href: '/project?id=' + encodeURIComponent(p.id) })}<span class="badge">${p.files.filter(f => f.kind === 'image').length} images</span>${p.shareToken ? '<span class="badge acc">Shared</span>' : '<span class="badge">Private</span>'}<span class="spacer"></span><a class="muted" style="font-size:12px" href="/project?id=${encodeURIComponent(p.id)}">Details</a><button type="button" class="btn small danger p-del">Delete</button><span class="muted" style="font-size:12px">${fmtDate(p.updatedAt)}</span></div>
       <div class="p-del-confirm" hidden><span>Delete <strong>${esc(p.name)}</strong>? This cannot be undone.</span><span class="spacer"></span><button type="button" class="btn small p-del-no">Cancel</button><button type="button" class="btn small danger p-del-yes">Yes, delete</button></div>`;
     list.appendChild(card);
+    bindThumbImg(card.querySelector('img[data-thumb]'), projectThumbSources(p));
   }
 }
 

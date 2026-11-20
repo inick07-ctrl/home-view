@@ -8,6 +8,7 @@ import { readJSON, writeJSON, writeJSONIfAbsent, remove, listAll, headBlob, stre
 import { getExample, resolvedExampleName } from '../server/examples.js';
 import { areasForExample } from '../public/js/example-areas.js';
 import { estimateBuild, resolveLocation, sanitizeTier, normalizeZip } from '../public/js/cost-estimator.js';
+import { planThumbSvg, houseFallbackSvg } from '../public/js/plan-thumb.js';
 import {
   sanitizeBuildType, isAdmin, contactEmail,
   sanitizeSponsor, publicSponsor, sanitizeInquiry,
@@ -191,13 +192,18 @@ function sanitizeLayout(raw) {
       type: String(it.type).slice(0, 40),
       x, y,
       rot: num(it.rot, -3600, 3600) ?? 0,
-      w: num(it.w, 0.2, 40) ?? undefined,
-      d: num(it.d, 0.2, 40) ?? undefined,
+      w: num(it.w, 0.2, 80) ?? undefined,
+      d: num(it.d, 0.2, 80) ?? undefined,
     };
     if (it.finish) rec.finish = String(it.finish).slice(0, 24);
     if (it.variant) rec.variant = String(it.variant).slice(0, 24);
     if (it.wood) rec.wood = String(it.wood).slice(0, 24);
     if (it.chaise) rec.chaise = String(it.chaise).slice(0, 12);
+    if (it.z != null && num(it.z, -20, 80) != null) rec.z = num(it.z, -20, 80);
+    if (it.pitch != null && num(it.pitch, -80, 80) != null) rec.pitch = num(it.pitch, -80, 80);
+    if (it.along) rec.along = String(it.along).slice(0, 8);
+    if (it.panels != null && num(it.panels, 1, 80) != null) rec.panels = num(it.panels, 1, 80);
+    if (it.poolKind) rec.poolKind = String(it.poolKind).slice(0, 16);
     return rec;
   }).filter(Boolean) : undefined;
   const rooms = Array.isArray(raw.rooms) ? raw.rooms.slice(0, 200).map((r) => {
@@ -218,8 +224,24 @@ function sanitizeLayout(raw) {
       walls[k] = list.slice(0, 2000).filter((r) => Array.isArray(r) && r.length >= 4 && r.slice(0, 4).every((n) => Number.isFinite(Number(n)))).map((r) => r.slice(0, 8).map((n, i) => (i < 4 || typeof n === 'number') ? n : n));
     }
   }
-  if (!items && !rooms && !walls) return undefined;
-  return { version: 1, items, rooms, walls };
+  let roofs;
+  if (Array.isArray(raw.roofs)) {
+    roofs = raw.roofs.slice(0, 80).map((rf) => {
+      if (!rf || typeof rf !== 'object') return null;
+      const x0 = num(rf.x0, -500, 500), y0 = num(rf.y0, -500, 500), x1 = num(rf.x1, -500, 500), y1 = num(rf.y1, -500, 500);
+      if (x0 == null || y0 == null || x1 == null || y1 == null) return null;
+      const out = { x0, y0, x1, y1 };
+      for (const k of ['shed', 'flat', 'aframe']) if (rf[k]) out[k] = true;
+      if (rf.along) out.along = String(rf.along).slice(0, 4);
+      for (const k of ['pitch', 'oh', 'eave', 'hi', 'lo', 'h']) {
+        if (rf[k] != null && Number.isFinite(Number(rf[k]))) out[k] = Number(rf[k]);
+      }
+      if (Array.isArray(rf.ends)) out.ends = rf.ends.slice(0, 2).map((s) => String(s || '').slice(0, 12));
+      return out;
+    }).filter(Boolean);
+  }
+  if (!items && !rooms && !walls && !roofs) return undefined;
+  return { version: 1, items, rooms, walls, roofs };
 }
 
 function publicProject(p, { owner = false } = {}) {
@@ -471,7 +493,7 @@ const routes = {
     const p = await loadOwnProject(user, id);
     const { pathname, name, kind } = await readBody(req);
     if (typeof pathname !== 'string' || !pathname.startsWith(`files/${user.id}/${p.id}/`) || pathname.includes('..')) throw bad('Invalid file');
-    if (!['image', 'model', 'pano', 'ground'].includes(kind)) throw bad('Invalid kind');
+    if (!['image', 'model', 'pano', 'ground', 'thumb'].includes(kind)) throw bad('Invalid kind');
     if ((p.files || []).some(f => f.pathname === pathname)) throw bad('Already added');
     if ((p.files || []).length >= 100) throw bad('File limit reached (100 per project)');
     const meta = await headBlob(pathname);
@@ -484,6 +506,11 @@ const routes = {
       const old = p.files.filter(x => x.kind === 'model');
       await remove(old.map(x => x.pathname));
       p.files = p.files.filter(x => x.kind !== 'model');
+    } else if (kind === 'thumb') {
+      if (!SITE_IMAGE_TYPES.includes(meta.contentType)) { await remove(pathname); throw bad('Thumbnails must be a JPG, PNG or WebP image'); }
+      const old = p.files.filter(x => x.kind === 'thumb');
+      await remove(old.map(x => x.pathname));
+      p.files = p.files.filter(x => x.kind !== 'thumb');
     } else if (SITE_KINDS.includes(kind)) {
       if (!SITE_IMAGE_TYPES.includes(meta.contentType)) { await remove(pathname); throw bad('Site photos must be a JPG, PNG or WebP image'); }
       if (meta.size > SITE_MAX_UPLOAD) { await remove(pathname); throw bad('Site photos must be 25 MB or smaller'); }
@@ -524,6 +551,25 @@ const routes = {
     if (!f) throw new HttpError(404, 'File not found');
     await streamFile(res, f);
   },
+  'GET projects/:id/thumb': async (req, res, { id }) => {
+    const user = await requireUser(req);
+    const p = await loadOwnProject(user, id);
+    const thumb = (p.files || []).find(x => x.kind === 'thumb');
+    if (thumb) { await streamFile(res, thumb); return; }
+    if (p.exampleId) {
+      res.statusCode = 302;
+      res.setHeader('Location', '/img/' + encodeURIComponent(p.exampleId) + '.jpg');
+      res.setHeader('Cache-Control', 'private, max-age=60');
+      res.end();
+      return;
+    }
+    const rooms = p.layout && Array.isArray(p.layout.rooms) ? p.layout.rooms : null;
+    const svg = rooms && rooms.length ? planThumbSvg(rooms, p.name || '') : houseFallbackSvg(p.name || 'Home');
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'private, max-age=60');
+    res.end(svg);
+  },
 
   // ---------- public share links (read-only) ----------
   'GET share/:token': async (req, res, { token }) => {
@@ -555,6 +601,11 @@ const routes = {
         tier: q.get('tier') || 'standard',
         zip,
         location,
+        extras: {
+          poolSf: Number(q.get('poolSf') || 0),
+          spaCount: Number(q.get('spaCount') || 0),
+          solarKw: Number(q.get('solarKw') || 0),
+        },
       });
     }
     send(res, 200, out);
