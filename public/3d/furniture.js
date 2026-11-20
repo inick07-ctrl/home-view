@@ -1066,7 +1066,7 @@ function longestWallWithoutDoor(room, doors) {
   return edges.find(e => !used.has(e)) || edges[0];
 }
 
-const SKIP_ROOMS = /closet|wic|w\.i\.c|pantry|garage|bay |shop|mech|safe|attic|unfinished/i;
+const SKIP_ROOMS = /closet|wic|w\.i\.c|pantry|garage|bay |shop|mech|safe|attic|unfinished|storage/i;
 
 export function autoFurnish(M, WS) {
   const items = [];
@@ -1163,6 +1163,16 @@ export function autoFurnish(M, WS) {
       put('deskLamp', { x: desk.x + (desk.rot === 0 || desk.rot === 180 ? 1.6 : 0), y: desk.y + (desk.rot === 90 || desk.rot === 270 ? 1.6 : 0), rot: desk.rot });
       const bw = againstWall(room, wall === 'n' ? 'e' : 'w', 3.2, 1.15, 0.35);
       put('bookshelf', { ...bw });
+      continue;
+    }
+
+    if (/entry|foyer/i.test(n)) {
+      put('rug', { x: cx, y: cy, w: Math.min(rw - 1, 8), d: Math.min(rd - 1, 6), color: '#c4b8a4', field: '#e4ddd0' });
+      const wall = longestWallWithoutDoor(room, doors);
+      const b = againstWall(room, wall, Math.min(4.8, (wall === 'n' || wall === 's' ? rw : rd) - 1), 1.6, 0.35);
+      put('mudBench', { ...b, w: Math.min(4.8, (wall === 'n' || wall === 's' ? rw : rd) - 1.2) });
+      const corner = againstWall(room, wall === 'n' || wall === 's' ? 'e' : 's', 2.0, 2.0, 0.5);
+      put('plant', { ...corner, variant: 'fiddle' });
       continue;
     }
 

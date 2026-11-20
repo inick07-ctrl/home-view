@@ -852,6 +852,7 @@ function ensureEditor() {
     src: SRC,
     canEdit: SRC.kind !== 'share',
     get exampleId() { return currentId; },
+    set exampleId(_) {},
     getItems: () => currentItems,
     setItems: setItemsList,
     getRooms: () => M?.rooms || [],
@@ -1551,7 +1552,7 @@ function normalizeJsonModel(raw, fallbackName) {
 // ?p=<projectId>      your own project (needs login)
 // ?s=<shareToken>     read-only shared project
 const params = new URLSearchParams(location.search);
-const SRC = params.get('s') ? { kind: 'share', token: params.get('s') } : params.get('p') ? { kind: 'project', id: params.get('p') } : { kind: 'example' };
+const SRC = params.get('s') ? { kind: 'share', token: params.get('s') } : params.get('p') ? { kind: 'project', id: params.get('p') } : params.get('draft') === '1' ? { kind: 'draft' } : params.get('embed') === '1' ? { kind: 'embed' } : { kind: 'example' };
 let assetBase = null, projectFiles = [];
 function resolveAsset(src) {
   if (!src) return src;
@@ -1577,6 +1578,14 @@ if (SRC.kind === 'example') {
     tabs.appendChild(b);
   }
 } else if (SRC.kind === 'project') { back.href = `/project?id=${encodeURIComponent(SRC.id)}`; back.textContent = '← Project'; }
+else if (SRC.kind === 'draft' || SRC.kind === 'embed') {
+  back.href = '/builder'; back.textContent = '← Builder';
+  if (SRC.kind === 'embed') {
+    document.body.classList.add('embed');
+    if ($('topbar')) $('topbar').style.display = 'none';
+    document.documentElement.style.setProperty('--tbh', '0px');
+  }
+}
 else { back.href = `/s/${encodeURIComponent(SRC.token)}`; back.textContent = '← Project'; }
 // keep the HUD / compass below the tab bar when the tabs wrap onto two rows on phones
 const syncTopbar = () => document.documentElement.style.setProperty('--tbh', $('topbar').offsetHeight + 'px');
@@ -1732,8 +1741,71 @@ function setStyle(id) {
 }
 if ($('bStyle')) $('bStyle').addEventListener('change', e => setStyle(e.target.value));
 
+function frameModel(modeHint = 'orbit') {
+  const rooms = M?.rooms || [];
+  if (!rooms.length) return;
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const r of rooms) { x0 = Math.min(x0, r[3]); y0 = Math.min(y0, r[4]); x1 = Math.max(x1, r[5]); y1 = Math.max(y1, r[6]); }
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const span = Math.max(x1 - x0, y1 - y0, 12);
+  if (modeHint === 'top') lookTopSafe(cx, cy, Math.max(36, span * 1.8));
+  else {
+    setMode('orbit', true);
+    const wx = Wx(cx), wz = Wz(cy);
+    const dist = Math.max(18, span * 1.05), height = Math.max(8, span * 0.32);
+    orbit.target.set(wx, 1.4, wz);
+    camera.position.set(wx + dist * 0.65, height, wz + dist * 0.85);
+    orbit.update();
+  }
+}
+function lookTopSafe(fx, fy, height = 48) {
+  const wx = Wx(fx), wz = Wz(fy);
+  setMode('top', true);
+  orbit.target.set(wx, 0, wz);
+  camera.position.set(wx, height, wz + 0.01);
+  orbit.update();
+}
+function loadJsonModel(raw, fallbackName = 'Builder home', view = 'orbit') {
+  const rooms = raw && Array.isArray(raw.rooms) ? raw.rooms : [];
+  if (!rooms.length) return false;
+  const jsonModel = normalizeJsonModel(raw, fallbackName);
+  if (mode === 'walk') exitWalk();
+  disposeRoot();
+  if (typeof clearSiteEnv === 'function') clearSiteEnv({ restore: true });
+  currentStyle = jsonModel.defaultStyle || currentStyle || 'default';
+  syncStyleUi();
+  snapshotOriginal(jsonModel);
+  activeLayout = null;
+  buildModel(jsonModel, { layout: null });
+  setMode('orbit', true);
+  setRoof(true);
+  setLabels(true);
+  setItemsVisible?.(true);
+  frameModel(view);
+  window.app.current = jsonModel.id || 'builder';
+  if ($('back') && (SRC.kind === 'draft' || SRC.kind === 'embed')) { $('back').href = '/builder'; $('back').textContent = '← Builder'; }
+  return true;
+}
+function loadBuilderDraft() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('peakstead-builder-draft-model') || 'null');
+    if (!loadJsonModel(raw, 'Builder home', 'orbit')) showError('No builder plan is saved on this device yet. Go back to the Builder and place a room.');
+  } catch (e) {
+    showError('Could not open the builder plan: ' + (e.message || e));
+  }
+}
+window.addEventListener('message', (ev) => {
+  if (ev.origin !== location.origin) return;
+  if (ev.data && ev.data.type === 'peakstead-builder-model' && ev.data.model) {
+    loadJsonModel(ev.data.model, ev.data.model.title || 'Builder home', ev.data.view || 'orbit');
+  }
+});
+if (SRC.kind === 'embed' && window.parent && window.parent !== window) {
+  try { window.parent.postMessage({ type: 'peakstead-builder-ready' }, location.origin); } catch {}
+}
+
 window.app = {
-  loadExample, scene, setMode, setRoof, setLabels, setCut, setPlan, setStyle, camera, orbit, player,
+  loadExample, loadJsonModel, scene, setMode, setRoof, setLabels, setCut, setPlan, setStyle, camera, orbit, player,
   setLook: (y, p) => { yaw = y; pitch = p; }, setPlayer: (fx, fy) => player.set(Wx(fx), Wz(fy)), current: null,
   planToWorld: (fx, fy) => [Wx(fx), Wz(fy)],
   getRooms: () => M?.rooms || [],
@@ -1744,14 +1816,9 @@ window.app = {
     camera.position.set(wx + dist * 0.65, height, wz + dist * 0.85);
     orbit.update();
   },
-  lookTop: (fx, fy, height = 48) => {
-    const wx = Wx(fx), wz = Wz(fy);
-    setMode('top', true);
-    orbit.target.set(wx, 0, wz);
-    camera.position.set(wx, height, wz + 0.01);
-    orbit.update();
-  },
+  lookTop: lookTopSafe,
 };
 if (SRC.kind === 'example') await loadExample(params.get('ex') || REGISTRY[0].id);
-else await loadProjectModel();
+else if (SRC.kind === 'draft') loadBuilderDraft();
+else if (SRC.kind !== 'embed') await loadProjectModel();
 loop();

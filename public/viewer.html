@@ -68,6 +68,7 @@
   #tabs button.on{background:var(--acc);border-color:var(--acc);color:#1d1d1d}
   #hud{top:58px !important}
   #north{top:60px !important}
+  body.embed #topbar,body.embed #saveWrap{display:none !important}body.embed{--tbh:0px}
   @media (max-width:420px){#topbar .brand{display:none}}
   @media (max-width:600px){#topbar .brand{display:none}#topbar{padding:6px 8px;flex-wrap:wrap}#topbar .back,#saveWrap .save-ctl{font-size:12px;padding:5px 10px}#tabs:empty{display:none}#tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;width:100%;overflow:visible}#tabs button{font-size:12px;padding:5px 4px;text-align:center}#hud{top:calc(var(--tbh,52px) + 6px) !important}#north{top:calc(var(--tbh,52px) + 8px) !important}}
 </style>

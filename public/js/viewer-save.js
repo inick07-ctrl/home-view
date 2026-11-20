@@ -2,7 +2,7 @@ import { toast } from './common.js';
 import { loginUrlFor, saveExample, savedExampleMap, renderSaveControl } from './example-save.js';
 
 const params = new URLSearchParams(location.search);
-const isExampleView = !params.get('s') && !params.get('p');
+const isExampleView = !params.get('s') && !params.get('p') && params.get('embed') !== '1' && params.get('draft') !== '1';
 const wrap = document.getElementById('saveWrap');
 if (!isExampleView || !wrap) {
   // Project and share views don't offer "Save to my projects".

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Builder — PeakStead Designs</title>
+<meta name="description" content="Build a home like Lego blocks. Snap rooms together, preview in 3D, and save the plan to your PeakStead projects.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/site.css">
+<link rel="stylesheet" href="/css/builder.css">
+</head>
+<body class="builder">
+<main>
+  <div class="builder-shell">
+    <div class="builder-toolbar">
+      <div class="title">Builder</div>
+      <label class="muted" style="margin:0;font-size:12px">Template
+        <select id="template" aria-label="Start from a template"></select>
+      </label>
+      <button type="button" class="btn small" id="undo" title="Undo (Ctrl+Z)">Undo</button>
+      <button type="button" class="btn small" id="redo" title="Redo (Ctrl+Y)">Redo</button>
+      <button type="button" class="btn small" id="fit" title="Fit the plan in view">Fit</button>
+      <button type="button" class="btn small danger" id="clear">Clear</button>
+      <div class="seg" role="tablist" aria-label="Workspace view">
+        <button type="button" id="view2d" class="on">2D Plan</button>
+        <button type="button" id="viewSplit">Split</button>
+        <button type="button" id="view3d">3D View</button>
+      </div>
+      <div class="stats" id="stats"></div>
+      <span class="warn" id="warn" hidden></span>
+      <span class="spacer"></span>
+      <button type="button" class="btn small" id="open3d">Open in Full 3D Viewer</button>
+      <button type="button" class="btn small primary" id="save">Save to My Projects</button>
+    </div>
+    <div class="builder-body view2d" id="body">
+      <aside class="palette" id="palette">
+        <header>
+          <h2>Room blocks</h2>
+          <p>Pick a size, then drag a block onto the lot. Edges snap together like Lego.</p>
+        </header>
+        <div class="palette-list" id="paletteList"></div>
+      </aside>
+      <section class="workspace" id="workspace">
+        <canvas id="c" aria-label="Plan workspace"></canvas>
+        <div class="hint" id="hint">Drag a room from the left, or move the starter blocks. Scroll to zoom, drag empty space to pan. R rotates, Delete removes, Ctrl+D duplicates.</div>
+        <div class="inspector" id="inspector" hidden></div>
+      </section>
+      <section class="preview" id="preview">
+        <iframe id="view3dFrame" title="3D preview" src="about:blank"></iframe>
+        <div class="empty" id="previewEmpty">Place a room on the lot to preview it in 3D.</div>
+      </section>
+    </div>
+  </div>
+</main>
+<script type="module" src="/js/builder.js"></script>
+</body>
+</html>
