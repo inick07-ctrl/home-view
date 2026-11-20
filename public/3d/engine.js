@@ -1562,6 +1562,7 @@ function resolveAsset(src) {
 }
 function setModelUi(engine, hasRoof = true) {
   for (const id of ['bLabels', 'bCut', 'bPlan', 'bEdit', 'bItems']) if ($(id)) $(id).style.display = engine ? '' : 'none';
+  if ($('editPlanBtn')) $('editPlanBtn').style.display = engine ? 'inline-flex' : 'none';
   if ($('bRoof')) $('bRoof').style.display = engine || hasRoof ? '' : 'none';
   if (engine && $('bPlan')) $('bPlan').style.display = M.planImage ? '' : 'none';
   if ($('styleWrap')) $('styleWrap').style.display = engine ? '' : 'none';
@@ -1587,9 +1588,20 @@ else if (SRC.kind === 'draft' || SRC.kind === 'embed') {
   }
 }
 else { back.href = `/s/${encodeURIComponent(SRC.token)}`; back.textContent = '← Project'; }
-// keep the HUD / compass below the tab bar when the tabs wrap onto two rows on phones
-const syncTopbar = () => document.documentElement.style.setProperty('--tbh', $('topbar').offsetHeight + 'px');
-syncTopbar(); addEventListener('resize', syncTopbar);
+// Keep the HUD, compass, and Edit drawer below the top bar on every screen size.
+const syncTopbar = () => {
+  const bar = $('topbar');
+  if (!bar || document.body.classList.contains('embed')) {
+    document.documentElement.style.setProperty('--tbh', '0px');
+    return;
+  }
+  document.documentElement.style.setProperty('--tbh', Math.ceil(bar.getBoundingClientRect().height) + 'px');
+};
+syncTopbar();
+addEventListener('resize', syncTopbar);
+if (typeof ResizeObserver === 'function' && $('topbar')) {
+  new ResizeObserver(syncTopbar).observe($('topbar'));
+}
 let currentId = null;
 async function loadExample(id) {
   const entry = REGISTRY.find(r => r.id === id) || REGISTRY[0];

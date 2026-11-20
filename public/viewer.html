@@ -56,21 +56,29 @@
   body.walk-pad #sf{bottom:max(148px,calc(140px + env(safe-area-inset-bottom)))}
   @media (max-width:600px){#sf{right:8px;bottom:max(8px,env(safe-area-inset-bottom));padding:7px 10px;padding-right:max(10px,env(safe-area-inset-right))}#sf .sf-h{font-size:13px}#sf .sf-unit{font-size:11px}#sf .sf-sub{font-size:10px}}
   @media (max-width:600px){#hud{padding:8px 10px}#hud .sub{display:none}#help{font-size:11px}.label{font-size:10px;padding:1px 4px}.label small{font-size:9px}.label.minor{display:none}#hud h1{font-size:14px}.btns button{font-size:12px;padding:6px 8px}#north{width:52px;height:52px}#north svg{width:44px;height:44px}}
-  #topbar{position:fixed;left:0;right:0;top:0;z-index:7;display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(20,24,28,.86);color:#f3f1ec;box-shadow:0 2px 12px rgba(0,0,0,.25)}
-  #topbar .brand{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:15px;white-space:nowrap;color:inherit;text-decoration:none;overflow:hidden;text-overflow:ellipsis;max-width:40vw}#topbar .brand svg{width:18px;height:18px;flex-shrink:0}
-  #topbar .back{color:#f3f1ec;text-decoration:none;font-size:13px;font-weight:600;white-space:nowrap;border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:6px 12px;background:rgba(255,255,255,.08)}
-  #saveWrap{margin-left:auto;display:none;align-items:center;gap:8px;flex-shrink:0}
+  :root{--tbh:56px}
+  #topbar{position:fixed;left:0;right:0;top:0;z-index:7;display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:8px 12px;background:rgba(20,24,28,.92);color:#f3f1ec;box-shadow:0 2px 12px rgba(0,0,0,.25)}
+  #topbar .topbar-row{display:flex;align-items:center;gap:10px;min-height:36px}
+  #topbar .brand{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:15px;white-space:nowrap;color:inherit;text-decoration:none;overflow:hidden;text-overflow:ellipsis;max-width:28vw}#topbar .brand svg{width:18px;height:18px;flex-shrink:0}
+  #topbar .back{color:#f3f1ec;text-decoration:none;font-size:13px;font-weight:600;white-space:nowrap;border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:6px 12px;background:rgba(255,255,255,.08);flex-shrink:0}
+  #saveWrap{margin-left:0;display:none;align-items:center;gap:8px;flex-shrink:0}
   #saveWrap .save-ctl{font:inherit;font-size:13px;font-weight:600;white-space:nowrap;border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:6px 12px;background:rgba(255,255,255,.08);color:#f3f1ec;text-decoration:none;cursor:pointer}
   #saveWrap .save-ctl.primary{background:#e0a95a;border-color:#e0a95a;color:#1d1d1d}
   #saveWrap .save-ctl:disabled{opacity:.6;cursor:default}
-  #tabs{display:flex;flex-wrap:wrap;gap:6px;overflow:visible}
-  #tabs button{font:inherit;font-size:13px;font-weight:600;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#f3f1ec;padding:6px 14px;border-radius:999px;cursor:pointer;white-space:nowrap}
+  #editPlanBtn{display:none;align-items:center;flex-shrink:0;font:inherit;font-size:13px;font-weight:750;white-space:nowrap;border:1px solid #e0a95a;border-radius:999px;padding:6px 14px;background:#e0a95a;color:#1d1d1d;cursor:pointer;margin-left:auto}
+  #editPlanBtn:hover{filter:brightness(1.06)}
+  #editPlanBtn.on{box-shadow:0 0 0 2px rgba(224,169,90,.45)}
+  #bEdit{border-color:#e0a95a !important;font-weight:750}
+  #tabs{display:flex;flex-wrap:nowrap;gap:6px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:thin;padding-bottom:2px}
+  #tabs:empty{display:none;padding:0}
+  #tabs button{font:inherit;font-size:13px;font-weight:600;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#f3f1ec;padding:6px 14px;border-radius:999px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
   #tabs button.on{background:var(--acc);border-color:var(--acc);color:#1d1d1d}
-  #hud{top:58px !important}
-  #north{top:60px !important}
-  body.embed #topbar,body.embed #saveWrap{display:none !important}body.embed{--tbh:0px}
+  #hud,#north{top:calc(var(--tbh, 56px) + 8px) !important}
+  body.embed #topbar,body.embed #saveWrap,body.embed #editPlanBtn{display:none !important}
+  body.embed{--tbh:0px}
+  body.embed #hud,body.embed #north{top:12px !important}
   @media (max-width:420px){#topbar .brand{display:none}}
-  @media (max-width:600px){#topbar .brand{display:none}#topbar{padding:6px 8px;flex-wrap:wrap}#topbar .back,#saveWrap .save-ctl{font-size:12px;padding:5px 10px}#tabs:empty{display:none}#tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;width:100%;overflow:visible}#tabs button{font-size:12px;padding:5px 4px;text-align:center}#hud{top:calc(var(--tbh,52px) + 6px) !important}#north{top:calc(var(--tbh,52px) + 8px) !important}}
+  @media (max-width:600px){#topbar .brand{display:none}#topbar{padding:6px 8px;gap:6px}#topbar .back,#saveWrap .save-ctl,#editPlanBtn{font-size:12px;padding:5px 10px}#tabs button{font-size:12px;padding:5px 10px}}
 </style>
 <link rel="stylesheet" href="/css/plan-editor.css">
 <script type="importmap">
@@ -79,7 +87,15 @@
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="topbar"><a id="back" class="back" href="/">←</a><a class="brand" href="/" id="brandName"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.2 1.6 15.8h4.2V28.4h8V19.8h4.4v8.6h8V15.8h4.2L16 2.2z" fill="#e0a95a"/></svg>PeakStead Designs</a><nav id="tabs" aria-label="Examples"></nav><div id="saveWrap"></div></div>
+<div id="topbar">
+  <div class="topbar-row">
+    <a id="back" class="back" href="/">←</a>
+    <a class="brand" href="/" id="brandName"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.2 1.6 15.8h4.2V28.4h8V19.8h4.4v8.6h8V15.8h4.2L16 2.2z" fill="#e0a95a"/></svg>PeakStead Designs</a>
+    <button type="button" id="editPlanBtn" aria-pressed="false" title="Edit items, rooms, and walls">Edit Plan</button>
+    <div id="saveWrap"></div>
+  </div>
+  <nav id="tabs" aria-label="Examples"></nav>
+</div>
 <div id="hud">
   <button id="toggleHud" title="Collapse">▾</button>
   <h1 id="mtitle">Loading…</h1>
@@ -93,7 +109,7 @@
     <button id="bCut">Cutaway walls</button>
     <button id="bPlan">Plan overlay</button>
     <button id="bItems" class="on">Items</button>
-    <button id="bEdit">Edit</button>
+    <button id="bEdit" title="Edit items, rooms, and walls">Edit Plan</button>
     <label id="styleWrap" class="stylepick" style="display:none">Style
       <select id="bStyle" aria-label="Interior style">
         <option value="default">Default</option>

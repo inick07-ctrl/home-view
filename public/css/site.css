@@ -69,6 +69,9 @@ footer{color:var(--muted);font-size:12.5px;text-align:center;padding:24px}
 
 .pcard .ex-body{display:flex;flex-direction:column;gap:8px;text-decoration:none;color:inherit}
 .pcard .ex-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px}
+.p-del-confirm{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding:10px 12px;background:rgba(224,87,79,.12);border:1px solid rgba(224,87,79,.35);border-radius:10px;font-size:13px}
+.p-del-confirm[hidden]{display:none}
+.pcard .p-del{margin-left:2px}
 
 /* Full-bleed homepage hero */
 .hero-band{position:relative;overflow:hidden;color:#f3f1ec;background:#071018;min-height:min(78vh,720px)}

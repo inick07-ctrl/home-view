@@ -189,15 +189,21 @@ export function mountPlanEditor(ctrl) {
     }
   }
 
+  function setEditButtons(on) {
+    document.querySelectorAll('#bEdit, #editPlanBtn').forEach((el) => {
+      el.classList.toggle('on', !!on);
+      el.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
   function open() {
     drawer.classList.add('open');
-    btn.classList.add('on');
+    setEditButtons(true);
     render();
     ctrl.setEditMode(true);
   }
   function close() {
     drawer.classList.remove('open');
-    btn.classList.remove('on');
+    setEditButtons(false);
     placing = null;
     drawingWall = null;
     selected = null;
@@ -206,7 +212,10 @@ export function mountPlanEditor(ctrl) {
     showClearance(false);
   }
 
-  btn.addEventListener('click', () => { drawer.classList.contains('open') ? close() : open(); });
+  const toggle = () => { drawer.classList.contains('open') ? close() : open(); };
+  btn.addEventListener('click', toggle);
+  const topBtn = document.getElementById('editPlanBtn');
+  if (topBtn && topBtn !== btn) topBtn.addEventListener('click', toggle);
   drawer.querySelector('[data-act=close]').onclick = close;
   drawer.querySelector('[data-act=undo]').onclick = () => {
     const prev = undo.pop();
@@ -760,7 +769,7 @@ function ensureEditButton() {
 function buildDrawer() {
   const d = el('aside', { id: 'editDrawer', role: 'dialog', 'aria-label': 'Edit plan' });
   const header = el('header');
-  header.appendChild(el('strong', { text: 'Edit' }));
+  header.appendChild(el('strong', { text: 'Edit plan' }));
   const acts = el('div', { class: 'edit-actions' });
   acts.append(
     el('button', { type: 'button', 'data-act': 'undo', text: 'Undo' }),
