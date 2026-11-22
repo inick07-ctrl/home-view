@@ -141,7 +141,6 @@ export default {
     k.block(42.15, 34.2, 44.1, 37.7, 0, 3.0, '#efe7da');
     k.block(45.2, 25, 47.3, 33, 0, 3.0, '#efe7da');
     // Linear fireplace on the family east wall, facing west into the room
-    k.block(76.4667, 25.3, 77.1167, 32.7, 0, 4.4, '#c9c4b8');
-    k.fire(76.5467, 25.6, 77.0467, 32.4, 'w');
+    k.place && k.place('fpLinear72', { x: 76.79, y: 29, rot: 90, w: 7.4, d: 0.65, h: 4.4, variant: 'plaster' });
   },
 };

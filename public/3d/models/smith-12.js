@@ -259,15 +259,9 @@ export default {
 
     // Animated fireplace on the living's east wall, facing west, north of the hall door.
     // Back + sides + mantel leave an open firebox (a solid slab would hide the flames).
-    k.block(75.95, 18.55, 76.30, 25.25, 0, 5.3, STONE, { solid: true });           // back
-    k.block(75.50, 18.55, 76.30, 19.15, 0, 5.3, STONE, { solid: true });           // south jamb
-    k.block(75.50, 24.65, 76.30, 25.25, 0, 5.3, STONE, { solid: true });           // north jamb
-    k.block(75.50, 18.55, 76.30, 25.25, 4.15, 5.35, STONE, { solid: true });       // lintel
-    k.block(75.35, 18.35, 76.30, 25.45, 5.2, 5.55, STONE, { solid: true });        // mantel
-    k.block(75.50, 19.15, 75.62, 24.65, 0.15, 4.15, '#1a1410', { keep: true });    // dark firebox
-    k.fire(75.52, 19.25, 75.90, 24.55, 'w');
-    k.block(75.45, 19.6, 77.05, 24.2, 10, 22.5, STONE, { solid: true });           // chimney
-    k.block(75.3, 19.45, 77.2, 24.35, 22.5, 23.1, '#1e1f21');
+    k.place && k.place('fpMasonry48', { x: 75.2, y: 21.9, rot: 90, w: 6.7, d: 2.2, h: 5.6, variant: 'stone' });
+    k.block(75.45, 19.6, 77.05, 24.2, 10, 22.5, STONE, { chimney: [75.2, 21.9] });           // chimney
+    k.block(75.3, 19.45, 77.2, 24.35, 22.5, 23.1, '#1e1f21', { chimney: [75.2, 21.9] });
 
     // Tray ceiling: perimeter trim only (a solid slab hid the room in the cutaway)
     const tx0 = XC1 + 1.4, ty0 = Y0 + 1.4, tx1 = XR1 - 1.4, ty1 = YPR - 1.4;

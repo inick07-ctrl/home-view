@@ -100,7 +100,7 @@ export function sanitizeLayout(raw) {
     }).filter(Boolean);
   }
   if (!items && !rooms && !walls && !roofs) return null;
-  return { version: 1, items, rooms, walls, roofs };
+  return { version: +raw.version >= 2 ? 2 : 1, items, rooms, walls, roofs };
 }
 
 export function mountPlanEditor(ctrl) {
@@ -134,7 +134,7 @@ export function mountPlanEditor(ctrl) {
   }
   function currentLayout() {
     return {
-      version: 1,
+      version: 2,
       items: cloneItems(ctrl.getItems()),
       rooms: cloneRooms(ctrl.getRooms()),
       walls: cloneWalls(ctrl.getWalls()),

@@ -65,9 +65,7 @@ export default {
     k.block(XK + 0.15, 7.7, XK + 2.0, 11.8, 0, 3.55, CREAM, { solid: true });
     k.block(XK + 0.15, 7.7, XK + 2.0, 11.8, 3.55, 3.68, '#2c2c2e');
     // Fireplace on the west wall of the living room
-    k.block(-0.05, 4.3, 1.35, 7.7, 0, 6.6, '#8a8680', { solid: true });
-    k.fire(0.2, 4.55, 1.15, 7.45, 'e');
-    k.block(-0.05, 4.3, 1.35, 7.7, 6.6, 8.4, '#7a7670');
+    k.place && k.place('fpMasonry36', { x: 1.1, y: 6.0, rot: 270, w: 3.4, d: 2.3, h: 8.4, variant: 'stone' });
     // Porch posts
     for (const x of [1.3, 10, 18.6]) k.block(x - 0.18, YP - 0.35, x + 0.18, YP, 0, 7.5, TIM, { solid: true });
     k.block(1.15, YP - 0.3, 18.8, YP, 7.5, 7.95, TIM);

@@ -101,9 +101,8 @@ export default {
     k.block(29.5, 54, 34.5, 55.6, -0.6, -0.25, '#9a9a96');
     k.plane(30, 55.6, 34, 80, 'paver'); k.plane(90, 13, 116, 45, 'paver'); k.plane(104, 45, 116, 80, 'paver');
     // fireplace on the living room's west wall + chimney through the roof
-    k.block(16.2, 17.5, 18.4, 24.5, 0, 9, '#c9c4b8', { solid: true }); k.block(18.3, 19, 18.5, 23, 0.8, 3.4, '#141414');
-    k.block(18.4, 17, 20.2, 25, 0, 0.3, '#5c5852');
-    k.block(16.4, 18.5, 18.4, 23.5, 9, 23.5, '#c9c4b8'); k.block(16.3, 18.4, 18.5, 23.6, 23.5, 24, BK);
+    k.place && k.place('fpStoneTrad', { x: 17.55, y: 21, rot: 270, w: 7, d: 2.7, h: 9, variant: 'traditional' });
+    k.block(16.4, 18.5, 18.4, 23.5, 9, 23.5, '#c9c4b8', { chimney: [17.55, 21] }); k.block(16.3, 18.4, 18.5, 23.6, 23.5, 24, BK, { chimney: [17.55, 21] });
     // living: sofa + chairs facing the fireplace, rug-table
     k.block(26.5, 17, 28.8, 26, 0, 2.6, '#7b8590'); k.block(21, 15, 25, 16.8, 0, 2.6, '#9aa0a6'); k.block(21, 25.2, 25, 27, 0, 2.6, '#9aa0a6');
     k.block(21.5, 19.5, 24.5, 22.5, 0, 1.3, '#6b4a2f');

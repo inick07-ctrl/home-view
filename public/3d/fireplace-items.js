@@ -255,14 +255,14 @@ function buildLinear(g, rec) {
   const oh = 1.35; // ~16" tall
   const y0 = 1.6;
   const zf = D / 2;
-  const plaster = rec.variant === 'plaster';
-  const face = plaster ? mat('#ece8e0', { r: 0.95 }) : mat('#d9d6cf', { r: 0.35, m: 0.05 });
+  const plaster = rec.variant === 'plaster', stoneV = rec.variant === 'stone';
+  const face = plaster ? mat('#ece8e0', { r: 0.95 }) : stoneV ? texMat('stone', W, H) : mat('#d9d6cf', { r: 0.35, m: 0.05 });
   // bump-out surround in pieces around the opening so the flames are visible
   add(g, B(W, y0, D), face, 0, y0 / 2, 0);
   add(g, B(W, H - y0 - oh, D), face, 0, y0 + oh + (H - y0 - oh) / 2, 0);
   add(g, B((W - open) / 2, oh, D), face, -(W + open) / 4, y0 + oh / 2, 0);
   add(g, B((W - open) / 2, oh, D), face, (W + open) / 4, y0 + oh / 2, 0);
-  if (!plaster) for (let i = 1; i < 4; i++) add(g, B(W + 0.01, 0.015, D + 0.01), mat('#bdb9b0', { r: 0.4 }), 0, y0 + oh + i * (H - y0 - oh) / 4, 0); // slab seams
+  if (!plaster && !stoneV) for (let i = 1; i < 4; i++) add(g, B(W + 0.01, 0.015, D + 0.01), mat('#bdb9b0', { r: 0.4 }), 0, y0 + oh + i * (H - y0 - oh) / 4, 0); // slab seams
   firebox(g, { ow: open, oh, y0, zf: zf - 0.02, fd: 1.1, kind: 'gas' });
   add(g, B(open + 0.2, 0.08, 0.06), BLACK(), 0, y0 + oh + 0.04, zf + 0.01);
   add(g, B(open + 0.2, 0.08, 0.06), BLACK(), 0, y0 - 0.04, zf + 0.01);
@@ -330,7 +330,7 @@ function buildFarmhouse(g, rec) {
 function buildSeeThrough(g, rec) {
   const W = rec.w || 6.5, D = rec.d || 3.0, H = rec.h || 8;
   const open = rec.opening || 4, oh = 1.8, y0 = 1.4;
-  const s = (w, h) => texMat('stone', w, h);
+  const s = rec.variant === 'plaster' ? () => mat('#e9e6df', { r: 0.9 }) : (w, h) => texMat('stone', w, h);
   add(g, B(W, y0, D), s(W, y0), 0, y0 / 2, 0);
   add(g, B(W, H - y0 - oh, D), s(W, H - y0 - oh), 0, y0 + oh + (H - y0 - oh) / 2, 0);
   add(g, B((W - open) / 2, oh, D), s((W - open) / 2, oh), -(W + open) / 4, y0 + oh / 2, 0);
@@ -780,7 +780,7 @@ export const FIREPLACE_CATALOG = {
   fpStoneLinear: F('Floor-to-ceiling stone — 60" linear', buildStoneWall, 8.5, 2.6, 9.0, { fuel: 'electric', opening: 5.0, variants: ['linear', 'traditional', 'marble-slab'] }),
   fpFarmhouse36: F('Farmhouse shiplap + beam mantel 36"', buildFarmhouse, 6.0, 2.0, 9.0, { fuel: 'electric', opening: 3.0, variants: ['white', 'greige', 'charcoal'] }),
   fpFarmhouse42: F('Farmhouse shiplap + beam mantel 42"', buildFarmhouse, 7.0, 2.0, 9.0, { fuel: 'electric', opening: 3.5, variants: ['white', 'greige', 'charcoal'] }),
-  fpSeeThrough: F('Two-sided see-through 48"', buildSeeThrough, 6.5, 3.0, 8.0, { fuel: 'electric', opening: 4.0 }),
+  fpSeeThrough: F('Two-sided see-through 48"', buildSeeThrough, 6.5, 3.0, 8.0, { fuel: 'electric', opening: 4.0, variants: ['stone', 'plaster'] }),
   fpStove: F('Freestanding stove', buildStove, 3.4, 3.4, 8.6, { fuel: 'wood', variants: ['black', 'enamel-red'] }),
   fpMidCentury: F('Mid-century low horizontal', buildMidCentury, 9.0, 2.0, 2.3, { fuel: 'electric', variants: ['plaster', 'brick'] }),
   fpOldWorld60: F('Old-world limestone — 60" opening', buildOldWorld, 6.9, 3.4, 9.0, { fuel: 'wood', variants: ['styled', 'plain'] }),

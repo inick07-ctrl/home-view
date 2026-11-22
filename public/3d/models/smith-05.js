@@ -131,8 +131,8 @@ export default {
     post(32.4, 0.5, 11); post(55, 0.5, 11); k.block(32, 0.2, 55.4, 0.8, 10.3, 11, '#1e1f21');
     post(23.6, 2.8, 10); post(63.4, 2.8, 10);
     // chimney at the centre ridge + fireplace on the great room back wall
-    k.block(41.5, 14.4, 46, 18.6, 0, 24.5, '#f1efea', { solid: true }); k.block(41.4, 14.3, 46.1, 18.7, 24.5, 25, '#1d1e20');
-    k.block(42.4, 18.6, 45.1, 19, 0.6, 3.4, '#151515');
+    k.place && k.place('fpFarmhouse42', { x: 43.75, y: 16.75, rot: 0, w: 4.5, d: 4.7, h: 9, variant: 'white', fuel: 'wood' });
+    k.block(41.5, 14.4, 46, 18.6, 9, 24.5, '#f1efea', { chimney: [43.75, 16.75] }); k.block(41.4, 14.3, 46.1, 18.7, 24.5, 25, '#1d1e20', { chimney: [43.75, 16.75] });
     // site: walk to the front porch, driveway to the side-entry garage door
     k.plane(26.5, 56.2, 30, 85, 'paver');
     k.plane(87.2, 52.5, 110, 72, 'paver'); k.plane(100, 72, 110, 95, 'paver');

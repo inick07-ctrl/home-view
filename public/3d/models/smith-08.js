@@ -164,9 +164,8 @@ export default {
     k.plane(-16, 58.4167, 8, 77.4167, 'paver');
     // 60" linear fireplace on the family/entry wall, stone surround
     const fmx = 76, fmy = 37.5833;
-    k.block(fmx - 0.55, fmy - 2.7, fmx + 0.35, fmy + 2.7, 0, 6.4, 'stone', { solid: true });
-    k.block(fmx - 0.12, fmy - 2.5, fmx + 0.18, fmy + 2.5, 1.1, 3.5, '#1a1a1a');
-    k.block(fmx - 0.4, fmy - 1.1, fmx + 0.3, fmy + 1.1, 6.4, 16, 'stone');
+    k.place && k.place('fpLinear60', { x: fmx - 0.1, y: fmy, rot: 90, w: 5.4, d: 0.9, h: 10, variant: 'stone' });
+    k.block(fmx - 0.4, fmy - 1.1, fmx + 0.3, fmy + 1.1, 10, 16, 'stone', { chimney: [fmx - 0.1, fmy] }); // flue chase (wood-burning only)
     // family furniture
     k.block(61, 33.5833, 64, 41.5833, 0, 2.6, '#7b8590');
     k.block(65, 31.5833, 72, 33.7833, 0, 2.6, '#9aa0a6');

@@ -83,9 +83,7 @@ export default {
     k.block(11.5, 25.2, 18.5, 29.0, 0, 3.05, CREAM, { solid: true });
     k.block(11.5, 25.2, 18.5, 29.0, 3.05, 3.2, '#2a2a2c');
     // Fireplace east of the center hall so circulation stays clear
-    k.block(18.8, YB - 0.15, 26.4, YB + 1.55, 0, 7.0, STONE, { solid: true });
-    k.fire(19.1, YB + 0.2, 26.1, YB + 1.3, 's');
-    k.block(18.8, YB - 0.15, 26.4, YB + 1.55, 7.0, 8.8, STONE);
+    k.place && k.place('fpStoneTrad', { x: 22.6, y: YB + 0.95, rot: 0, w: 7.6, d: 2.2, h: 8.8, variant: 'traditional' });
     k.block(8.1, 0.2, 23.9, 15.8, 9.00, 9.22, 'wood');
     k.block(8.1, 15.65, 23.9, 15.85, 9.22, 11.8, 'wood');
     k.block(8.1, 15.65, 23.9, 15.85, 11.68, 11.9, TIM);

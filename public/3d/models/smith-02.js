@@ -151,7 +151,8 @@ export default {
     // living: sectional, fireplace + chimney (brick)
     k.block(72.5, 61.6, 82.5, 64.2, 0, 2.6, '#7b8590'); k.block(80, 53.5, 82.6, 61.6, 0, 2.6, '#7b8590');
     k.block(71, 56, 76, 59.5, 0, 1.3, '#6b4a2f');
-    k.block(62.6, 55.6, 65.4, 61.9, 0, 22, 'brick', { solid: true }); k.block(65.2, 57, 65.9, 60.5, 0.5, 3.5, '#1a1a1a');
+    k.place && k.place('fpMasonry42', { x: 64.275, y: 58.75, rot: 270, w: 6.3, d: 3.35, h: 9, variant: 'brick' });
+    k.block(62.6, 55.6, 65.4, 61.9, 9, 22, 'brick', { chimney: [64.275, 58.75] }); // chimney (wood-burning only)
     // garage cars (pickup, SUV, pickup) + bedroom porch posts
     // wood garage doors (closed), as in the exterior rendering
     k.block(77.7, 83.25, 93.5, 83.45, 0, 8, '#9b6a3e'); k.block(95.7, 83.25, 104.5, 83.45, 0, 8, '#9b6a3e');

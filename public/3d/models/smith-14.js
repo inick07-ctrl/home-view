@@ -375,13 +375,13 @@ export default {
     for (let i = 0; i < 3; i++) blk(61.5, -1.5 - i * 1.2, 68.5, -0.3 - i * 1.2, -0.55, -0.55 - (i - 2.5) * 0.18, '#7a6a58'); // deck steps
 
     // ------------------------------------------------------------ chimneys (ledgestone, two)
-    blk(50.6, FP_Y - 2.2, 53.6, FP_Y + 2.2, WH, coreZ(FP_Y) + 3.4, 'ledgestone', roofP);
-    blk(50.45, FP_Y - 2.35, 53.75, FP_Y + 2.35, coreZ(FP_Y) + 3.4, coreZ(FP_Y) + 3.75, CAP, roofP);
-    blk(51.4, FP_Y - 1.2, 52.8, FP_Y + 1.2, coreZ(FP_Y) + 3.75, coreZ(FP_Y) + 4.6, BLACK, roofP);
+    blk(50.6, FP_Y - 2.2, 53.6, FP_Y + 2.2, WH, coreZ(FP_Y) + 3.4, 'ledgestone', { ...roofP, chimney: [XGR + 0.3 + 3.55 / 2, FP_Y] });
+    blk(50.45, FP_Y - 2.35, 53.75, FP_Y + 2.35, coreZ(FP_Y) + 3.4, coreZ(FP_Y) + 3.75, CAP, { ...roofP, chimney: [XGR + 0.3 + 3.55 / 2, FP_Y] });
+    blk(51.4, FP_Y - 1.2, 52.8, FP_Y + 1.2, coreZ(FP_Y) + 3.75, coreZ(FP_Y) + 4.6, BLACK, { ...roofP, chimney: [XGR + 0.3 + 3.55 / 2, FP_Y] });
     const SC_Y = 21.5;
-    blk(XSUN + 0.4, SC_Y - 2.3, XSUN + 3.4, SC_Y + 2.3, -0.5, 18.4, 'ledgestone', { keep: true, solid: true });
-    blk(XSUN + 0.25, SC_Y - 2.45, XSUN + 3.55, SC_Y + 2.45, 18.4, 18.75, CAP);
-    blk(XSUN + 1.2, SC_Y - 1.2, XSUN + 2.6, SC_Y + 1.2, 18.75, 19.6, BLACK);
+    blk(XSUN + 0.4, SC_Y - 2.3, XSUN + 3.4, SC_Y + 2.3, -0.5, 18.4, 'ledgestone', { keep: true, solid: true, chimney: [XSUN - 0.3 - 3.4 / 2, 21.5] });
+    blk(XSUN + 0.25, SC_Y - 2.45, XSUN + 3.55, SC_Y + 2.45, 18.4, 18.75, CAP, { keep: true, chimney: [XSUN - 0.3 - 3.4 / 2, 21.5] });
+    blk(XSUN + 1.2, SC_Y - 1.2, XSUN + 2.6, SC_Y + 1.2, 18.75, 19.6, BLACK, { keep: true, chimney: [XSUN - 0.3 - 3.4 / 2, 21.5] });
 
     // ------------------------------------------------------------ stone wainscot + garage front stone
     const skinY = (y, xa, xb, z0, z1, holes, col, out = 1) => {

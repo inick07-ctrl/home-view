@@ -5,7 +5,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import REGISTRY from './models/registry.js';
 import { parcelDefaults, lotStats, formatLotArea, worldRings, buildableRings, xfHouse, houseFromWorld } from '../js/parcel.js';
-import { sanitizeWalls, clipCounters, autoFurnish, installFurniture, buildItemMesh, makeItem, itemRect, clearanceHit, isCoveredPorch, isPorchLike } from './furniture.js';
+import { sanitizeWalls, clipCounters, autoFurnish, installFurniture, buildItemMesh, makeItem, itemRect, clearanceHit, isCoveredPorch, isPorchLike, CATALOG as ITEM_CATALOG } from './furniture.js';
 import { mountPlanEditor, cloneWalls, cloneRooms, cloneItems, cloneRoofs, loadLocalLayout, sanitizeLayout } from './plan-editor.js';
 
 const $ = (id) => document.getElementById(id);
@@ -640,6 +640,7 @@ let itemsGroup = null;
 let highlightGroup = null;
 let itemsOn = true;
 let itemFire = { flames: [], lights: [], glows: [] }; // animated flames inside placed fireplace items
+let chimneyMeshes = []; // model chimney/flue blocks tagged { chimney: [x, y] }: shown only while a wood-burning fireplace item sits near (x, y)
 let editMode = false;
 let defaultItems = [];
 const hlMat = new THREE.MeshStandardMaterial({ color: '#e0a95a', emissive: '#e0a95a', emissiveIntensity: 0.45, transparent: true, opacity: 0.35, depthWrite: false });
@@ -680,7 +681,7 @@ function wallsOnRoom(WS, room, slack = 0.6) {
 }
 function translateSeg(w, dx, dy) { w[0] += dx; w[1] += dy; w[2] += dx; w[3] += dy; }
 function captureLayout() {
-  activeLayout = { version: 1, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs) };
+  activeLayout = { version: 2, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs) };
   return activeLayout;
 }
 function rebuildPlan() {
@@ -702,6 +703,7 @@ function refreshItems() {
   }
   itemsGroup.visible = itemsOn;
   addSepticRun();
+  updateChimneys();
   itemFire = { flames: [], lights: [], glows: [] };
   itemsGroup.traverse((o) => {
     if (o.userData?.flame) itemFire.flames.push(o);
@@ -710,6 +712,21 @@ function refreshItems() {
   });
   if (solids && M) {
     // keep architectural solids; item footprints are not walk-blockers except large islands
+  }
+}
+/** Chimneys/flue chases on the roof follow the fuel type of the fireplace they serve (wood = shown, electric/none = hidden). */
+function isFireplaceItem(it) { return ITEM_CATALOG[it?.type]?.category === 'fireplace'; }
+function fuelOf(it) { return it.fuel || ITEM_CATALOG[it.type]?.defaultFuel || 'wood'; }
+function updateChimneys() {
+  for (const m of chimneyMeshes) {
+    const [x, y] = m.userData.chimneyAt;
+    let best = null, bd = 7;
+    for (const it of currentItems || []) {
+      if (!isFireplaceItem(it)) continue;
+      const d = Math.hypot(it.x - x, it.y - y);
+      if (d < bd) { bd = d; best = it; }
+    }
+    m.visible = !!best && fuelOf(best) === 'wood';
   }
 }
 /** Faint dashed run from the house to each septic tank and on to the nearest drain field. */
@@ -1453,6 +1470,7 @@ function buildModel(model, opts = {}) {
   highlightGroup = new THREE.Group(); highlightGroup.name = 'highlight'; highlightGroup.renderOrder = 2; root.add(highlightGroup);
   const detected = {};
   installFurniture(kit, { rooms: M.rooms, WS, detected, Wx, Wz, itemsGroup, ceiling: H });
+  chimneyMeshes = [];
   const _kitBlock = kit.block ? kit.block.bind(kit) : null;
   if (_kitBlock) {
     kit.block = (a, b, c, d, z0, z1, color, opts) => {
@@ -1461,7 +1479,9 @@ function buildModel(model, opts = {}) {
       if (!(opts && opts.keep) && h >= 6 && w <= 1.25 && dep <= 1.25 && (M.rooms || []).some((r) => isCoveredPorch(r) && !(r[7] && r[7].noPosts) && cx >= r[3] && cx <= r[5] && cy >= r[4] && cy <= r[6])) {
         return;
       }
-      return _kitBlock(a, b, c, d, z0, z1, color, opts);
+      const m = _kitBlock(a, b, c, d, z0, z1, color, opts);
+      if (m && opts && Array.isArray(opts.chimney)) { m.userData.chimneyAt = opts.chimney; chimneyMeshes.push(m); }
+      return m;
     };
   }
   if (typeof M.furnish === 'function') M.furnish(kit);
@@ -1493,9 +1513,17 @@ function buildModel(model, opts = {}) {
       try { defaultItems.push(makeItem(raw.type, raw)); } catch (e) { console.warn('skipped placed item', raw, e); }
     }
   }
-  if (layout?.items) currentItems = cloneItems(layout.items);
-  else currentItems = cloneItems(defaultItems);
-  activeLayout = { version: 1, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs) };
+  if (layout?.items) {
+    currentItems = cloneItems(layout.items);
+    // v1 layouts were saved before built-in fireplaces became items: bring the model's fireplace back
+    // unless the saved plan already has a fireplace at (about) that spot.
+    if (!(+layout.version >= 2)) {
+      for (const fp of defaultItems.filter(isFireplaceItem)) {
+        if (!currentItems.some((it) => isFireplaceItem(it) && Math.hypot(it.x - fp.x, it.y - fp.y) < 4)) currentItems.push({ ...fp });
+      }
+    }
+  } else currentItems = cloneItems(defaultItems);
+  activeLayout = { version: 2, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs) };
   refreshItems();
   ensureEditor();
   syncAreaUi(M);

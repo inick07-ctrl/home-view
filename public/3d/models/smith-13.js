@@ -434,10 +434,10 @@ export function closeToHome(opts = {}) {
     for (let x = XGR + 1; x < XE; x += 2.0) box(TIMBER_D, x - 0.13, YEP - 0.5, x + 0.13, YMB - 0.4, 7.55, 7.85, true);
 
     // ------------------------------------------------------------ chimney (stone) over the great-room fireplace
-    blk(70.0, 37.0, 72.9, 41.4, WH, 21.2, 'ledgestone', roofP);
-    blk(69.85, 36.85, 73.05, 41.55, 21.2, 21.55, CAP, roofP);
-    blk(70.6, 37.6, 71.2, 38.4, 21.55, 22.3, BLACK, roofP);
-    blk(71.7, 40.0, 72.3, 40.8, 21.55, 22.3, BLACK, roofP);
+    blk(70.0, 37.0, 72.9, 41.4, WH, 21.2, 'ledgestone', { ...roofP, chimney: [XGR - 0.25 - 3.55 / 2, 39.2] });
+    blk(69.85, 36.85, 73.05, 41.55, 21.2, 21.55, CAP, { ...roofP, chimney: [XGR - 0.25 - 3.55 / 2, 39.2] });
+    blk(70.6, 37.6, 71.2, 38.4, 21.55, 22.3, BLACK, { ...roofP, chimney: [XGR - 0.25 - 3.55 / 2, 39.2] });
+    blk(71.7, 40.0, 72.3, 40.8, 21.55, 22.3, BLACK, { ...roofP, chimney: [XGR - 0.25 - 3.55 / 2, 39.2] });
 
     // ------------------------------------------------------------ exterior cladding: dark board garage, stone wainscot
     const skinX = (x, ya, yb, z0, z1, holes, col, out = -1) => {

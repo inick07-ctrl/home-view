@@ -152,7 +152,6 @@ export default {
     k.block(49.5083, 14.6667, 51.9083, 22.6667, 0, 3.0, '#efe7da');
     k.block(45.15, 26.3667, 49.85, 27.2667, 0, 7.2, '#d8c8a8');
     // Great-room fireplace on the west wall, facing east into the room
-    k.block(15.3833, 15.8167, 16.0333, 22.0167, 0, 4.6, '#c9c4b8');
-    k.fire(15.4833, 16.1667, 15.9533, 21.6667, 'e');
+    k.place && k.place('fpLinear60', { x: 15.708, y: 18.9167, rot: 270, w: 6.2, d: 0.65, h: 4.6, variant: 'plaster' });
   },
 };

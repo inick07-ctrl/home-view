@@ -47,9 +47,7 @@ export default {
     k.block(5.4, 16.3, 11.6, 18.3, 0, 3.0, CREAM, { solid: true });
     k.block(5.4, 16.3, 11.6, 18.3, 3.0, 3.14, '#2a2a2c');
     // Fireplace under the loft, facing the great room / glass
-    k.block(8.4, YB - 1.5, 15.6, YB + 0.15, 0, 6.8, STONE, { solid: true });
-    k.fire(8.7, YB - 1.25, 15.3, YB - 0.15, 's');
-    k.block(8.4, YB - 1.5, 15.6, YB + 0.15, 6.8, 8.6, STONE);
+    k.place && k.place('fpStoneTrad', { x: 12, y: YB - 0.425, rot: 0, w: 7.2, d: 2.15, h: 8.6, variant: 'traditional' });
     // Loft deck and railing toward the great room
     k.block(7.1, 0.15, 16.9, 13.35, 9.00, 9.22, 'wood');
     k.block(7.1, 13.2, 16.9, 13.38, 9.22, 11.8, 'wood'); // rail

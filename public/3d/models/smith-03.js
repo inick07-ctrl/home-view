@@ -127,8 +127,8 @@ export default {
     k.block(0.5, 25, 4.5, 27, 0, 1.8, '#f4f6f8'); k.block(10.4, 25, 12.4, 30.4, 0, 3, '#e8e2d6');
     k.bed(1, 38.5, 7.5, 45, 'w'); k.bed(31, 41, 37.5, 47.5, 'e');
     // great room: fireplace built-in on the west wall, sectional, faux beams x3
-    k.block(21.6, 19.1, 24.2, 31.1, 0, 3, '#e8e2d6', { solid: true }); k.block(22.2, 23.2, 24.2, 27, 0, 9.6, 'brick', { solid: true });
-    k.block(23.6, 24, 24.25, 26.2, 0.5, 3.2, '#1a1a1a');
+    k.block(21.6, 19.1, 24.2, 23.2, 0, 3, '#e8e2d6', { solid: true }); k.block(21.6, 27, 24.2, 31.1, 0, 3, '#e8e2d6', { solid: true }); // built-ins either side
+    k.place && k.place('fpMasonry36', { x: 23.475, y: 25.1, rot: 270, w: 3.8, d: 2.55, h: 9.6, variant: 'brick' });
     k.block(28.5, 19.5, 31, 31, 0, 2.6, '#7b8590'); k.block(28.5, 31, 37, 33.5, 0, 2.6, '#7b8590'); k.block(32, 23.5, 36, 28, 0, 1.3, '#6b4a2f');
     for (const x of [31.8, 39.3, 48.5]) k.block(x - .35, 14.3, x + .35, 36.3, 13, 13.8, '#6b4a2f');
     // kitchen: island, back counter + sink run, range wall, peninsula

@@ -133,10 +133,9 @@ export default {
     screen(39.95, -11.6, 40.05, 3.6); screen(58.45, -11.6, 58.55, 3.6); screen(40.3, -12.05, 47, -11.95); screen(51.5, -12.05, 58.2, -11.95);
     k.block(40, -12.2, 58.5, -11.8, 10.3, 11, BK);
     // two-sided see-through fireplace in the living room's back wall + chimney through the centre ridge
-    k.block(46.6, 2.6, 52, 5.4, 0, 11, '#e9e6df', { solid: true });
-    k.block(47.6, 2.5, 51, 5.5, 0.8, 3.6, '#141414');
+    k.place && k.place('fpSeeThrough', { x: 49.3, y: 4.0, rot: 0, w: 5.4, d: 2.8, h: 11, variant: 'plaster', fuel: 'wood' });
     k.block(46.4, 1.2, 52.2, 2.6, 0, 0.35, '#5c5852'); k.block(46.4, 5.4, 52.2, 6.8, 0, 0.35, '#5c5852');   // hearths both sides
-    k.block(47.4, 2.9, 51.2, 5.1, 11, 24.5, '#e9e6df'); k.block(47.3, 2.8, 51.3, 5.2, 24.5, 25, BK);
+    k.block(47.4, 2.9, 51.2, 5.1, 11, 24.5, '#e9e6df', { chimney: [49.3, 4.0] }); k.block(47.3, 2.8, 51.3, 5.2, 24.5, 25, BK, { chimney: [49.3, 4.0] });
     // front porch posts, site paths, driveway to the side-load garage
     post(40.4, 48.2, 11); post(58.1, 48.2, 11);
     k.plane(34.5, 48.5, 38.5, 85, 'paver'); k.plane(46, 48.5, 52.5, 56, 'paver');

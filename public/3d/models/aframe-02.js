@@ -77,9 +77,7 @@ export default {
     k.block(6.2, 22.3, 15.7, 24.4, 0, 3.0, CREAM, { solid: true });
     k.block(6.2, 22.3, 15.7, 24.4, 3.0, 3.14, '#2a2a2c');
     // Fireplace east of the hall so the center walk stays clear
-    k.block(16.4, YB - 0.15, 24.2, YB + 1.5, 0, 6.8, STONE, { solid: true });
-    k.fire(16.7, YB + 0.15, 23.9, YB + 1.25, 's');
-    k.block(16.4, YB - 0.15, 24.2, YB + 1.5, 6.8, 8.6, STONE);
+    k.place && k.place('fpStoneTrad', { x: 20.3, y: YB + 0.925, rot: 0, w: 7.8, d: 2.15, h: 8.6, variant: 'traditional' });
     k.block(8.1, 0.2, 19.9, 15.8, 9.00, 9.22, 'wood');
     k.block(8.1, 15.65, 19.9, 15.85, 9.22, 11.8, 'wood');
     k.block(8.1, 15.65, 19.9, 15.85, 11.68, 11.9, TIM);
