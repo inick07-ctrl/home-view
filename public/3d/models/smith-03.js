@@ -61,6 +61,7 @@ export default {
   subtitle: "A barndominium with a soaring great room and a shop garage built for serious work.",
   wallH: 10,
   planImage: { src: new URL("./smith-03-plan.jpg", import.meta.url).href, pxPerFt: 11.583, originPx: [54.28, 54.0], sizePx: [1400, 884] },
+  garageDoor: { color: '#d9d6cf' },
   materials: { ext: '#ebe7de', int: '#f7f4ee', roofTex: 'metal', roofUnder: '#d6c3a2', gable: 'ext', extSkin: true },
   walls: w,
   rooms: [
@@ -144,7 +145,7 @@ export default {
     // garage: chest freezers on the kitchen wall, pickup + SUV
     k.block(64.3, 28.6, 66.4, 35.2, 0, 3, '#e9e9e9');
     // steel overhead doors (closed), workbench
-    k.block(104.05, 4.8, 104.3, 20.3, 0, 12, '#d9d6cf'); k.block(104.05, 26.8, 104.3, 42.3, 0, 12, '#d9d6cf');
+    // overhead garage door leaves are drawn by the engine (M.garageDoor) so they roll up in walk-through and can be resized/removed
     k.block(86, 44.7, 100, 46.7, 0, 3.2, '#6b4a2f');
   },
 };

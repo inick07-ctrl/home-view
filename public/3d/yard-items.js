@@ -324,6 +324,7 @@ export const YARD_CATEGORIES = [
   { id: 'pool', name: 'Pool' },
   { id: 'solar', name: 'Solar' },
   { id: 'site', name: 'Septic & well' },
+  { id: 'outbuilding', name: 'Outbuildings' },
 ];
 
 export const YARD_CATALOG = {

@@ -3,10 +3,13 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { YARD_CATEGORIES, YARD_CATALOG } from './yard-items.js';
 import { FIREPLACE_CATEGORIES, FIREPLACE_CATALOG } from './fireplace-items.js';
+import { STAIR_CATEGORIES, STAIR_CATALOG } from './stair-items.js';
+import { OUTBUILDING_CATEGORIES, OUTBUILDING_CATALOG } from './outbuilding-items.js';
 
 export const CATEGORIES = [
   { id: 'living', name: 'Living' },
   ...FIREPLACE_CATEGORIES,
+  ...STAIR_CATEGORIES,
   { id: 'bedroom', name: 'Bedroom' },
   { id: 'kitchen', name: 'Kitchen & Dining' },
   { id: 'bath', name: 'Bath' },
@@ -218,6 +221,61 @@ function buildSofa(g, rec) {
   const p1 = add(g, rbox(0.55, 0.48, 0.22, 0.07), pillow, -px, seatH + 0.42, -D / 2 + 0.7, 0, 0.35, 0.1);
   const p2 = add(g, rbox(0.5, 0.44, 0.2, 0.07), mat('#f4eee4', { r: 0.8 }), px, seatH + 0.4, -D / 2 + 0.68, 0, -0.4, -0.08);
   void p1; void p2;
+}
+
+// Living Spaces Morro Bay II 128" 3-piece power dual-reclining modular sofa (#303817):
+// 128"W x 44"D x 31"H, seat 34"W x 24"D, seat height 18.9", track arms 12"W x 28"H, 1.5" legs,
+// two power-recliner end modules (47.5") + armless centre seat (35"), power headrests, beige woven fabric.
+// variant 'reclined' extends the footrests and tips the end backs; modules butt together (no gaps).
+const MORRO = { beige: ['#cbbca5', '#bfae95'], ivory: ['#e3dccf', '#d6cdbd'], gray: ['#a9a59e', '#9a958d'] };
+function buildMorroBay(g, rec) {
+  const [cA, cB] = MORRO[rec.finish] || MORRO.beige;
+  const fab = mat(cA, { r: 0.92 }), fab2 = mat(cB, { r: 0.94 }), seam = mat('#9d8e78', { r: 0.95 });
+  const blk = mat('#1d1d1d', { r: 0.5, m: 0.4 });
+  const IN = 1 / 12, W = (rec.w || 10.67), D = rec.d || 3.67, H = 31 * IN;
+  const scale = W / (128 * IN);
+  const armW = 12 * IN * scale, endW = 47.5 * IN * scale - 0.5 * IN, midW = W - 2 * endW;
+  const legH = 1.5 * IN, baseTop = 9.5 * IN, seatH = 18.9 * IN, armH = 28 * IN, backD = 9 * IN;
+  const recl = rec.variant === 'reclined';
+  const z0 = -D / 2;
+  const mods = [[-W / 2 + endW / 2, endW, -1], [0, midW, 0], [W / 2 - endW / 2, endW, 1]];
+  for (const [mx, mw, side] of mods) {
+    // plinth base (power mechanism housing) on low block feet
+    for (const fx of [-1, 1]) for (const fz of [-1, 1]) add(g, box(0.16, legH, 0.16), blk, mx + fx * (mw / 2 - 0.22), legH / 2, fz * (D / 2 - 0.3));
+    add(g, rbox(mw, baseTop - legH, D - 0.12, 0.03), fab2, mx, legH + (baseTop - legH) / 2, 0.02);
+    // closed rear panel: base up to the back frame so the back reads solid from behind
+    add(g, rbox(mw - 0.01, seatH + 0.05 - legH, backD, 0.03), fab2, mx, legH + (seatH + 0.05 - legH) / 2, z0 + backD / 2 + 0.05);
+    // seat platform + seat cushion (one 34" cushion per module)
+    const seatX0 = side < 0 ? mx - mw / 2 + armW : mx - mw / 2, seatX1 = side > 0 ? mx + mw / 2 - armW : mx + mw / 2;
+    const sw = seatX1 - seatX0, scx = (seatX0 + seatX1) / 2;
+    const sd = 24 * IN + 4 * IN, sz = D / 2 - sd / 2 - 0.02;
+    add(g, rbox(sw - 0.02, seatH - 5 * IN - baseTop, sd, 0.03), fab2, scx, baseTop + (seatH - 5 * IN - baseTop) / 2, sz);
+    add(g, rbox(sw - 0.04, 5 * IN, sd, 0.12), fab, scx, seatH - 2.5 * IN, sz + 0.01);
+    // back: frame + deep feather back cushion + power headrest pad on top (tips back when reclined)
+    const tilt = recl && side !== 0 ? -0.32 : 0;
+    const back = new THREE.Group(); back.position.set(scx, seatH - 0.1, z0 + backD + 0.05); back.rotation.x = tilt; g.add(back);
+    add(back, rbox(sw, H - seatH - 5 * IN + 0.1, backD, 0.05), fab2, 0, (H - seatH - 5 * IN + 0.1) / 2, -backD / 2);
+    add(back, rbox(sw - 0.08, H - seatH - 3 * IN, 7 * IN, 0.13), fab, 0, (H - seatH - 3 * IN) / 2 + 0.05, 3.5 * IN);
+    add(back, rbox(sw - 0.1, 6 * IN, 5 * IN, 0.1), fab, 0, H - seatH - 3.5 * IN + 0.12, 2.5 * IN);  // headrest pad
+    add(back, box(sw - 0.12, 0.02, 0.02), seam, 0, H - seatH - 6.6 * IN + 0.12, 5.1 * IN);          // headrest seam
+    // track arm on the outer end of each recliner (full depth, 12" wide, 28" tall)
+    if (side) {
+      const ax = side < 0 ? mx - mw / 2 + armW / 2 : mx + mw / 2 - armW / 2;
+      add(g, rbox(armW, armH - legH, D - 0.06, 0.06), fab, ax, legH + (armH - legH) / 2, 0);
+      add(g, box(0.02, 0.06, 0.14), mat('#8a8a86', { r: 0.4, m: 0.6 }), ax + side * (armW / 2 + 0.01), seatH - 0.25, D / 2 - 0.9); // power buttons
+    }
+    // footrest: tucked under the seat front, flips out when reclined
+    if (side) {
+      if (recl) {
+        add(g, box(sw - 0.14, 0.1, 0.1), blk, scx, baseTop - 0.1, D / 2 + 0.35);
+        add(g, rbox(sw - 0.12, 3.5 * IN, 1.3, 0.08), fab, scx, baseTop + 0.05, D / 2 + 0.7);
+      } else add(g, box(sw - 0.1, 0.02, 0.02), seam, scx, baseTop + 0.4, D / 2 + 0.02);
+    }
+  }
+  // module seams (where the three boxes butt)
+  for (const x of [-W / 2 + endW, W / 2 - endW]) add(g, box(0.015, baseTop - legH - 0.04, 0.012), seam, x, legH + (baseTop - legH) / 2, D / 2 - 0.035);
+  // two throw pillows on the end seats
+  for (const s of [-1, 1]) add(g, rbox(1.35, 1.25, 0.35, 0.12), mat('#e9e2d6', { r: 0.9 }), s * (W / 2 - armW - 0.85), seatH + 0.62, z0 + backD + 0.9, -0.15, s * 0.2, s * 0.08);
 }
 
 function buildSectional(g, rec) {
@@ -985,6 +1043,7 @@ function buildFirepit(g, rec) {
 }
 
 export const CATALOG = {
+  morroBay: { name: 'Morro Bay II 128" power dual-reclining modular sofa', category: 'living', w: 10.67, d: 3.67, h: 2.58, variants: ['upright', 'reclined'], finishes: ['beige', 'ivory', 'gray'], build: buildMorroBay },
   sofa: { name: 'Sofa', category: 'living', w: 7.67, d: 3.33, h: 2.75, variants: ['roll-arm', 'track-arm'], finishes: Object.keys(FINISHES), build: buildSofa },
   sectional: { name: 'Sectional', category: 'living', w: 9.5, d: 6.5, h: 2.75, variants: ['roll-arm', 'track-arm'], finishes: Object.keys(FINISHES), build: buildSectional },
   accentChair: { name: 'Accent chair', category: 'living', w: 2.55, d: 2.6, h: 3.05, variants: ['wing', 'spindle', 'lounge'], finishes: Object.keys(FINISHES), build: buildAccentChair },
@@ -1036,7 +1095,7 @@ export const CATALOG = {
   sportsCar: { name: 'Sports Car', category: 'garage', w: 14.6, d: 6.0, h: 4.2, finishes: Object.keys(VEHICLE_FINISHES), build: buildSportsCar },
 };
 
-Object.assign(CATALOG, YARD_CATALOG, FIREPLACE_CATALOG);
+Object.assign(CATALOG, YARD_CATALOG, FIREPLACE_CATALOG, STAIR_CATALOG, OUTBUILDING_CATALOG);
 
 export function itemFootprint(rec) {
   const t = CATALOG[rec.type] || CATALOG.sofa;
@@ -1255,6 +1314,15 @@ export function makeItem(type, opts = {}) {
     finish: opts.finish || (t.finishes ? t.finishes[0] : undefined),
     variant: opts.variant || (t.variants ? t.variants[0] : undefined),
     wood: opts.wood,
+    hw: opts.hw || undefined,
+    stairFinish: opts.stairFinish || undefined,
+    rail: opts.rail || undefined,
+    dir: opts.dir || undefined,
+    level: opts.level || undefined,
+    levelH: opts.levelH != null ? +opts.levelH : undefined,
+    body: opts.body || undefined,
+    trim: opts.trim || undefined,
+    roofColor: opts.roofColor || undefined,
     chaise: opts.chaise,
     top: opts.top,
     pillow: opts.pillow,
@@ -1286,7 +1354,7 @@ export function buildItemMesh(rec, ctx) {
   const g = new THREE.Group();
   g.userData.itemId = rec.id;
   g.userData.item = rec;
-  t.build(g, rec);
+  t.build(g, rec, ctx);
   // hang pendants from a typical ceiling
   if (rec.type === 'pendant') g.position.y = 0; // builder already uses local y; we'll lift the group below
   const typ = CATALOG[rec.type] || t;
@@ -1332,7 +1400,7 @@ export function isCoveredPorch(room) {
 export function isOutdoorItem(type) {
   const t = CATALOG[type] || {};
   const c = t.category;
-  return !!t.outdoor || c === 'garage' || c === 'patio' || c === 'pool' || c === 'solar' || c === 'site';
+  return !!t.outdoor || c === 'garage' || c === 'patio' || c === 'pool' || c === 'solar' || c === 'site' || c === 'outbuilding';
 }
 
 export function roomOfPoint(rooms, x, y) {
@@ -1540,7 +1608,12 @@ export function autoFurnish(M, WS) {
       const seatD = useSectional ? 6.4 : 3.33;
       const sofa = againstWall(room, wall, sofaW, seatD, 0.7);
       let seat = null;
-      if (useSectional) {
+      // default living / great-room sofa: Morro Bay II 128" modular power recliner (when the wall fits it)
+      if ((wall === 'n' || wall === 's' ? rw : rd) >= 12.2) {
+        const mb = againstWall(room, wall, 10.67, 3.67, 0.7);
+        seat = put('morroBay', { ...mb, w: 10.67, d: 3.67, finish: 'beige', variant: 'upright' });
+      }
+      if (!seat && useSectional) {
         seat = put('sectional', { ...sofa, w: sofaW + 1.5, d: 6.4, finish: 'linen', chaise: 'right' });
       }
       if (!seat) {

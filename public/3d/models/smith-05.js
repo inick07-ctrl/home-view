@@ -71,6 +71,7 @@ export default {
   subtitle: "A three-gable modern farmhouse with a deep, vaulted back porch.",
   wallH: 9,
   planImage: { src: new URL("./smith-05-plan.jpg", import.meta.url).href, pxPerFt: 11.45, originPx: [80, 537], sizePx: [1206, 1436] },
+  garageDoor: { color: '#2a2b2d' },
   materials: { ext: '#f4f3ef', int: '#f8f6f1', roofTex: 'metal', roofUnder: '#d8c7a8', gable: 'ext', extSkin: true },
   walls: w,
   rooms: [
@@ -157,6 +158,6 @@ export default {
     // utility, closet
     k.block(68.4, 49, 76.9, 50.6, 0, 3, '#f4f4f4'); k.block(78, 49.2, 90.8, 50.6, 0, 7, '#6b4a2f');
     // garage: two cars, closed overhead door
-    k.block(87.25, 53.3, 87.5, 71.3, 0, 8, '#2a2b2d');
+    // overhead garage door leaves are drawn by the engine (M.garageDoor) so they roll up in walk-through and can be resized/removed
   },
 };

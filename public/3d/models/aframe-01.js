@@ -52,12 +52,8 @@ export default {
     k.block(7.1, 0.15, 16.9, 13.35, 9.00, 9.22, 'wood');
     k.block(7.1, 13.2, 16.9, 13.38, 9.22, 11.8, 'wood'); // rail
     k.block(7.1, 13.2, 16.9, 13.38, 11.68, 11.9, TIM);
-    // Stair along the west of the loft opening
-    for (let i = 0; i < 12; i++) {
-      const z = i * (9.0 / 12);
-      const y = 13.3 + i * 0.75;
-      k.block(7.2, y, 10.2, y + 0.8, z, z + 0.18, 'wood');
-    }
+    // Stair up to the loft (placeable, removable item: Edit Plan → Stairs); top lands on the loft deck edge
+    k.place && k.place('stairStraight', { x: 8.7, y: 13.35 + 8.8 / 2, rot: 0, w: 3.2, d: 8.8, dir: 'up', level: true, levelH: 9.22, variant: 'oak', rail: 'wood' });
     // Deck posts
     for (const x of [-1.6, 12, 25.6]) k.block(x - 0.2, YD - 0.35, x + 0.2, YD, 0, 3.4, TIM, { solid: true });
     k.block(-1.7, YD - 0.25, 25.7, YD, 3.4, 3.7, TIM);

@@ -66,6 +66,7 @@ export function clearLocalLayout(key) {
   try { localStorage.removeItem(STORE_PREFIX + key); } catch {}
 }
 
+import { OB_BODY, OB_TRIM, OB_ROOF } from './outbuilding-items.js';
 export function sanitizeLayout(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const items = Array.isArray(raw.items) ? raw.items.slice(0, 400).map((it) => {
@@ -99,9 +100,33 @@ export function sanitizeLayout(raw) {
       return { ...rf, x0, y0, x1, y1 };
     }).filter(Boolean);
   }
-  if (!items && !rooms && !walls && !roofs) return null;
-  return { version: +raw.version >= 2 ? 2 : 1, items, rooms, walls, roofs };
+  const finishes = sanitizeFinishes(raw.finishes);
+  const deleted = Array.isArray(raw.deleted) ? raw.deleted.slice(0, 100).filter((d) => d && Array.isArray(d.rect) && d.rect.length === 4 && d.rect.every(Number.isFinite))
+    .map((d) => ({ name: String(d.name || 'Room').slice(0, 60), rect: d.rect.slice(), cat: ['heated', 'garage', 'porch'].includes(d.cat) ? d.cat : 'heated', area: +d.area || 0 })) : undefined;
+  if (!items && !rooms && !walls && !roofs && !finishes) return null;
+  return { version: Math.max(1, Math.min(3, Math.floor(+raw.version) || 1)), items, rooms, walls, roofs, finishes, deleted };
 }
+const COLOR_RX = /^(wood:)?#[0-9a-f]{6}$/i;
+function sanitizeFinishes(f) {
+  if (!f || typeof f !== 'object') return undefined;
+  const out = {};
+  for (const k of ['wall', 'doorInt', 'doorExt']) if (typeof f[k] === 'string' && COLOR_RX.test(f[k])) out[k] = f[k];
+  if (typeof f.hardware === 'string' && /^[a-z-]{3,30}$/.test(f.hardware)) out.hardware = f.hardware;
+  if (f.rooms && typeof f.rooms === 'object') {
+    const r = {};
+    for (const [k, v] of Object.entries(f.rooms).slice(0, 200)) if (typeof v === 'string' && COLOR_RX.test(v)) r[String(k).slice(0, 60)] = v;
+    if (Object.keys(r).length) out.rooms = r;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+export const WALL_PALETTE = [
+  ['Pure White', '#f6f5f0'], ['Alabaster', '#efe9dc'], ['Swiss Coffee', '#ece4d4'], ['Agreeable Gray', '#d1cbc1'], ['Accessible Beige', '#cdc0ad'],
+  ['Repose Gray', '#c3c0b8'], ['Edgecomb Gray', '#d8d1c3'], ['Evergreen Fog', '#a3a796'], ['Sage', '#b3b9a0'], ['Pale Oak', '#ddd3c4'],
+  ['Hale Navy', '#3d4652'], ['Naval', '#2f3d4c'], ['Iron Ore', '#4a4847'], ['Urbane Bronze', '#55504a'], ['Tricorn Black', '#2b2b2b'], ['Terracotta Blush', '#c99a83'],
+];
+export const DOOR_PALETTE = [
+  ['White', '#f4f2eb'], ['Black', '#1d1e20'], ['Natural oak', 'wood:#d2a679'], ['Walnut', 'wood:#6b4630'], ['Navy', '#2f3d4c'], ['Sage', '#97a088'], ['Charcoal', '#45474a'],
+];
 
 export function mountPlanEditor(ctrl) {
   if (document.getElementById('editDrawer')) { if (ctrl) Object.assign(mountPlanEditor._ctrl || {}, ctrl); return mountPlanEditor._api; }
@@ -134,11 +159,13 @@ export function mountPlanEditor(ctrl) {
   }
   function currentLayout() {
     return {
-      version: 2,
+      version: 3,
       items: cloneItems(ctrl.getItems()),
       rooms: cloneRooms(ctrl.getRooms()),
       walls: cloneWalls(ctrl.getWalls()),
       roofs: cloneRoofs(ctrl.getRoofs ? ctrl.getRoofs() : []),
+      finishes: JSON.parse(JSON.stringify(ctrl.getFinishes ? ctrl.getFinishes() : {})),
+      deleted: JSON.parse(JSON.stringify(ctrl.getDeleted ? ctrl.getDeleted() : [])),
     };
   }
   function pushUndo() {
@@ -171,6 +198,7 @@ export function mountPlanEditor(ctrl) {
   function stillExists(sel) {
     if (!sel) return false;
     if (sel.kind === 'item') return ctrl.getItems().some((it) => it.id === sel.id);
+    if (sel.kind === 'door') return !!(ctrl.getWalls().door || [])[sel.index];
     if (sel.kind === 'room') return !!ctrl.getRooms()[sel.index];
     if (sel.kind === 'wall') {
       const list = ctrl.getWalls()[sel.wallKind] || [];
@@ -296,6 +324,8 @@ export function mountPlanEditor(ctrl) {
     body.innerHTML = '';
     if (tab === 'items') renderItems(body);
     else if (tab === 'rooms') renderRooms(body);
+    else if (tab === 'doors') renderDoors(body);
+    else if (tab === 'colors') renderColors(body);
     else renderWalls(body);
   }
 
@@ -411,6 +441,36 @@ export function mountPlanEditor(ctrl) {
       s.onchange = () => patchItem(it.id, { fuel: s.value });
       row('Fuel type', s);
     }
+    if (t.sizes) {
+      const ss = el('select', { id: 'editObSize' });
+      const cur = `${Math.round(it.w)}x${Math.round(it.d)}`;
+      for (const [w, d] of t.sizes) { const k = `${w}x${d}`; const o = el('option', { value: k, text: `${w}′ × ${d}′` }); if (k === cur) o.selected = true; ss.appendChild(o); }
+      ss.onchange = () => { const [w, d] = ss.value.split('x').map(Number); patchItem(it.id, { w, d }); };
+      row('Size', ss);
+      for (const [key, lab, pal] of [['body', 'Body color', OB_BODY], ['trim', 'Trim color', OB_TRIM], ['roofColor', 'Roof color', OB_ROOF]]) {
+        const cs = el('select', { id: 'editOb_' + key });
+        for (const [v, l] of pal) { const o = el('option', { value: v, text: l }); if ((it[key] || 'match') === v) o.selected = true; cs.appendChild(o); }
+        cs.onchange = () => patchItem(it.id, { [key]: cs.value === 'match' ? undefined : cs.value });
+        row(lab, cs);
+      }
+    }
+    if (t.stair) {
+      const ds = el('select', { id: 'editStairDir' });
+      for (const [k, lab] of [['up', 'Up (to a loft / upper level)'], ['down', 'Down (to the basement — cuts a floor opening)']]) { const o = el('option', { value: k, text: lab }); if ((it.dir || 'up') === k) o.selected = true; ds.appendChild(o); }
+      ds.onchange = () => patchItem(it.id, { dir: ds.value });
+      row('Direction', ds);
+      const rs = el('select', { id: 'editStairRail' });
+      for (const k of (t.rails || ['black'])) { const o = el('option', { value: k, text: { black: 'Black metal balusters', wood: 'Wood rail + white balusters', glass: 'Glass panels' }[k] || k }); if ((it.rail || 'black') === k) o.selected = true; rs.appendChild(o); }
+      rs.onchange = () => patchItem(it.id, { rail: rs.value });
+      row('Railing', rs);
+    }
+    if (ctrl.hwFinishes && /sink|faucet|vanity|kitchen|island|counter|cabinet|pantry|pendant|chandelier|lamp|sconce|light|shower|tub|bath|toilet|dresser|nightstand|sideboard|buffet|desk|bar|hutch|wardrobe|credenza|range|hood/i.test(it.type)) {
+      const s = el('select', { id: 'editHw' });
+      s.appendChild(el('option', { value: '', text: 'House default' }));
+      for (const [k, f] of Object.entries(ctrl.hwFinishes)) { const o = el('option', { value: k, text: f.label }); if (it.hw === k) o.selected = true; s.appendChild(o); }
+      s.onchange = () => patchItem(it.id, { hw: s.value || undefined });
+      row('Hardware / metal finish', s);
+    }
     const acts = el('div', { class: 'row' });
     const dup = el('button', { type: 'button', text: 'Duplicate' });
     dup.onclick = () => {
@@ -495,6 +555,22 @@ export function mountPlanEditor(ctrl) {
       b.onclick = () => select({ kind: 'room', index: i });
       list.appendChild(b);
     });
+    if (canEdit() && rooms.length) {
+      const box = el('div', { class: 'row', id: 'delRoomRow' });
+      const sel = el('select', { id: 'delRoomSel', title: 'Pick a room to delete' });
+      sel.appendChild(el('option', { value: '', text: 'Delete room by name…' }));
+      rooms.forEach((r, i) => { if (r[0]) sel.appendChild(el('option', { value: String(i), text: r[0] })); });
+      if (selected?.kind === 'room') sel.value = String(selected.index);
+      const go = el('button', { type: 'button', class: 'danger', id: 'delRoomBtn', text: 'Delete room' });
+      go.onclick = () => {
+        const i = sel.value === '' ? (selected?.kind === 'room' ? selected.index : -1) : +sel.value;
+        const r = rooms[i]; if (!r) return;
+        if (!confirm(`Delete “${r[0] || 'Room'}”? Its floor, furniture and unshared walls go; shared walls stay and become exterior walls. Undo brings it back.`)) return;
+        pushUndo(); ctrl.removeRoom(i); select(null); persist(); render();
+      };
+      box.append(sel, go);
+      body.appendChild(box);
+    }
     body.appendChild(list);
     const room = selected?.kind === 'room' ? rooms[selected.index] : null;
     if (room && canEdit()) body.appendChild(roomInspector(room, selected.index));
@@ -571,6 +647,114 @@ export function mountPlanEditor(ctrl) {
     ctrl.highlight(selected);
   }
 
+  function renderDoors(body) {
+    const list0 = ctrl.doorList ? ctrl.doorList() : [];
+    body.appendChild(el('p', { id: 'editHint', text: canEdit() ? 'Pick a door to remove it (leaves an open cased opening, or fill it with wall), recolor it, or resize a garage door. Add a garage door from Walls → select an exterior garage wall.' : 'View only.' }));
+    const list = el('div', { id: 'editList' });
+    const groups = [['garage', 'Garage doors'], ['ext', 'Exterior doors'], ['int', 'Interior doors']];
+    for (const [k, lab] of groups) {
+      const ds = list0.filter((d) => d.kind === k);
+      if (!ds.length) continue;
+      list.appendChild(el('div', { class: 'group', text: lab }));
+      ds.forEach((d, n) => {
+        const b = el('button', { class: 'item' + (selected?.kind === 'door' && selected.index === d.index ? ' on' : ''), type: 'button', 'data-door': String(d.index) });
+        b.appendChild(document.createTextNode(`${lab.replace(/s$/, '')} ${n + 1}${d.room ? ' · ' + d.room : ''}`));
+        b.appendChild(el('small', { text: `${fmtFt(d.width)} wide${d.removed ? ' · removed (open)' : d.hasLeaf ? '' : ' · cased opening'}` }));
+        b.onclick = () => { selected = { kind: 'door', index: d.index }; render(); ctrl.highlightDoor(d.index); };
+        list.appendChild(b);
+      });
+    }
+    body.appendChild(list);
+    const d = selected?.kind === 'door' ? list0.find((x) => x.index === selected.index) : null;
+    if (!d || !canEdit()) return;
+    const wrap = el('div', { id: 'editInspect' });
+    wrap.appendChild(el('h3', { text: (d.kind === 'garage' ? 'Garage door' : d.kind === 'ext' ? 'Exterior door' : 'Interior door') + (d.room ? ' — ' + d.room : '') }));
+    const acts = el('div', { class: 'row' });
+    const done = () => { persist(); render(); };
+    if (d.removed) {
+      const b = el('button', { type: 'button', text: 'Restore door' });
+      b.onclick = () => { pushUndo(); ctrl.restoreDoor(d.index); done(); ctrl.highlightDoor(d.index); };
+      acts.appendChild(b);
+    } else if (d.hasLeaf) {
+      const b = el('button', { type: 'button', class: 'danger', id: 'removeDoorBtn', text: 'Remove door (keep opening)' });
+      b.onclick = () => { pushUndo(); ctrl.removeDoor(d.index, 'opening'); done(); ctrl.highlightDoor(d.index); };
+      acts.appendChild(b);
+    }
+    const w = el('button', { type: 'button', class: 'danger', text: 'Remove & fill with wall' });
+    w.onclick = () => { pushUndo(); ctrl.removeDoor(d.index, 'wall'); selected = null; ctrl.highlightDoor(null); done(); };
+    acts.appendChild(w);
+    wrap.appendChild(acts);
+    if (d.kind === 'garage') {
+      wrap.appendChild(el('label', { text: 'Garage door size' }));
+      const s = el('select', { id: 'gdSize' });
+      const cur = d.width > 12 ? 'double' : 'single';
+      for (const [k, lab] of [['single', 'Single-car 9′ × 8′'], ['double', 'Double-car 16′ × 8′'], ['two', 'Two single 9′ doors']]) { const o = el('option', { value: k, text: lab }); if (k === cur) o.selected = true; s.appendChild(o); }
+      s.onchange = () => {
+        pushUndo();
+        const r = ctrl.garageSize(d.index, s.value);
+        if (!r.ok) { undo.pop(); $('editHint').textContent = 'Could not resize: ' + r.why; s.value = cur; return; }
+        selected = null; ctrl.highlightDoor(null); done();
+      };
+      wrap.appendChild(s);
+    }
+    wrap.appendChild(el('label', { text: 'Door color' }));
+    wrap.appendChild(swatches(DOOR_PALETTE, d.color, (c) => { pushUndo(); ctrl.setDoorColor(d.index, c); persist(); render(); }, true));
+    body.appendChild(wrap);
+  }
+  function swatches(pal, cur, onPick, allowClear) {
+    const box = el('div', { class: 'swatches' });
+    for (const [lab, c] of pal) {
+      const hex = c.replace(/^wood:/, '');
+      const b = el('button', { type: 'button', class: 'sw' + (cur === c ? ' on' : ''), title: lab, 'data-color': c });
+      b.style.background = c.startsWith('wood:') ? `repeating-linear-gradient(100deg, ${hex}, ${hex} 4px, rgba(0,0,0,.12) 5px, ${hex} 7px)` : hex;
+      b.onclick = () => onPick(c);
+      box.appendChild(b);
+    }
+    const pick = el('input', { type: 'color', title: 'Custom color', value: cur && /^#/.test(cur) ? cur : '#d8d1c3' });
+    pick.onchange = () => onPick(pick.value);
+    box.appendChild(pick);
+    if (allowClear) { const x = el('button', { type: 'button', class: 'sw-clear', text: 'Default' }); x.onclick = () => onPick(null); box.appendChild(x); }
+    return box;
+  }
+  function renderColors(body) {
+    const fin = ctrl.getFinishes ? ctrl.getFinishes() : {};
+    const ok = canEdit();
+    const set = (patch) => { pushUndo(); ctrl.setFinishes(patch); persist(); render(); };
+    body.appendChild(el('p', { id: 'editHint', text: ok ? 'Colors apply live. Pick a whole-house wall color, then override single rooms; door colors and the fixture/hardware finish work the same way. Per-door colors: Doors tab. Per-item metal finish: select the item.' : 'View only.' }));
+    if (!ok) return;
+    body.appendChild(el('h3', { text: 'Wall paint — whole house' }));
+    body.appendChild(swatches(WALL_PALETTE, fin.wall, (c) => set({ wall: c }), true));
+    body.appendChild(el('h3', { text: 'Wall paint — one room' }));
+    const rooms = ctrl.getRooms().filter((r) => r[0] && !r[7]?.outside);
+    const names = [...new Set(rooms.map((r) => r[0]))];
+    const rs = el('select', { id: 'paintRoom' });
+    for (const n of names) rs.appendChild(el('option', { value: n, text: n + (fin.rooms && fin.rooms[n] ? ' ●' : '') }));
+    const selRoom = selected?.kind === 'room' ? ctrl.getRooms()[selected.index]?.[0] : null;
+    rs.value = (renderColors._room && names.includes(renderColors._room)) ? renderColors._room : (selRoom && names.includes(selRoom) ? selRoom : names[0]);
+    rs.onchange = () => { renderColors._room = rs.value; render(); };
+    body.appendChild(rs);
+    const curRoom = rs.value;
+    body.appendChild(swatches(WALL_PALETTE, fin.rooms?.[curRoom], (c) => { renderColors._room = curRoom; set({ rooms: { [curRoom]: c } }); }, true));
+    body.appendChild(el('h3', { text: 'Doors' }));
+    body.appendChild(el('label', { text: 'All interior doors' }));
+    body.appendChild(swatches(DOOR_PALETTE, fin.doorInt, (c) => set({ doorInt: c }), true));
+    body.appendChild(el('label', { text: 'All exterior doors' }));
+    body.appendChild(swatches(DOOR_PALETTE, fin.doorExt, (c) => set({ doorExt: c }), true));
+    body.appendChild(el('h3', { text: 'Fixtures & hardware' }));
+    body.appendChild(el('small', { text: 'Faucets, door knobs & levers, cabinet pulls, light-fixture metal, shower & bath fixtures' }));
+    const hw = el('div', { class: 'hwlist', id: 'hwList' });
+    const opt = [['', 'As designed']].concat(Object.entries(ctrl.hwFinishes || {}).map(([k, f]) => [k, f.label]));
+    for (const [k, lab] of opt) {
+      const f = (ctrl.hwFinishes || {})[k];
+      const b = el('button', { type: 'button', class: 'hw' + ((fin.hardware || '') === k ? ' on' : ''), 'data-hw': k });
+      const dot = el('span', { class: 'hwdot' }); dot.style.background = f ? f.color : 'linear-gradient(135deg,#c9a45c,#1c1c1c)';
+      b.append(dot, document.createTextNode(lab));
+      b.onclick = () => set({ hardware: k || null });
+      hw.appendChild(b);
+    }
+    body.appendChild(hw);
+  }
+
   function renderWalls(body) {
     const WS = ctrl.getWalls();
     body.appendChild(el('p', { id: 'editHint', text: canEdit() ? 'Click a wall in 3D to select it (hover highlights it). Press Delete or use Remove wall. Add a wall, then click two points on the floor.' : 'View only.' }));
@@ -627,6 +811,15 @@ export function mountPlanEditor(ctrl) {
     };
     acts.append(door, del);
     wrap.appendChild(acts);
+    if (ctrl.garageWallInfo && ctrl.garageWallInfo(kind, index)) {
+      const g = el('div', { class: 'row' });
+      for (const [sz, lab] of [['single', '+ Garage door 9′×8′'], ['double', '+ Garage door 16′×8′']]) {
+        const b = el('button', { type: 'button', text: lab });
+        b.onclick = () => { pushUndo(); const r = ctrl.addGarageDoor(kind, index, sz); if (!r.ok) { undo.pop(); $('editHint').textContent = 'Could not add: ' + r.why; return; } select(null); persist(); tab = 'doors'; render(); };
+        g.appendChild(b);
+      }
+      wrap.appendChild(g);
+    }
     void horiz;
     return wrap;
   }
@@ -996,6 +1189,8 @@ function buildDrawer() {
     el('button', { type: 'button', 'data-tab': 'items', class: 'on', text: 'Items' }),
     el('button', { type: 'button', 'data-tab': 'rooms', text: 'Rooms' }),
     el('button', { type: 'button', 'data-tab': 'walls', text: 'Walls' }),
+    el('button', { type: 'button', 'data-tab': 'doors', text: 'Doors', title: 'Remove, restore, recolor doors; add or resize garage doors' }),
+    el('button', { type: 'button', 'data-tab': 'colors', text: 'Colors', title: 'Wall paint, door colors, fixture & hardware finishes' }),
   );
   d.append(header, tabs, el('div', { id: 'editBody' }), el('div', { id: 'editStatus', text: '' }));
   return d;

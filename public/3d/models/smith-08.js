@@ -31,6 +31,9 @@ w.seg(85.1667, 0, 105.1667, 0, { ext: true, h: 12, windows: [[89.1667, 94.1667, 
 w.seg(105.1667, 0, 105.1667, 3, { ext: true, h: 12 });
 w.seg(105.1667, 3, 118.1667, 3, { ext: true, windows: [[107.6667, 112.1667, 3, 7], [113.1667, 116.6667, 3, 7]] });
 w.seg(118.1667, 3, 118.1667, 14, { ext: true, windows: [[5, 11, 3, 7]] });
+w.seg(105.1667, 17, 118.1667, 17, { ext: true });   // hall strip south wall (was open)
+w.seg(118.1667, 14, 118.1667, 17, { ext: true });
+w.seg(76, 42.9167, 76, 47.5833, { ext: true, h: 12 }); // family room / front porch (was open)
 w.seg(85.1667, 0, 85.1667, 27.5833, { ext: true, h: 12, windows: [[3, 10, 3, 7]] });
 w.seg(85.1667, 42.9167, 85.1667, 53.9167, { ext: true, windows: [[45.9167, 50.9167, 3, 7]] });
 w.seg(85.1667, 53.9167, 99.8333, 53.9167, { ext: true, windows: [[89.1667, 95.1667, 3, 7]] });
@@ -73,6 +76,7 @@ export default {
   wallH: 10,
   defaultStyle: 'english-country',
   planImage: { src: new URL("./smith-08-plan.png", import.meta.url).href, pxPerFt: 12, originPx: [112, 88], sizePx: [1642, 1017] },
+  garageDoor: { color: '#2a2b2d' },
   materials: { ext: '#ebe4d4', int: '#f3efe6', roofTex: 'shingle', roofUnder: '#d8c7a8', gable: 'ext', extSkin: true },
   walls: w,
   rooms: [
@@ -139,11 +143,11 @@ export default {
     // garage — lower gable, gable end over the west side-load doors
     { x0: 0, y0: 21.5833, x1: 24, y1: 59.4167, along: 'y', pitch: 0.5, oh: 1, eave: 10, endOh: [1, 0], ends: ['ext', null] },
     // primary + office — front-facing gable (ridge north-south)
-    { x0: 85.1667, y0: 0, x1: 118.1667, y1: 14, along: 'y', pitch: 0.67, oh: 1, eave: 12, ends: ['ext', 'ext'] },
+    { x0: 85.1667, y0: 0, x1: 118.1667, y1: 17, along: 'y', pitch: 0.67, oh: 1, eave: 12, ends: ['ext', 'ext'] },
     // bedroom wing south of the primary
     { x0: 85.1667, y0: 14, x1: 105.8333, y1: 53.9167, along: 'y', pitch: 0.67, oh: 1, eave: 10, endOh: [0, 1], ends: [null, 'ext'] },
     // back porch shed (low edge outboard / north)
-    { shed: true, x0: 56, y0: 13.4, x1: 87, y1: 27.5833, hi: 8.2, lo: 9.4, oh: 0.6 },
+    { shed: true, x0: 56, y0: 13.4, x1: 85.1667, y1: 27.5833, hi: 8.2, lo: 9.4, oh: 0.6 }, // stops at the hall wall (was poking into the hall)
     // front porch shed (low edge outboard / south)
     { shed: true, x0: 76, y0: 42.9167, x1: 86, y1: 49.5167, hi: 9.4, lo: 8.2, oh: 0.6 },
   ],
@@ -236,8 +240,8 @@ export default {
     }
     // garage cars: Golf R in Bay 1, Lexus GX in Bay 2 Truck, G-Wagon in Bay 3; all nose west toward the doors
     // closed overhead doors
-    k.block(3.75, 23.3833, 4.15, 32.6167, 0, 8, '#2a2b2d');
-    k.block(-0.25, 35.9167, 0.15, 45.0833, 0, 8, '#2a2b2d');
-    k.block(3.75, 48.3833, 4.15, 57.6167, 0, 8, '#2a2b2d');
+    // overhead garage door leaves are drawn by the engine (M.garageDoor) so they roll up in walk-through and can be resized/removed
+    // overhead garage door leaves are drawn by the engine (M.garageDoor) so they roll up in walk-through and can be resized/removed
+    // overhead garage door leaves are drawn by the engine (M.garageDoor) so they roll up in walk-through and can be resized/removed
   },
 };

@@ -351,7 +351,9 @@ export function estimateBuild({
   const fireplaceCost = Math.max(0, Number(extras.fireplaceCost) || 0) * tierX(0.85, 1.3);
   const septicCost = Math.max(0, Number(extras.septicCost) || 0) * tierX(0.9, 1.15);
   const wellCost = Math.max(0, Number(extras.wellCost) || 0) * tierX(0.9, 1.15);
-  const mid = heatedCost + garageCost + porchCost + poolCost + spaCost + solarCost + fireplaceCost + septicCost + wellCost;
+  const stairCost = Math.max(0, Number(extras.stairCost) || 0) * tierX(0.85, 1.3);
+  const garageDoorCost = Math.max(0, Number(extras.garageDoorCost) || 0) * tierX(0.9, 1.25);
+  const mid = heatedCost + garageCost + porchCost + poolCost + spaCost + solarCost + fireplaceCost + septicCost + wellCost + stairCost + garageDoorCost;
   const low = mid * 0.88;
   const high = mid * 1.14;
   const items = BREAKDOWN.map((b) => {
@@ -376,6 +378,8 @@ export function estimateBuild({
     if (lines) lines.forEach((ln, i) => { const amount = (Number(ln.cost) || 0) * fx; items.push({ id: 'fireplace' + (i ? '-' + i : ''), label: ln.label, amount, pct: mid > 0 ? amount / mid : 0 }); });
     else items.push({ id: 'fireplace', label: (fireplaceCount > 1 ? `Fireplaces (${fireplaceCount})` : 'Fireplace') + ' (rough)', amount: fireplaceCost, pct: mid > 0 ? fireplaceCost / mid : 0 });
   }
+  if (stairCost > 0) (extras.stairLines || []).forEach((ln, i) => { const amount = (Number(ln.cost) || 0) * tierX(0.85, 1.3); items.push({ id: 'stair' + (i ? '-' + i : ''), label: ln.label, amount, pct: mid > 0 ? amount / mid : 0 }); });
+  if (garageDoorCost > 0) items.push({ id: 'garage-doors', label: extras.garageDoorLabel || 'Garage doors (rough)', amount: garageDoorCost, pct: mid > 0 ? garageDoorCost / mid : 0 });
   if (septicCost > 0) items.push({ id: 'septic', label: 'Septic system (rough — soils/perc test vary)', amount: septicCost, pct: mid > 0 ? septicCost / mid : 0 });
   if (wellCost > 0) items.push({ id: 'well', label: 'Drilled well + pump (rough — depth varies)', amount: wellCost, pct: mid > 0 ? wellCost / mid : 0 });
   return {

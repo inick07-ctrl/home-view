@@ -1,5 +1,5 @@
 import { loadPrefs, savePrefs, estimateBuild, renderZipTierBar, renderBreakdown, fmtRange, fmtMoney } from '/js/cost-estimator.js';
-import { extrasFromItems } from '/js/yard-extras.js';
+import { extrasFromItems, garageDoorExtras } from '/js/yard-extras.js';
 
 function areasFromApp() {
   const a = window.app?.getAreas?.();
@@ -8,7 +8,7 @@ function areasFromApp() {
 }
 
 function estimate(prefs, areas = areasFromApp()) {
-  const extras = extrasFromItems(window.app?.getItems?.() || []);
+  const extras = { ...extrasFromItems(window.app?.getItems?.() || []), ...garageDoorExtras(window.app?.getGarageDoors?.() || []) };
   return estimateBuild({
     heatedSqFt: areas.heated, garageSqFt: areas.garage, porchSqFt: areas.porch,
     buildType: areas.buildType || 'home', zip: prefs.zip, tier: prefs.tier,

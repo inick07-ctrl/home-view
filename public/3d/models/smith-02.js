@@ -66,6 +66,7 @@ export default {
   subtitle: "A modern farmhouse with a vaulted living wing, an open terrace, and a pool house.",
   wallH: 9,
   planImage: { src: new URL("./smith-02-plan.jpg", import.meta.url).href, pxPerFt: 10.1, originPx: [0, 0], sizePx: [1206, 899] },
+  garageDoor: { color: '#9b6a3e' },
   materials: { ext: '#2a2c2f', extTex: 'board', int: '#f6f3ec', roof: '#1b1c1e', roofTex: 'metal', roofUnder: '#d8c3a0', gable: 'brick', extSkin: true },
   walls: w,
   rooms: [
@@ -155,7 +156,7 @@ export default {
     k.block(62.6, 55.6, 65.4, 61.9, 9, 22, 'brick', { chimney: [64.275, 58.75] }); // chimney (wood-burning only)
     // garage cars (pickup, SUV, pickup) + bedroom porch posts
     // wood garage doors (closed), as in the exterior rendering
-    k.block(77.7, 83.25, 93.5, 83.45, 0, 8, '#9b6a3e'); k.block(95.7, 83.25, 104.5, 83.45, 0, 8, '#9b6a3e');
+    // overhead garage door leaves are drawn by the engine (M.garageDoor) so they roll up in walk-through and can be resized/removed
     for (const x of [13.8, 41]) k.block(x - .35, 56.6, x + .35, 57.3, 0, 9, '#1e1f21', { solid: true });
   },
 };

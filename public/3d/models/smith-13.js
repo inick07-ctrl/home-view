@@ -234,6 +234,7 @@ export function closeToHome(opts = {}) {
   wallH: WH,
   defaultStyle: 'default',
   walkStart: [59.29, 64.5, 0],
+  garageDoor: { color: '#26282b', glass: true },
   materials: { extTex: 'whiteBoard', ext: '#f4f3ef', int: MTN ? '#efebe4' : '#f8f6f1', roofTex: 'metal', roofUnder: MTN ? '#f3eee6' : '#ead8bc', roofUnderGlow: 0.45, gable: 'ext', extSkin: true },
   planImage: opts.planImage || { src: new URL('./smith-13-plan.jpg', import.meta.url).href, pxPerFt: 10.85, originPx: [16, 10], sizePx: [1160, 770] },
   walls: w,
@@ -488,10 +489,8 @@ export function closeToHome(opts = {}) {
     }
     // closed overhead garage doors (black, panel grooves + glass top row)
     for (const [s, e] of [[24.6, 34.6], [37.2, 47.2], [49.7, 59.7]]) {
-      blk(-0.18, s, 0.0, e, 0, 8, '#26282b');
-      for (let z = 1.6; z < 6.4; z += 1.6) box('#141516', -0.24, s + 0.15, -0.17, e - 0.15, z - 0.04, z + 0.04);
-      for (let i = 0; i < 5; i++) { const a = s + 0.35 + i * 1.9; box('#3d4650', -0.22, a, -0.17, a + 1.6, 6.65, 7.55); }
-      box(BLACK, -0.62, s - 0.25, -0.38, s, 0, 8.25); box(BLACK, -0.62, e, -0.38, e + 0.25, 0, 8.25); box(BLACK, -0.62, s - 0.25, -0.38, e + 0.25, 8, 8.25);
+      // door leaves: engine overhead sectional doors (M.garageDoor); s/e kept for reference
+      void s; void e;
     }
     // gooseneck lights over the garage doors
     for (const y of [29.6, 42.2, 54.7]) { box(BLACK, -0.9, y - 0.12, -0.42, y + 0.12, 8.6, 8.72); box('#f6e2a8', -1.05, y - 0.2, -0.75, y + 0.2, 8.42, 8.6); }
@@ -557,10 +556,8 @@ export function closeToHome(opts = {}) {
     blk(XGR + 0.25, YSTR - 1.6, XM - 0.2, YSTR - 0.2, 0, 3.0, CAB);
     box('#d9cdb9', XGR + 0.2, YSTR - 1.65, XM - 0.15, YSTR - 0.15, 3.0, 3.15);
     blk(XGR + 0.25, YSTR - 1.25, XM - 0.2, YSTR - 0.2, 4.6, 8.0, CAB);
-    // stair: treads stepping down (visible from the hall) + rail
-    for (let i = 0; i < 9; i++) { const y = YH - 0.2 - i * 1.0; blk(XGR + 0.45, y - 1.0, XM - 0.2, y, -0.05 - i * 0.6, -0.45 - i * 0.6 + 0.4, '#b98d5f'); }
-    box(BLACK, XGR + 0.25, YSTR, XGR + 0.4, YH, 3.0, 3.12);
-    for (let y = YSTR + 0.5; y < YH; y += 0.9) box(BLACK, XGR + 0.28, y, XGR + 0.37, y + 0.06, 0, 3.0);
+    // stair down to the basement: a placeable, removable stair item (Edit Plan → Stairs)
+    k.place && k.place('stairStraight', { x: (XGR + XM) / 2, y: (YSTR + YH) / 2, rot: 0, w: XM - XGR - 0.2, d: YH - YSTR - 0.1, dir: 'down', variant: 'oak', rail: 'black' });
     // kitchen uppers (west wall) + open shelves
     const UP = MTN ? '#3f3f3d' : CAB;
     blk(XW + 0.2, YDK + 0.25, XW + 1.4, 35.85, 4.7, 7.9, UP);

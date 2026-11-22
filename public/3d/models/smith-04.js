@@ -71,6 +71,7 @@ export default {
   subtitle: "A modern ranch with two master suites and terraces that open front and back.",
   wallH: 10,
   planImage: { src: new URL("./smith-04-plan.jpg", import.meta.url).href, pxPerFt: 9.37, originPx: [29, 105], sizePx: [1206, 876] },
+  garageDoor: { color: '#d9d6cf' },
   materials: { ext: '#f1eee8', int: '#f8f6f1', roofTex: 'metal', roofUnder: '#d8c7a8', gable: 'ext', extSkin: true },
   walls: w,
   rooms: [
@@ -170,6 +171,6 @@ export default {
     k.block(101, 36.3, 103, 38.6, 0, 3, '#f4f4f4'); k.block(103.2, 36.3, 105.2, 38.6, 0, 3, '#f4f4f4'); k.block(93, 31.2, 105.2, 32.8, 0, 7, '#e8e2d6');
     k.block(118, 25, 121.3, 28, 0, 5, '#b8bcc0');
     // garage: car, pickup, pickup; overhead doors (closed)
-    k.block(83.3, 63.95, 103.6, 64.2, 0, 8, '#d9d6cf'); k.block(110, 63.95, 121.2, 64.2, 0, 8, '#d9d6cf');
+    // overhead garage door leaves are drawn by the engine (M.garageDoor) so they roll up in walk-through and can be resized/removed
   },
 };

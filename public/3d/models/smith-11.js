@@ -14,11 +14,17 @@ w.seg(15.3333, 11.1667, 45, 11.1667, { ext: true, h: 12, doors: [[19.3333, 25.33
 w.seg(45, 6, 56.4167, 6, { ext: true, h: 12, windows: [[48, 53.4167, 3, 7]] });
 w.seg(45, 6, 45, 11.1667, { ext: true });
 w.seg(56.4167, 6, 56.4167, 12, { ext: true });
+w.seg(56.4167, 0, 56.4167, 6, { ext: true });      // bedroom-wing entry / side porch (was open)
+w.seg(56.4167, 0, 60.0833, 0, { ext: true, h: 11 });
 w.seg(17.3333, 32.3333, 26.3333, 32.3333, { ext: true, doors: [[19.8333, 23.8333, 8]] });
 w.seg(17.3333, 26.1667, 17.3333, 32.3333, { ext: true });
 w.seg(29.8333, 32.3333, 33.3333, 32.3333, { ext: true });
 w.seg(33.3333, 37.8333, 45, 37.8333, { ext: true, windows: [[36.3333, 42, 3, 7.5]] });
-w.seg(45, 26.1667, 45, 37.8333, {});
+w.seg(45, 26.1667, 45, 34.5833, {});
+w.seg(45, 34.5833, 45, 37.8333, { ext: true });                                   // study / pantry notch (was open)
+w.seg(33.3333, 26.1667, 33.3333, 32.3333, {});                                    // study west partition (was missing)
+w.seg(33.3333, 32.3333, 33.3333, 37.8333, { ext: true, windows: [[33.5833, 36.5833, 3, 7]] }); // study west exterior (was open to the yard)
+w.seg(50, 34.5833, 50, 40.6667, { ext: true });                                   // mud room west exterior (was missing)
 w.seg(45, 34.5833, 50, 34.5833, { ext: true });
 w.seg(50, 40.6667, 54.0833, 40.6667, { ext: true });
 w.seg(26.3333, 32.3333, 29.8333, 32.3333, { ext: true });
@@ -39,6 +45,9 @@ w.seg(5.3333, 26.8333, 5.3333, 38.8333, { doors: [[29.8333, 32.8333, 7]] });
 w.seg(5.3333, 38.8333, 17.3333, 38.8333, {});
 w.seg(17.3333, 26.1667, 17.3333, 40.5, { doors: [[27.6667, 30.6667, 7]] });
 w.seg(17.3333, 26.1667, 26.3333, 26.1667, { doors: [[19.3333, 24.3333, 8]] });
+w.seg(15.3333, 26.1667, 17.3333, 26.1667, {});                                   // great room SW corner (was open above)
+w.seg(8.3333, 26.8333, 17.3333, 26.8333, {});                                    // bed 4 north wall (was missing)
+w.seg(26.3333, 26.1667, 33.3333, 26.1667, { doors: [[26.5333, 33.1333, 9]] });   // nook open to the great room; wall carried up to the vault above
 w.seg(26.3333, 26.1667, 26.3333, 32.3333, { doors: [[27.3667, 29.9667, 7]] });
 w.seg(29.8333, 26.1667, 29.8333, 32.3333, {});
 w.seg(33.3333, 26.1667, 45, 26.1667, { doors: [[36.3333, 42, 8]] });
@@ -46,7 +55,7 @@ w.seg(33.3333, 11.1667, 33.3333, 26.1667, { doors: [[14.1667, 23.1667, 8]] });
 w.seg(45, 6, 45, 26.1667, { doors: [[14.1667, 24.1667, 8]] });
 w.seg(45, 26.1667, 50, 26.1667, { doors: [[46.2, 48.8, 7]] });
 w.seg(50, 26.1667, 50, 34.5833, {});
-w.seg(56.4167, 26.1667, 56.4167, 26.1667, { doors: [[51.5, 54.5, 7]] });
+w.seg(50, 26.1667, 56.4167, 26.1667, { doors: [[51.5, 54.5, 7]] });              // kitchen / mud room (was a zero-length stub)
 w.seg(56.4167, 12, 56.4167, 28, { doors: [[14, 17, 7]] });
 w.seg(60.0833, 0, 60.0833, 28, { doors: [[4, 7, 7], [19, 23, 7]] });
 w.seg(71.0833, 0, 71.0833, 12, { doors: [[4, 7, 7]] });
@@ -127,13 +136,14 @@ export default {
     { shed: true, x0: 15.3333, y0: 0, x1: 56.4167, y1: 11.1667, hi: 9.4, lo: 8.0, oh: 0.6 },
     // living — vaulted great room / dining / kitchen, ridge east-west
     { x0: 15.3333, y0: 6, x1: 56.4167, y1: 26.1667, pitch: 0.55, oh: 1, eave: 12, ends: ['ext', 'ext'] },
-    { x0: 17.3333, y0: 26.1667, x1: 26.3333, y1: 32.3333, pitch: 0.45, oh: 0.6, eave: 10, ends: ['ext', 'ext'] },
+    { x0: 17.3333, y0: 26.1667, x1: 33.3333, y1: 32.3333, pitch: 0.45, oh: 0.6, eave: 10, ends: ['ext', 'ext'] }, // foyer + powder + nook (powder/nook had no roof)
     { x0: 33.3333, y0: 26.1667, x1: 45, y1: 37.8333, pitch: 0.45, oh: 0.7, eave: 10, ends: ['ext', 'ext'] },
     { shed: true, x0: 17.3333, y0: 32.3333, x1: 29.3333, y1: 40.3333, hi: 8.8, lo: 7.6, oh: 0.5 },
     { shed: true, x0: 29.3333, y0: 37.8333, x1: 50, y1: 42.8333, hi: 8.4, lo: 7.4, oh: 0.5 },
     // east bedroom wing
     { x0: 56.4167, y0: 0, x1: 76.0833, y1: 40.6667, along: 'y', pitch: 0.5, oh: 1, eave: 10, ends: ['ext', 'ext'] },
     { x0: 50, y0: 26.1667, x1: 56.4167, y1: 40.6667, pitch: 0.4, oh: 0.6, eave: 9, ends: ['ext', 'ext'] },
+    { x0: 45, y0: 26.1667, x1: 50, y1: 34.5833, pitch: 0.45, oh: 0.6, eave: 10, ends: ['ext', 'ext'] }, // pantry (had no roof)
     // garage — gable facing the south doors
     { x0: 54.0833, y0: 40.6667, x1: 76.0833, y1: 64.6667, along: 'x', pitch: 0.5, oh: 1, eave: 10, ends: ['ext', 'ext'] },
   ],

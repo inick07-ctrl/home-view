@@ -219,6 +219,7 @@ export default {
   wallH: WH,
   defaultStyle: 'default',
   walkStart: [CXP, YPF + 3.5, 0],
+  garageDoor: { color: '#2b2d30', glass: true },
   materials: { extTex: 'board', ext: '#2a2c2f', int: '#efebe4', roofTex: 'darkShingle', roofUnder: '#c9a57c', roofUnderGlow: 0.3, gable: 'ext', extSkin: true },
   planImage: { src: new URL('./smith-14-plan.jpg', import.meta.url).href, pxPerFt: 9.06, originPx: [3, 76], sizePx: [1206, 826] },
   walls: w,
@@ -421,10 +422,7 @@ export default {
     skinX(XG + 0.41, YGN - 0.4, YGS + 0.4, -0.4, 2.6, [[31, 40, -1, 9], [42.5, 51.5, -1, 9], [54, 63, -1, 9], [65.5, 74.5, -1, 9]], 'ledgestone', 1);
     // overhead garage doors (charcoal, closed) — open interior bays, no stall walls, no cars
     for (const [s, e] of [[31, 40], [42.5, 51.5], [54, 63], [65.5, 74.5]]) {
-      blk(XG + 0.0, s, XG + 0.18, e, 0, 8, '#2b2d30');
-      for (let z = 1.6; z < 6.4; z += 1.6) box('#151618', XG + 0.17, s + 0.15, XG + 0.24, e - 0.15, z - 0.04, z + 0.04);
-      for (let i = 0; i < 4; i++) { const a = s + 0.35 + i * 2.15; box('#3d4650', XG + 0.17, a, XG + 0.22, a + 1.85, 6.65, 7.55); }
-      box(BLACK, XG + 0.38, s - 0.25, XG + 0.62, s, 0, 8.25); box(BLACK, XG + 0.38, e, XG + 0.62, e + 0.25, 0, 8.25); box(BLACK, XG + 0.38, s - 0.25, XG + 0.62, e + 0.25, 8, 8.25);
+      // door leaves: engine overhead sectional doors (M.garageDoor)
       box(BLACK, XG + 0.42, (s + e) / 2 - 0.12, XG + 0.9, (s + e) / 2 + 0.12, 8.6, 8.72); box('#f6e2a8', XG + 0.75, (s + e) / 2 - 0.2, XG + 1.05, (s + e) / 2 + 0.2, 8.42, 8.6);
     }
 
@@ -474,13 +472,9 @@ export default {
     // sun room: exposed ridge + ties
     box(TIMBER, 106.15, YSUN + 0.2, 106.75, YGN - 0.2, WH + 0.6 * 8.85 - 1.2, WH + 0.6 * 8.85 - 0.35, true);
     for (const y of [16.5, 23]) box(TIMBER, XK + 3.1, y - 0.25, XSUN - 3.1, y + 0.25, 10.6, 11.1, true);
-    // stair: treads stepping down northward from the hall, black rail
-    for (let i = 0; i < 13; i++) { const y = YH - 0.2 - i * 1.05; blk(XOF + 0.35, y - 1.05, XGR - 0.35, y, -0.05 - i * 0.62, -0.45 - i * 0.62 + 0.4, '#b98d5f'); }
-    box(BLACK, XGR - 0.45, YLND, XGR - 0.3, YH, 3.0, 3.12);
-    for (let y = YLND + 0.5; y < YH; y += 0.9) box(BLACK, XGR - 0.42, y, XGR - 0.33, y + 0.06, 0, 3.0);
-    // mud-room stair up to the bonus space over the garage
-    for (let i = 0; i < 12; i++) blk(93.8, YSV - 1.3 - i * 0.85, XK - 0.35, YSV - 0.45 - i * 0.85, 0, 0.62 * (i + 1), '#b98d5f');
-    box(BLACK, 93.6, YSV - 11.5, 93.75, YSV - 0.4, 0, 8.4);
+    // stairs are placeable, removable items (Edit Plan → Stairs): DN to the basement from the hall, UP from the mud room to the bonus space
+    k.place && k.place('stairStraight', { x: (XOF + XGR) / 2, y: (YLND + YH) / 2, rot: 0, w: XGR - XOF - 0.1, d: YH - YLND - 0.1, dir: 'down', variant: 'oak', rail: 'black' });
+    k.place && k.place('stairStraight', { x: (93.6 + XK - 0.3) / 2, y: YSV - 0.4 - 11.1 / 2, rot: 0, w: XK - 0.3 - 93.6, d: 11.1, dir: 'up', level: true, levelH: 8.1, variant: 'oak', rail: 'black' });
     // kitchen uppers on the east wall + hood surround; open shelves
     blk(XK - 1.35, 24.0, XK - 0.25, 29.2, 4.7, 8.6, '#3f3f3d');
     blk(XK - 1.35, 32.6, XK - 0.25, 36.9, 4.7, 8.6, '#3f3f3d');

@@ -52,3 +52,17 @@
 @media (max-width:600px){
   #editDrawer{right:8px;left:8px;width:auto;top:calc(var(--tbh,52px) + 6px);max-height:calc(100vh - var(--tbh,52px) - 14px)}
 }
+
+/* colors & doors tabs */
+#editTabs { flex-wrap: wrap; }
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0 10px; }
+.swatches .sw { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(0,0,0,.15); padding: 0; cursor: pointer; }
+.swatches .sw.on { outline: 2px solid #e0a95a; outline-offset: 2px; }
+.swatches input[type=color] { width: 30px; height: 28px; padding: 0; border: 1px solid rgba(0,0,0,.2); border-radius: 6px; background: none; }
+.swatches .sw-clear { font-size: 12px; padding: 4px 8px; }
+.hwlist { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 6px 0; }
+.hwlist .hw { display: flex; align-items: center; gap: 8px; text-align: left; padding: 6px 8px; }
+.hwlist .hw.on { outline: 2px solid #e0a95a; }
+.hwdot { width: 16px; height: 16px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,.25); flex: none; }
+#delRoomRow { margin-bottom: 8px; }
+#delRoomRow select { flex: 1; }

@@ -146,6 +146,7 @@ export default {
   wallH: 10,
   defaultStyle: 'default',
   walkStart: [58.9, 32.5, 0],
+  garageDoor: { color: '#2a2b2d' },
   materials: { ext: '#f5f4f0', int: '#f8f6f1', roofTex: 'metal', roofUnder: '#d8c7a8', gable: 'ext', extSkin: true },
   walls: w,
   rooms: [
@@ -272,7 +273,7 @@ export default {
     k.block(tx1 - 0.18, ty0, tx1, ty1, 9.55, 9.85, TRIM, { keep: true, role: 'trim' });
 
     // Two-car garage: closed door panels + cars nosed toward the south doors
-    k.block(2.3, YC1 - 0.22, 11.2, YC1 + 0.05, 0, 8, GD);
-    k.block(15.3, YC1 - 0.22, 24.2, YC1 + 0.05, 0, 8, GD);
+    // overhead garage door leaves are drawn by the engine (M.garageDoor) so they roll up in walk-through and can be resized/removed
+    // overhead garage door leaves are drawn by the engine (M.garageDoor) so they roll up in walk-through and can be resized/removed
   },
 };

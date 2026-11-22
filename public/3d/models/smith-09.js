@@ -21,7 +21,12 @@ w.seg(19, 8.1667, 81.9167, 8.1667, { ext: true, h: 14, doors: [[25, 33, 8], [43.
 w.seg(71.9167, 8.1667, 81.9167, 8.1667, { ext: true, h: 14 });
 w.seg(81.9167, 8.1667, 81.9167, 22.0833, { ext: true });
 w.seg(40.5833, 28.0833, 71.9167, 28.0833, { ext: true, h: 14, windows: [[44.5833, 50.5833, 3, 7.5], [58.5, 66.5, 3, 7.5]] });
+w.seg(19, 28.0833, 40.5833, 28.0833, { h: 14, doors: [[19.25, 40.3333, 10]] }); // open to foyer/hall, wall carried up to the great-room eave above (was a sky gap)
 w.seg(71.9167, 22.1667, 76.9167, 22.1667, { ext: true });
+w.seg(71.9167, 22.1667, 71.9167, 28.0833, { ext: true, h: 14 }); // kitchen east (was open)
+w.seg(76.9167, 22.5833, 81.9167, 22.5833, { ext: true });         // powder south (was open)
+w.seg(19, 55.5833, 19, 65.6667, { ext: true });                     // closet / bath west (was open)
+w.seg(96.5833, 22.5833, 101.5, 22.5833, { ext: true, doors: [[97.5833, 100.5833, 8]] }); // terrace door
 w.seg(23, 36.25, 40.5833, 36.25, { ext: true, doors: [[28, 34.5, 8]] });
 w.seg(23, 28.0833, 23, 36.25, { ext: true });
 w.seg(40.5833, 28.0833, 40.5833, 36.25, { ext: true });
@@ -159,7 +164,8 @@ export default {
     // foyer
     { x0: 23, y0: 28.0833, x1: 40.5833, y1: 36.25, pitch: 0.5, oh: 0.8, eave: 10, ends: ['ext', 'ext'] },
     // front porch sheds
-    { shed: true, x0: 23, y0: 28.0833, x1: 86.25, y1: 41.5, hi: 9.4, lo: 8.0, oh: 0.6 },
+    { shed: true, x0: 40.5833, y0: 28.0833, x1: 86.25, y1: 41.5, hi: 9.4, lo: 8.0, oh: 0.6 },
+    { shed: true, x0: 23, y0: 36.25, x1: 40.5833, y1: 41.5, hi: 8.55, lo: 8.0, oh: 0.6 }, // in front of the foyer only (was cutting through it)
     { shed: true, x0: 23, y0: 41.5, x1: 40.5833, y1: 49.6667, hi: 8.4, lo: 7.4, oh: 0.6 },
     // west wing — Master 1, bath, closet, Bedroom 1 (ridge north-south)
     { x0: 0, y0: 4, x1: 19, y1: 37.5833, along: 'y', pitch: 0.67, oh: 1, eave: 10, ends: ['ext', 'ext'] },
