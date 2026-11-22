@@ -29,6 +29,8 @@ export const YARD_ITEM_META = {
   fpSeeThrough: { category: 'fireplace', cost: 24000 },
   fpStove: { category: 'fireplace', cost: 5500 },
   fpMidCentury: { category: 'fireplace', cost: 8000 },
+  fpOldWorld60: { category: 'fireplace', cost: 28000, rough: true },
+  fpOldWorld72: { category: 'fireplace', cost: 35000, rough: true },
   // Septic + well — ROUGH placeholders; soils, perc tests, mound vs. trench and well depth swing these a lot.
   septicTank1000: { category: 'site', septic: true, cost: 4000 },
   septicTank1250: { category: 'site', septic: true, cost: 4800 },
@@ -41,7 +43,7 @@ export const YARD_ITEM_META = {
 
 export function extrasFromItems(items) {
   let poolSf = 0, spaCount = 0, solarKw = 0;
-  let fireplaceCost = 0, fireplaceCount = 0, septicCost = 0, wellCost = 0, wellCount = 0;
+  let fireplaceCost = 0, fireplaceCount = 0, fireplaceRough = false, septicCost = 0, wellCost = 0, wellCount = 0;
   for (const it of items || []) {
     const t = YARD_ITEM_META[it.type];
     if (!t) continue;
@@ -50,9 +52,9 @@ export function extrasFromItems(items) {
       else poolSf += Math.max(0, (it.w || t.w || 0) * (it.d || t.d || 0));
     }
     if (t.category === 'solar') solarKw += t.kw || ((t.panels || 0) * 0.4);
-    if (t.category === 'fireplace') { fireplaceCost += t.cost || 0; fireplaceCount += 1; }
+    if (t.category === 'fireplace') { fireplaceCost += t.cost || 0; fireplaceCount += 1; if (t.rough) fireplaceRough = true; }
     if (t.septic) septicCost += t.cost || 0;
     if (t.well) { wellCost += t.cost || 0; wellCount += 1; }
   }
-  return { poolSf, spaCount, solarKw, fireplaceCost, fireplaceCount, septicCost, wellCost, wellCount };
+  return { poolSf, spaCount, solarKw, fireplaceCost, fireplaceCount, fireplaceRough, septicCost, wellCost, wellCount };
 }

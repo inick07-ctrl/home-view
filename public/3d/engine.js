@@ -74,6 +74,8 @@ const TEX = {
     }
   }, 512),
   metal: canvasTex((g, s) => { g.fillStyle = '#1d1e20'; g.fillRect(0, 0, s, s); for (let i = 0; i < 4; i++) { g.fillStyle = 'rgba(255,255,255,.10)'; g.fillRect(i * s / 4, 0, 3, s); g.fillStyle = 'rgba(0,0,0,.5)'; g.fillRect(i * s / 4 + 3, 0, 2, s); } }),
+  // dark charcoal architectural (dimensional) shingles: staggered tabs with tonal variation
+  darkShingle: canvasTex((g, s) => { g.fillStyle = '#26282b'; g.fillRect(0, 0, s, s); const rows = 10; let i = 0; for (let y = 0; y < rows; y++) { let x = -rnd(y + 70) * s * 0.2; while (x < s) { const w = s * (0.08 + rnd(i + 5) * 0.12), v = 34 + rnd(i) * 26; g.fillStyle = `rgb(${v},${v + 1},${v + 4})`; g.fillRect(x + 1, y * s / rows + 1, w - 2, s / rows - 3); g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(x, (y + 1) * s / rows - 3, w, 3); x += w; i++; } } }, 256),
   shingle: canvasTex((g, s) => { g.fillStyle = '#4b5159'; g.fillRect(0, 0, s, s); for (let y = 0; y < 8; y++) { g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(0, y * s / 8, s, 2); for (let x = 0; x < 4; x++) g.fillRect(x * s / 4 + (y % 2) * s / 8, y * s / 8, 2, s / 8); } }),
   // English Country (bright, airy): cream limewash walls, pale plaster ceilings,
   // light oak board accents, honey/cream flagstone, pale limestone
@@ -139,7 +141,7 @@ const TEX = {
   }, 256),
 };
 TEX.grass.repeat.set(90, 90);
-const TEXSCALE = { whiteBoard: 6, ledgestone: 5, wood: 6, tile: 4, concrete: 10, porch: 4, gym: 4, stone: 3, terrace: 6, paver: 6, board: 4, brick: 5, metal: 6, shingle: 4, limewash: 8, palePlaster: 10, lightOak: 5, slate: 8, lightStone: 3 };
+const TEXSCALE = { whiteBoard: 6, ledgestone: 5, wood: 6, tile: 4, concrete: 10, porch: 4, gym: 4, stone: 3, terrace: 6, paver: 6, board: 4, brick: 5, metal: 6, shingle: 4, darkShingle: 5, limewash: 8, palePlaster: 10, lightOak: 5, slate: 8, lightStone: 3 };
 const MAT = {};
 for (const k of ['wood', 'tile', 'concrete', 'porch', 'gym', 'stone', 'terrace', 'paver']) MAT[k] = new THREE.MeshLambertMaterial({ map: TEX[k] });
 MAT.brick = new THREE.MeshStandardMaterial({ map: TEX.brick, roughness: .95 });

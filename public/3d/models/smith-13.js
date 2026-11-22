@@ -603,9 +603,9 @@ export function closeToHome(opts = {}) {
     if (MTN) {
       // ---- staged from the Mountain Ranch interior renderings: warm-modern, cream bouclé, cognac leather,
       // walnut organic tables, charcoal shaker kitchen with a fluted island + marble waterfall, rattan + brass light.
-      P('fpStoneLinear', { x: XGR - 0.25 - 1.3, y: 39.2, rot: 90, variant: 'marble-slab', w: 8.5 });
-      P('tv', { x: XGR - 0.25 - 2.6 - 0.15, y: 39.2, rot: 90, w: 5.6 });
-      P('rug', { x: 61.6, y: 39.2, w: 13, d: 10.5, rot: 90, color: '#d9d3c8', field: '#ebe6dd' });
+      // old-world French limestone mantel (Nick's reference photo): plain plaster breast above, no TV
+      P('fpOldWorld72', { x: XGR - 0.25 - 3.55 / 2, y: 39.2, rot: 90, h: WH, variant: 'styled' });
+      P('rug', { x: 60.6, y: 39.2, w: 12.5, d: 10, rot: 90, color: '#b9a37c', field: '#cdb994' }); // jute
       P('sectional', { x: 57.2, y: 39.6, rot: 270, w: 10.5, d: 6.4, finish: 'boucle', variant: 'track-arm', chaise: 'left', wood: 'walnut', pillow: '#b9ae9f' });
       P('coffeeTable', { x: 62.0, y: 39.4, rot: 90, variant: 'organic', w: 4.8, d: 2.7, wood: 'walnut' });
       P('accentChair', { x: 63.8, y: 33.4, rot: 20, variant: 'lounge', finish: 'cognac' });

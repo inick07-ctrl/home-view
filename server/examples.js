@@ -14,6 +14,7 @@ export const EXAMPLES = [
   { id: 'smith-11', name: 'Hearth Patio', type: 'home', formerNames: ['Smith 11'], tagline: 'An English Country house with four bedrooms, a study, and a covered patio.' },
   { id: 'smith-12', name: 'Twin Porch Homestead', type: 'home', formerNames: ['Smith 12'], tagline: 'A farmhouse with matching covered porches front and back, an open kitchen-dining-living core, and a two-car garage.' },
   { id: 'smith-13', name: 'Close to Home', type: 'home', tagline: 'A modern farmhouse with a timber-framed front porch, an open cathedral great room, a 3-car garage, and an exercise room.' },
+  { id: 'smith-14', name: 'Home away from Home', type: 'home', tagline: 'A dark board-and-batten mountain ranch with a timber entry gable, two stone fireplaces, a sun room, a safe room, and a 4-car garage.' },
   { id: 'tiny-01', name: 'Pine Nook', type: 'tiny', formerNames: ['Tiny 01'], tagline: 'A tiny house on wheels, with a loft over the kitchenette and bath.' },
   { id: 'tiny-02', name: 'Duskfen Loft', type: 'tiny', tagline: 'A sleek Nordic tiny home with dark siding, a clerestory roofline, a wall of glass, and a sleeping loft.' },
   { id: 'tiny-03', name: 'Tamarack Porch', type: 'tiny', tagline: 'A rustic timber tiny cabin with a covered front porch, a steep gable, a private bedroom, and a loft overhang.' },
