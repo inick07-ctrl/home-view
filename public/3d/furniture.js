@@ -2,9 +2,11 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { YARD_CATEGORIES, YARD_CATALOG } from './yard-items.js';
+import { FIREPLACE_CATEGORIES, FIREPLACE_CATALOG } from './fireplace-items.js';
 
 export const CATEGORIES = [
   { id: 'living', name: 'Living' },
+  ...FIREPLACE_CATEGORIES,
   { id: 'bedroom', name: 'Bedroom' },
   { id: 'kitchen', name: 'Kitchen & Dining' },
   { id: 'bath', name: 'Bath' },
@@ -33,6 +35,9 @@ export const FINISHES = {
   navy: { upholstery: '#3c4a5c', welt: '#2f3b4a', name: 'Navy' },
   cream: { upholstery: '#f3efe6', welt: '#e4ddd0', name: 'Cream' },
   slate: { upholstery: '#7a8490', welt: '#686f78', name: 'Slate' },
+  boucle: { upholstery: '#ece8df', welt: '#ddd7cb', name: 'Bouclé' },
+  cognac: { upholstery: '#a9643a', welt: '#8e5230', name: 'Cognac leather' },
+  greige: { upholstery: '#b9ae9f', welt: '#a69b8c', name: 'Greige' },
 };
 
 const WOOD = {
@@ -41,6 +46,8 @@ const WOOD = {
   espresso: '#3a2a1c',
   black: '#242220',
   light: '#c4a574',
+  whiteOak: '#b8946a',
+  teak: '#9a6a3f',
 };
 
 const MATS = {};
@@ -89,20 +96,68 @@ function woodOf(rec) {
 }
 
 /** Place a part in item space: origin at footprint center, y up, +z is the front. */
-function taperedLegs(g, w, d, legH, wood, inset = 0.12, top = 0.055, bot = 0.035) {
-  const hx = w / 2 - inset, hz = d / 2 - inset;
+// Legs run from the floor to `legH` (the underside of whatever they hold up) and sink EMBED into it,
+// so seats, tops, and carcasses always rest on their legs with no visible gap.
+const EMBED = 0.04;
+function taperedLegs(g, w, d, legH, wood, inset = 0.12, top = 0.055, bot = 0.035, ox = 0, oz = 0) {
+  const hx = w / 2 - inset, hz = d / 2 - inset, h = legH + EMBED;
   for (const [x, z] of [[-hx, -hz], [hx, -hz], [-hx, hz], [hx, hz]]) {
-    add(g, cyl(top, bot, legH, 10), wood, x, legH / 2, z);
+    add(g, cyl(top, bot, h, 10), wood, ox + x, h / 2, oz + z);
   }
+  return { hx, hz, ox, oz };
 }
 
 function turnedLegs(g, w, d, legH, wood, inset = 0.14) {
-  const hx = w / 2 - inset, hz = d / 2 - inset;
+  const hx = w / 2 - inset, hz = d / 2 - inset, h = legH + EMBED;
   for (const [x, z] of [[-hx, -hz], [hx, -hz], [-hx, hz], [hx, hz]]) {
-    add(g, cyl(0.04, 0.05, legH * 0.22, 10), wood, x, legH * 0.11, z);
-    add(g, cyl(0.028, 0.032, legH * 0.5, 10), wood, x, legH * 0.47, z);
-    add(g, cyl(0.045, 0.04, legH * 0.28, 10), wood, x, legH * 0.86, z);
+    // foot, spindle, and block overlap slightly so the turning reads as one piece
+    add(g, cyl(0.04, 0.05, h * 0.24, 10), wood, x, h * 0.12, z);
+    add(g, cyl(0.028, 0.032, h * 0.54, 10), wood, x, h * 0.47, z);
+    add(g, cyl(0.045, 0.04, h * 0.3, 10), wood, x, h * 0.85, z);
   }
+  return { hx, hz, ox: 0, oz: 0 };
+}
+
+/** Stretchers that run leg-centre to leg-centre, so both ends bury into the legs. */
+function stretchers(g, L, y, r, wood, sides = 'fblr') {
+  const { hx, hz, ox = 0, oz = 0 } = L;
+  if (sides.includes('f')) add(g, cyl(r, r, hx * 2, 8), wood, ox, y, oz + hz, 0, 0, Math.PI / 2);
+  if (sides.includes('b')) add(g, cyl(r, r, hx * 2, 8), wood, ox, y, oz - hz, 0, 0, Math.PI / 2);
+  if (sides.includes('l')) add(g, cyl(r, r, hz * 2, 8), wood, ox - hx, y, oz, Math.PI / 2, 0, 0);
+  if (sides.includes('r')) add(g, cyl(r, r, hz * 2, 8), wood, ox + hx, y, oz, Math.PI / 2, 0, 0);
+}
+
+/**
+ * Chair frame: four legs under a seat board, rear legs continue up as back posts,
+ * stretchers between the legs, and back rails/slats between the posts. Every joint overlaps.
+ */
+function chairFrame(g, { W, D, H, seatH, wood, seatT = 0.12, legR = [0.032, 0.022], footY = 0.55, footR = 0.014, slats = 5, ring = false }) {
+  const sw = W * 0.92, sd = D * 0.8;
+  const seatBot = seatH - seatT;
+  const inset = 0.1;
+  const hx = sw / 2 - inset, hz = sd / 2 - inset;
+  // front legs to the seat underside
+  for (const x of [-hx, hx]) add(g, cyl(legR[0], legR[1], seatBot + EMBED, 10), wood, x, (seatBot + EMBED) / 2, hz);
+  // rear legs run straight up as back posts
+  for (const x of [-hx, hx]) add(g, cyl(legR[0] * 0.9, legR[1], H, 10), wood, x, H / 2, -hz);
+  // seat board sits on all four legs
+  add(g, rbox(sw, seatT, sd, 0.02), wood, 0, seatH - seatT / 2, 0);
+  // stretchers
+  const L = { hx, hz };
+  if (ring) stretchers(g, L, footY, footR, wood, 'fblr');
+  else { stretchers(g, L, footY, footR, wood, 'lr'); stretchers(g, L, footY + 0.12, footR, wood, 'fb'); }
+  // back: crest rail + lower rail between the posts, slats between the rails
+  const crestY = H - 0.1, lowY = seatH + 0.28;
+  add(g, box(hx * 2, 0.16, 0.05), wood, 0, crestY, -hz);
+  add(g, box(hx * 2, 0.06, 0.04), wood, 0, lowY, -hz);
+  if (slats > 0) {
+    const sh = crestY - 0.08 - (lowY + 0.03);
+    for (let i = 0; i < slats; i++) {
+      const x = -hx + (i + 1) * (hx * 2 / (slats + 1));
+      add(g, box(0.05, sh + 0.04, 0.03), wood, x, lowY + 0.01 + sh / 2, -hz);
+    }
+  }
+  return { sw, sd, hx, hz };
 }
 
 function books(g, x0, y0, z0, w, h, d) {
@@ -178,8 +233,9 @@ function buildSectional(g, rec) {
   const cd = D;
   const cx = sign * (W / 2 - cw / 2);
   const legH = 0.42, seatH = 1.58, cushionH = 0.48;
-  taperedLegs(g, cw - 0.1, cd - 0.15, legH, wood, 0.14, 0.05, 0.032);
-  add(g, rbox(cw - 0.08, 0.62, cd - 0.2, 0.03), mat(f.upholstery, { r: 0.86 }), cx, (legH + 1.08) / 2, 0);
+  taperedLegs(g, cw - 0.1, cd - 0.15, legH, wood, 0.14, 0.05, 0.032, cx, 0); // legs under the chaise, not the sofa centre
+  add(g, box(cw - 0.12, 0.1, cd - 0.2), wood, cx, legH + 0.05, 0); // rail on the legs
+  add(g, rbox(cw - 0.08, 1.08 - legH, cd - 0.2, 0.03), mat(f.upholstery, { r: 0.86 }), cx, (legH + 1.08) / 2, 0);
   add(g, rbox(cw - 0.16, cushionH, cd - 0.7, 0.07), mat(f.upholstery, { r: 0.8 }), cx, seatH - cushionH / 2 + 0.02, 0.12);
   add(g, rbox(cw - 0.2, 0.7, 0.28, 0.08), mat(f.welt, { r: 0.82 }), cx, seatH + 0.55, -cd / 2 + 0.5);
   // shift the already-built sofa toward the opposite side
@@ -195,22 +251,53 @@ function buildAccentChair(g, rec) {
   const W = rec.w || 2.5, D = rec.d || 2.6, H = rec.h || 3.0;
   const variant = rec.variant || 'wing';
   const legH = 0.55, seatH = 1.5;
+  if (variant === 'lounge') {
+    // mid-century "womb" lounge: moulded upholstered shell on a chrome rod base, with matching ottoman in front
+    const chrome = mat('#c9ccd0', { r: 0.25, m: 0.85 });
+    const up = mat(f.upholstery, { r: 0.6 });
+    const shellY = 1.05, sw = W * 0.98;
+    // rod base: four legs from the floor up into a rail ring that the shell sits on
+    const hx = sw * 0.36, hz = D * 0.28;
+    for (const [x, z] of [[-hx, -hz], [hx, -hz], [-hx, hz], [hx, hz]]) add(g, cyl(0.025, 0.02, shellY + EMBED, 8), chrome, x, (shellY + EMBED) / 2, z);
+    add(g, box(hx * 2 + 0.05, 0.05, 0.05), chrome, 0, shellY, hz); add(g, box(hx * 2 + 0.05, 0.05, 0.05), chrome, 0, shellY, -hz);
+    add(g, box(0.05, 0.05, hz * 2), chrome, hx, shellY, 0); add(g, box(0.05, 0.05, hz * 2), chrome, -hx, shellY, 0);
+    // moulded shell: a cupped part-sphere resting on the rail, open to the front, with seat + back cushions
+    const shellGeo = new THREE.SphereGeometry(1, 28, 18, Math.PI * 0.95, Math.PI * 1.1, Math.PI * 0.12, Math.PI * 0.6);
+    const sh = new THREE.Mesh(shellGeo, new THREE.MeshStandardMaterial({ color: f.upholstery, roughness: 0.6, side: THREE.DoubleSide }));
+    sh.scale.set(sw / 2, (H - shellY) * 0.62, D * 0.5);
+    sh.rotation.set(-0.38, 0, 0);
+    sh.position.set(0, shellY + (H - shellY) * 0.5, -0.05);
+    sh.castShadow = sh.receiveShadow = true; g.add(sh);
+    add(g, rbox(sw * 0.9, 0.2, D * 0.66, 0.08), up, 0, shellY + 0.1, 0.05);                  // shell base on the rail
+    add(g, rbox(sw * 0.74, 0.24, D * 0.58, 0.1), mat(f.welt, { r: 0.6 }), 0, shellY + 0.32, 0.1); // seat cushion
+    add(g, rbox(sw * 0.62, 0.8, 0.22, 0.1), mat(f.welt, { r: 0.6 }), 0, shellY + 0.95, -D * 0.22, -0.32, 0, 0);
+    // ottoman (part of this item, in front)
+    const oz = D / 2 + 0.85, oy = 1.05;
+    for (const [x, z] of [[-0.55, -0.4], [0.55, -0.4], [-0.55, 0.4], [0.55, 0.4]]) add(g, cyl(0.022, 0.018, oy - 0.1 + EMBED, 8), chrome, x, (oy - 0.1 + EMBED) / 2, oz + z);
+    add(g, rbox(1.45, 0.08, 1.05, 0.03), chrome, 0, oy - 0.08, oz);
+    add(g, rbox(1.6, 0.36, 1.2, 0.14), up, 0, oy + 0.1, oz);
+    return;
+  }
   if (variant === 'spindle') {
     // Windsor-like
-    taperedLegs(g, W * 0.78, D * 0.7, seatH - 0.08, wood, 0.12, 0.035, 0.025);
-    add(g, cyl(0.015, 0.015, W * 0.7, 8), wood, 0, 0.7, 0, 0, 0, Math.PI / 2);
-    add(g, cyl(0.015, 0.015, D * 0.55, 8), wood, 0, 0.7, 0, Math.PI / 2, 0, 0);
-    add(g, rbox(W, 0.1, D * 0.72, 0.03), wood, 0, seatH - 0.12, 0.05);
-    add(g, rbox(W * 0.9, 0.14, D * 0.64, 0.04), mat(f.upholstery, { r: 0.8 }), 0, seatH, 0.08);
+    // Windsor-like: splayed-look legs into a thick seat, H-stretcher, spindles socketed into seat + crest
+    const sw = W * 0.9, sd = D * 0.78, seatT = 0.14, seatBot = seatH - 0.07 - seatT / 2;
+    const L = taperedLegs(g, sw, sd, seatBot, wood, 0.16, 0.035, 0.025);
+    stretchers(g, L, 0.55, 0.016, wood, 'lr');
+    add(g, cyl(0.015, 0.015, L.hx * 2, 8), wood, 0, 0.55, 0, 0, 0, Math.PI / 2); // centre bar joins the side stretchers
+    add(g, rbox(sw, seatT, sd, 0.03), wood, 0, seatBot + seatT / 2, 0);
+    add(g, rbox(sw * 0.9, 0.1, sd * 0.85, 0.04), mat(f.upholstery, { r: 0.8 }), 0, seatBot + seatT + 0.04, 0.04);
+    const spZ = -sd / 2 + 0.12, spY0 = seatBot + seatT - 0.02, crestY = H - 0.06;
     const n = 7;
     for (let i = 0; i < n; i++) {
       const t = i / (n - 1);
-      const x = -W * 0.35 + t * W * 0.7;
-      add(g, cyl(0.018, 0.016, H - seatH, 8), wood, x, (seatH + H) / 2, -D / 2 + 0.22);
+      const x = -sw * 0.38 + t * sw * 0.76;
+      add(g, cyl(0.018, 0.016, crestY - spY0, 8), wood, x, (spY0 + crestY) / 2, spZ);
     }
-    add(g, cyl(0.02, 0.02, W * 0.75, 8), wood, 0, H - 0.06, -D / 2 + 0.22, 0, 0, Math.PI / 2);
+    add(g, rbox(sw * 0.86, 0.12, 0.09, 0.03), wood, 0, crestY, spZ);
   } else {
-    taperedLegs(g, W * 0.82, D * 0.78, legH, wood, 0.14, 0.045, 0.03);
+    taperedLegs(g, W * 0.82, D * 0.72, legH, wood, 0.14, 0.045, 0.03, 0, 0.05);
+    add(g, box(W * 0.86, 0.08, D * 0.74), wood, 0, legH + 0.04, 0.05); // seat rail the legs mount into
     add(g, rbox(W, seatH - legH, D * 0.78, 0.05), mat(f.upholstery, { r: 0.84 }), 0, (legH + seatH) / 2, 0.05);
     add(g, rbox(W * 0.92, 0.4, D * 0.7, 0.06), mat(f.upholstery, { r: 0.8 }), 0, seatH + 0.08, 0.08);
     add(g, rbox(W * 0.92, H - seatH, 0.38, 0.06), mat(f.upholstery, { r: 0.82 }), 0, (seatH + H) / 2, -D / 2 + 0.28);
@@ -220,15 +307,30 @@ function buildAccentChair(g, rec) {
 
 function buildCoffeeTable(g, rec) {
   const wood = woodOf(rec);
+  if (rec.variant === 'organic') {
+    // two-tier organic oval tables: each top sits on a solid drum pedestal (no legs to float)
+    const W = rec.w || 4.6, D = rec.d || 2.6;
+    const ell = (w, d, h) => { const geo = cyl(0.5, 0.5, h, 40); return { geo, sx: w, sz: d }; };
+    const part = (w, d, h, y, x, z, m) => { const e = ell(w, d, h); const mm = add(g, e.geo, m, x, y, z); mm.scale.set(e.sx, 1, e.sz); return mm; };
+    const top = mat(WOOD[rec.wood] || WOOD.walnut, { r: 0.35 });
+    part(W * 0.78, D * 0.82, 0.12, 1.06, -W * 0.08, 0.1, top);          // low lobe top (underside 1.0)
+    part(W * 0.34, D * 0.34, 1.0, 0.5, -W * 0.1, 0.1, wood);             // its pedestal, floor → underside
+    part(W * 0.6, D * 0.66, 0.1, 1.47, W * 0.16, -0.12, top);           // upper lobe (underside 1.42)
+    part(W * 0.16, D * 0.16, 0.36, 1.24, W * 0.2, -0.12, wood);          // spacer from low top to upper top
+    add(g, box(0.6, 0.06, 0.42), mat('#ece6dc', { r: 0.6 }), W * 0.18, 1.55, -0.1);
+    add(g, cyl(0.08, 0.06, 0.4, 12), mat('#e8e4dc', { r: 0.2, m: 0.1 }), W * 0.3, 1.72, 0.0);
+    return;
+  }
   const stone = mat(rec.top === 'stone' ? '#d8d3ca' : (WOOD[rec.wood] || WOOD.oak), { r: rec.top === 'stone' ? 0.4 : 0.55, m: rec.top === 'stone' ? 0.08 : 0 });
   const W = rec.w || 4.2, D = rec.d || 2.3, H = rec.h || 1.5;
-  const legH = H - 0.12;
-  taperedLegs(g, W, D, legH, wood, 0.12, 0.05, 0.035);
-  add(g, box(W - 0.25, 0.08, D - 0.25), wood, 0, 0.28, 0); // lower shelf
-  add(g, box(W - 0.18, 0.07, 0.06), wood, 0, H - 0.2, D / 2 - 0.14); // apron
-  add(g, box(W - 0.18, 0.07, 0.06), wood, 0, H - 0.2, -D / 2 + 0.14);
-  add(g, box(0.06, 0.07, D - 0.18), wood, W / 2 - 0.14, H - 0.2, 0);
-  add(g, box(0.06, 0.07, D - 0.18), wood, -W / 2 + 0.14, H - 0.2, 0);
+  const topBot = H - 0.09; // underside of the 0.1 top
+  const L = taperedLegs(g, W, D, topBot, wood, 0.12, 0.05, 0.035);
+  add(g, box(L.hx * 2 + 0.06, 0.08, L.hz * 2 + 0.06), wood, 0, 0.28, 0); // lower shelf, corners notched into the legs
+  // apron rails run leg-to-leg and butt up under the top
+  add(g, box(L.hx * 2, 0.12, 0.06), wood, 0, topBot - 0.06, L.hz);
+  add(g, box(L.hx * 2, 0.12, 0.06), wood, 0, topBot - 0.06, -L.hz);
+  add(g, box(0.06, 0.12, L.hz * 2), wood, L.hx, topBot - 0.06, 0);
+  add(g, box(0.06, 0.12, L.hz * 2), wood, -L.hx, topBot - 0.06, 0);
   add(g, rbox(W, 0.1, D, 0.02), stone, 0, H - 0.04, 0);
   // tray, books, vase
   add(g, rbox(0.7, 0.04, 0.45, 0.01), mat('#c9b496', { r: 0.55 }), -0.7, H + 0.03, 0.15);
@@ -241,9 +343,9 @@ function buildCoffeeTable(g, rec) {
 function buildSideTable(g, rec) {
   const wood = woodOf(rec);
   const W = rec.w || 1.7, D = rec.d || 1.7, H = rec.h || 2.1;
-  taperedLegs(g, W, D, H - 0.1, wood, 0.1, 0.04, 0.028);
+  const L = taperedLegs(g, W, D, H - 0.08, wood, 0.1, 0.04, 0.028);
   add(g, rbox(W, 0.08, D, 0.015), wood, 0, H - 0.04, 0);
-  add(g, rbox(W - 0.2, 0.04, D - 0.2, 0.01), wood, 0, 0.55, 0);
+  add(g, rbox(L.hx * 2 + 0.05, 0.04, L.hz * 2 + 0.05, 0.01), wood, 0, 0.55, 0);
 }
 
 function buildTableLamp(g, rec) {
@@ -371,22 +473,36 @@ function buildBench(g, rec) {
   const f = finishOf(rec);
   const wood = woodOf(rec);
   const W = rec.w || 4.2, D = rec.d || 1.45, H = rec.h || 1.55;
-  taperedLegs(g, W, D, H - 0.16, wood, 0.12, 0.04, 0.03);
+  const L = taperedLegs(g, W, D, H - 0.16, wood, 0.12, 0.04, 0.03);
+  add(g, box(W - 0.1, 0.08, D - 0.1), wood, 0, H - 0.2, 0); // frame under the cushion
   add(g, rbox(W, 0.16, D, 0.04), mat(f.upholstery, { r: 0.82 }), 0, H - 0.08, 0);
-  add(g, box(W - 0.3, 0.06, 0.06), wood, 0, 0.55, 0);
+  stretchers(g, L, 0.5, 0.025, wood, 'lr');
+  add(g, box(L.hx * 2, 0.06, 0.06), wood, 0, 0.5, 0); // centre rail ends in the side stretchers
 }
 
 function buildDiningTable(g, rec) {
   const wood = woodOf(rec);
   const W = rec.w || 6.5, D = rec.d || 3.2, H = rec.h || 2.5;
   const variant = rec.variant || 'tapered';
+  if (variant === 'round') {
+    // round top on a fluted pedestal + foot, all stacked so every piece touches the next
+    const R = Math.min(W, D) / 2;
+    const dark = mat(WOOD[rec.wood] || WOOD.espresso, { r: 0.5 });
+    add(g, cyl(R * 0.42, R * 0.48, 0.12, 32), dark, 0, 0.06, 0);
+    const n = 14;
+    for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; add(g, cyl(0.07, 0.09, H - 0.24, 6), dark, Math.cos(a) * R * 0.22, 0.12 + (H - 0.24) / 2, Math.sin(a) * R * 0.22); }
+    add(g, cyl(R * 0.2, R * 0.2, H - 0.24, 20), dark, 0, 0.12 + (H - 0.24) / 2, 0);
+    add(g, cyl(R, R, 0.1, 48), mat(WOOD[rec.wood] || WOOD.espresso, { r: 0.42 }), 0, H - 0.07, 0);
+    return;
+  }
   if (variant === 'turned') turnedLegs(g, W, D, H - 0.12, wood, 0.16);
   else taperedLegs(g, W, D, H - 0.12, wood, 0.16, 0.065, 0.04);
-  // apron
-  add(g, box(W - 0.3, 0.18, 0.07), wood, 0, H - 0.28, D / 2 - 0.16);
-  add(g, box(W - 0.3, 0.18, 0.07), wood, 0, H - 0.28, -D / 2 + 0.16);
-  add(g, box(0.07, 0.18, D - 0.3), wood, W / 2 - 0.16, H - 0.28, 0);
-  add(g, box(0.07, 0.18, D - 0.3), wood, -W / 2 + 0.16, H - 0.28, 0);
+  // apron: leg-to-leg, flush under the top (top underside is H - 0.12)
+  const hx = W / 2 - 0.16, hz = D / 2 - 0.16;
+  add(g, box(hx * 2, 0.2, 0.07), wood, 0, H - 0.22, hz);
+  add(g, box(hx * 2, 0.2, 0.07), wood, 0, H - 0.22, -hz);
+  add(g, box(0.07, 0.2, hz * 2), wood, hx, H - 0.22, 0);
+  add(g, box(0.07, 0.2, hz * 2), wood, -hx, H - 0.22, 0);
   // chamfered top (two layers)
   add(g, rbox(W, 0.07, D, 0.02), wood, 0, H - 0.085, 0);
   add(g, rbox(W - 0.08, 0.05, D - 0.08, 0.015), mat(WOOD[rec.wood] || WOOD.oak, { r: 0.45 }), 0, H - 0.02, 0);
@@ -397,21 +513,8 @@ function buildDiningChair(g, rec) {
   const wood = woodOf(rec);
   const W = rec.w || 1.6, D = rec.d || 1.75, H = rec.h || 3.15;
   const seatH = 1.5;
-  taperedLegs(g, W * 0.85, D * 0.75, seatH - 0.08, wood, 0.1, 0.032, 0.022);
-  // stretchers
-  add(g, cyl(0.012, 0.012, W * 0.7, 8), wood, 0, 0.55, 0.15, 0, 0, Math.PI / 2);
-  add(g, cyl(0.012, 0.012, D * 0.55, 8), wood, W * 0.28, 0.55, 0, Math.PI / 2, 0, 0);
-  add(g, cyl(0.012, 0.012, D * 0.55, 8), wood, -W * 0.28, 0.55, 0, Math.PI / 2, 0, 0);
-  add(g, rbox(W * 0.92, 0.12, D * 0.7, 0.02), wood, 0, seatH - 0.08, 0.05);
-  add(g, rbox(W * 0.84, 0.1, D * 0.62, 0.04), mat(f.upholstery, { r: 0.82 }), 0, seatH + 0.02, 0.06);
-  // slatted / curved back
-  add(g, box(W * 0.85, 0.06, 0.04), wood, 0, H - 0.08, -D / 2 + 0.16);
-  add(g, box(W * 0.85, 0.05, 0.04), wood, 0, seatH + 0.2, -D / 2 + 0.16);
-  const slats = 5;
-  for (let i = 0; i < slats; i++) {
-    const x = -W * 0.32 + i * (W * 0.64 / (slats - 1));
-    add(g, box(0.05, H - seatH - 0.15, 0.035), wood, x, (seatH + H) / 2, -D / 2 + 0.16);
-  }
+  const fr = chairFrame(g, { W, D, H, seatH, wood, slats: 5 });
+  add(g, rbox(fr.sw * 0.9, 0.1, fr.sd * 0.84, 0.04), mat(f.upholstery, { r: 0.82 }), 0, seatH + 0.04, 0.04);
 }
 
 function buildBarstool(g, rec) {
@@ -419,22 +522,94 @@ function buildBarstool(g, rec) {
   const wood = woodOf(rec);
   const W = rec.w || 1.45, D = rec.d || 1.5, H = rec.h || 3.5;
   const seatH = 2.15; // counter height
-  taperedLegs(g, W * 0.8, D * 0.8, seatH - 0.08, wood, 0.1, 0.032, 0.022);
-  add(g, cyl(0.015, 0.015, W * 0.7, 8), wood, 0, 0.85, 0.2, 0, 0, Math.PI / 2); // footrest
-  add(g, cyl(0.015, 0.015, D * 0.55, 8), wood, W * 0.28, 0.85, 0, Math.PI / 2, 0, 0);
-  add(g, cyl(0.015, 0.015, D * 0.55, 8), wood, -W * 0.28, 0.85, 0, Math.PI / 2, 0, 0);
-  add(g, rbox(W * 0.9, 0.12, D * 0.8, 0.04), mat(f.upholstery, { r: 0.8 }), 0, seatH, 0);
-  add(g, box(W * 0.7, H - seatH, 0.08), wood, 0, (seatH + H) / 2, -D / 2 + 0.18);
-  add(g, rbox(W * 0.7, 0.1, 0.1, 0.02), mat(f.upholstery, { r: 0.8 }), 0, H - 0.08, -D / 2 + 0.2);
+  // footrest ring + a lower ring, all leg-to-leg; rear legs rise into the low back
+  const fr = chairFrame(g, { W, D, H, seatH, wood, ring: true, footY: 0.85, footR: 0.018, legR: [0.036, 0.026], slats: 0 });
+  stretchers(g, { hx: fr.hx, hz: fr.hz }, 0.35, 0.014, wood, 'lr');
+  add(g, box(fr.hx * 2, 0.3, 0.05), wood, 0, H - 0.28, -fr.hz); // back panel between the posts
+  add(g, rbox(fr.sw * 0.92, 0.12, fr.sd * 0.9, 0.04), mat(f.upholstery, { r: 0.8 }), 0, seatH + 0.05, 0.02);
 }
 
 function buildPendant(g, rec) {
   const metal = mat(rec.metal || '#c4a35a', { r: 0.3, m: 0.55 });
   const H = rec.h || 1.6;
+  const v = rec.variant || 'bell';
+  const glow = mat('#fff4d6', { r: 0.4, e: 0.9 });
+  if (v === 'rattan') {
+    // rectangular woven rattan shade (as staged over the island), two cords to the canopy
+    const W = (rec.w || 2.6) - 0.1;
+    for (const s of [-1, 1]) add(g, cyl(0.01, 0.01, 1.2, 6), metal, s * W * 0.35, 0.85, 0);
+    add(g, box(W * 0.8, 0.04, 0.12), metal, 0, 1.45, 0);
+    add(g, box(W, 0.55, 0.95), mat('#d6b58a', { r: 0.9 }), 0, 0.0, 0);
+    add(g, box(W - 0.1, 0.5, 0.85), glow, 0, 0.0, 0);
+    return;
+  }
+  if (v === 'sputnik') {
+    // branching brass chandelier with globe-cup shades
+    add(g, cyl(0.015, 0.015, 1.25, 8), metal, 0, 0.85, 0);
+    add(g, cyl(0.08, 0.08, 0.04, 12), metal, 0, 1.47, 0);
+    add(g, sph(0.1, 12), metal, 0, 0.2, 0);
+    const arms = rec.arms || 7;
+    for (let i = 0; i < arms; i++) {
+      const a = (i / arms) * Math.PI * 2, L = 1.15 + (i % 2) * 0.35, e = (i % 3 - 1) * 0.25;
+      const m = add(g, cyl(0.018, 0.018, L, 6), metal, Math.cos(a) * L / 2, 0.2 + e / 2, Math.sin(a) * L / 2);
+      m.rotation.set(0, -a, Math.PI / 2 - Math.atan2(e, L));
+      add(g, cyl(0.16, 0.06, 0.12, 14), metal, Math.cos(a) * L, 0.2 + e + 0.02, Math.sin(a) * L);
+      add(g, sph(0.07, 10), glow, Math.cos(a) * L, 0.2 + e - 0.04, Math.sin(a) * L);
+    }
+    return;
+  }
+  if (v === 'linear') {
+    // linear brass chandelier with hanging cylinder lights (dining)
+    const W = (rec.w || 3.4) - 0.2;
+    for (const s of [-1, 1]) add(g, cyl(0.01, 0.01, 1.0, 6), metal, s * W * 0.45, 0.95, 0);
+    add(g, box(W, 0.06, 0.08), metal, 0, 0.45, 0);
+    const n = 9;
+    for (let i = 0; i < n; i++) {
+      const x = -W / 2 + 0.1 + i * (W - 0.2) / (n - 1), drop = 0.25 + ((i * 7) % 4) * 0.12;
+      add(g, cyl(0.008, 0.008, drop, 5), metal, x, 0.45 - drop / 2, 0);
+      add(g, cyl(0.07, 0.07, 0.42, 10), mat('#1d1c1a', { r: 0.4, m: 0.4 }), x, 0.45 - drop - 0.2, 0);
+      add(g, cyl(0.072, 0.072, 0.08, 10), metal, x, 0.45 - drop - 0.38, 0);
+    }
+    return;
+  }
+  if (v === 'globe') {
+    add(g, cyl(0.012, 0.012, 1.2, 6), metal, 0, 0.85, 0);
+    add(g, cyl(0.08, 0.08, 0.04, 12), metal, 0, 1.47, 0);
+    add(g, sph(0.38, 18), mat('#f6f2ea', { r: 0.3, e: 0.5 }), 0, 0.0, 0);
+    return;
+  }
   add(g, cyl(0.015, 0.015, 1.1, 8), metal, 0, 0.8, 0); // this item hangs; y=0 is the canopy top? We'll position so origin is shade center and caller sets y.
   add(g, cyl(0.08, 0.08, 0.04, 12), metal, 0, 1.35, 0);
   add(g, cyl(0.32, 0.18, 0.5, 16), mat(rec.shade || '#d4b07a', { r: 0.5, m: 0.15 }), 0, 0.15, 0);
   add(g, cyl(0.02, 0.02, 0.12, 8), metal, 0, -0.15, 0);
+}
+
+function buildTv(g, rec) {
+  // wall-mounted flat screen: z = mounting height of the screen bottom (default 4.4'); bracket meets the wall plane (back, -z)
+  const W = rec.w || 5.3, D = rec.d || 0.3, H = W * 0.5625;
+  const y0 = 4.4;
+  add(g, box(1.2, 0.8, D - 0.08), mat('#2a2a2a', { r: 0.5, m: 0.4 }), 0, y0 + H / 2, -D / 2 + (D - 0.08) / 2);
+  add(g, rbox(W, H, 0.08, 0.01), mat('#121314', { r: 0.25, m: 0.3 }), 0, y0 + H / 2, D / 2 - 0.04);
+  add(g, box(W - 0.1, H - 0.1, 0.01), mat('#1d2630', { r: 0.1, m: 0.2 }), 0, y0 + H / 2, D / 2 + 0.002);
+}
+
+function buildCurtains(g, rec) {
+  // pair of sheer drapery panels on a black rod that spans the opening and returns to the wall
+  const W = rec.w || 8, H = rec.h || 8.6, D = rec.d || 0.5;
+  const rod = mat(rec.metal || '#1d1d1f', { r: 0.4, m: 0.5 });
+  add(g, cyl(0.03, 0.03, W, 8), rod, 0, H, 0, 0, 0, Math.PI / 2);
+  for (const s of [-1, 1]) { add(g, box(0.05, 0.05, D), rod, s * (W / 2), H, -D / 2 + 0.02); }
+  const sheer = new THREE.MeshStandardMaterial({ color: rec.color || '#f4f1ea', roughness: 0.95, transparent: true, opacity: 0.82, side: THREE.DoubleSide });
+  const pw = Math.min(2.6, W * 0.22);
+  for (const s of [-1, 1]) {
+    const folds = 7;
+    for (let i = 0; i < folds; i++) {
+      const x = s * (W / 2 - pw / 2) + (i - (folds - 1) / 2) * (pw / folds);
+      const m = add(g, box(pw / folds + 0.02, H - 0.05, 0.03), sheer, x, (H - 0.05) / 2 + 0.02, (i % 2 ? 0.06 : -0.02));
+      m.rotation.y = (i % 2 ? 0.35 : -0.35);
+      m.castShadow = false;
+    }
+  }
 }
 
 function buildRange(g, rec) {
@@ -489,22 +664,40 @@ function buildCounterItems(g, rec) {
 
 function buildCounter(g, rec) {
   const body = mat(rec.carcass || '#efe7da', { r: 0.82 });
-  const top = mat(rec.top || '#e8e4dc', { r: 0.5 });
+  const topCol = rec.top && rec.top.startsWith('#') ? rec.top : '#e8e4dc';
+  const top = mat(topCol, { r: 0.42, m: 0.03 });
+  const doorM = mat(rec.door || rec.carcass || '#e8dfd0', { r: 0.72 });
+  const pull = mat(rec.metal || '#c4a35a', { r: 0.3, m: 0.55 });
   const W = rec.w || 4, D = rec.d || 2.0, H = rec.h || 3.0;
+  const v = rec.variant || '';
   add(g, box(W, 0.12, D - 0.08), mat('#4a4038', { r: 0.8 }), 0, 0.06, 0.02); // toe kick
   add(g, rbox(W, H - 0.22, D - 0.08, 0.01), body, 0, (H - 0.1) / 2, 0.02);
-  const doors = Math.max(1, Math.round(W / 1.5));
-  const dw = W / doors;
-  for (let i = 0; i < doors; i++) {
-    const x = -W / 2 + dw / 2 + i * dw;
-    add(g, rbox(dw - 0.08, H - 0.55, 0.03, 0.01), mat('#e8dfd0', { r: 0.75 }), x, (H - 0.05) / 2, D / 2 - 0.08);
-    add(g, cyl(0.015, 0.015, 0.08, 8), mat('#c4a35a', { r: 0.3, m: 0.5 }), x + dw * 0.28, (H - 0.05) / 2, D / 2 - 0.05, Math.PI / 2, 0, 0);
+  if (v === 'fluted' || v === 'fluted-waterfall') {
+    // seating side (back, -z) and front both get vertical slats in the carcass colour
+    const n = Math.floor(W / 0.16);
+    for (const zs of [-1, 1]) for (let i = 0; i < n; i++) {
+      const x = -W / 2 + 0.08 + i * (W - 0.16) / Math.max(1, n - 1);
+      add(g, cyl(0.045, 0.045, H - 0.3, 6), doorM, x, (H - 0.18) / 2 + 0.06, zs * (D / 2 - 0.05));
+    }
+  } else {
+    const doors = Math.max(1, Math.round(W / 1.5));
+    const dw = W / doors;
+    for (let i = 0; i < doors; i++) {
+      const x = -W / 2 + dw / 2 + i * dw;
+      add(g, rbox(dw - 0.08, H - 0.55, 0.03, 0.01), doorM, x, (H - 0.05) / 2, D / 2 - 0.08);
+      add(g, rbox(dw - 0.26, H - 0.8, 0.02, 0.01), mat(rec.door || rec.carcass || '#e8dfd0', { r: 0.68 }), x, (H - 0.05) / 2, D / 2 - 0.06); // shaker panel
+      add(g, cyl(0.015, 0.015, 0.4, 8), pull, x + dw * 0.32, H - 0.75, D / 2 - 0.03);
+    }
   }
   add(g, rbox(W + 0.1, 0.12, D + 0.08, 0.015), top, 0, H - 0.04, -0.02);
+  if (v === 'waterfall' || v === 'fluted-waterfall') {
+    // stone wraps down both ends to the floor (sits on the floor, butts the top)
+    for (const s of [-1, 1]) add(g, box(0.12, H - 0.1, D + 0.08), top, s * (W / 2 + 0.05 - 0.06), (H - 0.1) / 2, -0.02);
+  }
 }
 
 function buildIsland(g, rec) {
-  buildCounter(g, rec);
+  buildCounter(g, { ...rec, d: rec.d || 3 });
   if (rec.stools !== false) { /* stools are separate items */ }
 }
 
@@ -517,8 +710,8 @@ function buildCabinet(g, rec) {
   const dw = W / doors;
   for (let i = 0; i < doors; i++) {
     const x = -W / 2 + dw / 2 + i * dw;
-    add(g, rbox(dw - 0.08, H - 0.2, 0.03, 0.01), mat('#e8dfd0', { r: 0.75 }), x, y0 + H / 2, D / 2 - 0.03);
-    add(g, cyl(0.015, 0.015, 0.08, 8), mat('#c4a35a', { r: 0.3, m: 0.5 }), x + dw * 0.22, y0 + H / 2, D / 2, Math.PI / 2, 0, 0);
+    add(g, rbox(dw - 0.08, H - 0.2, 0.03, 0.01), mat(rec.door || rec.carcass || '#e8dfd0', { r: 0.75 }), x, y0 + H / 2, D / 2 - 0.03);
+    add(g, cyl(0.015, 0.015, 0.08, 8), mat(rec.metal || '#c4a35a', { r: 0.3, m: 0.5 }), x + dw * 0.22, y0 + H / 2, D / 2, Math.PI / 2, 0, 0);
   }
 }
 
@@ -526,8 +719,9 @@ function buildDesk(g, rec) {
   const wood = woodOf(rec);
   const W = rec.w || 5.5, D = rec.d || 2.5, H = rec.h || 2.5;
   if (rec.variant === 'pedestal') {
-    add(g, rbox(1.4, H - 0.12, D - 0.1, 0.02), wood, -W / 2 + 0.75, (H - 0.12) / 2, 0);
-    add(g, rbox(1.4, H - 0.12, D - 0.1, 0.02), wood, W / 2 - 0.75, (H - 0.12) / 2, 0);
+    add(g, rbox(1.4, H - 0.08, D - 0.1, 0.02), wood, -W / 2 + 0.75, (H - 0.08) / 2, 0);
+    add(g, rbox(1.4, H - 0.08, D - 0.1, 0.02), wood, W / 2 - 0.75, (H - 0.08) / 2, 0);
+    add(g, box(W - 2.9, H * 0.45, 0.06), wood, 0, H - 0.09 - H * 0.225, -D / 2 + 0.12); // modesty panel ties the pedestals
     for (const s of [-1, 1]) {
       for (let i = 0; i < 3; i++) {
         add(g, rbox(1.2, 0.35, 0.04, 0.01), mat('#c9b496', { r: 0.65 }), s * (W / 2 - 0.75), 0.45 + i * 0.5, D / 2 - 0.08);
@@ -535,9 +729,11 @@ function buildDesk(g, rec) {
       }
     }
   } else {
-    taperedLegs(g, W, D, H - 0.12, wood, 0.14, 0.05, 0.035);
-    add(g, box(W - 0.3, 0.16, 0.07), wood, 0, H - 0.28, D / 2 - 0.16);
-    add(g, box(W - 0.3, 0.16, 0.07), wood, 0, H - 0.28, -D / 2 + 0.16);
+    const L = taperedLegs(g, W, D, H - 0.09, wood, 0.14, 0.05, 0.035);
+    add(g, box(L.hx * 2, 0.16, 0.07), wood, 0, H - 0.17, L.hz);
+    add(g, box(L.hx * 2, 0.16, 0.07), wood, 0, H - 0.17, -L.hz);
+    add(g, box(0.07, 0.16, L.hz * 2), wood, L.hx, H - 0.17, 0);
+    add(g, box(0.07, 0.16, L.hz * 2), wood, -L.hx, H - 0.17, 0);
   }
   add(g, rbox(W, 0.1, D, 0.015), wood, 0, H - 0.04, 0);
 }
@@ -546,17 +742,26 @@ function buildDeskChair(g, rec) {
   const f = finishOf(rec);
   const metal = mat('#4a4e52', { r: 0.4, m: 0.4 });
   const W = rec.w || 2.0, D = rec.d || 2.0, H = rec.h || 3.2;
-  add(g, cyl(0.18, 0.18, 0.07, 16), metal, 0, 0.12, 0);
+  add(g, cyl(0.18, 0.18, 0.08, 16), metal, 0, 0.14, 0); // hub
   for (let i = 0; i < 5; i++) {
     const a = i * Math.PI * 2 / 5;
-    add(g, cyl(0.02, 0.02, 0.85, 8), metal, Math.cos(a) * 0.42, 0.12, Math.sin(a) * 0.42, 0, 0, Math.PI / 2 + a);
-    add(g, sph(0.06, 10), metal, Math.cos(a) * 0.82, 0.08, Math.sin(a) * 0.82);
+    // spoke lies flat, running from the hub out to its caster
+    add(g, box(0.78, 0.05, 0.07), metal, Math.cos(a) * 0.46, 0.14, Math.sin(a) * 0.46, 0, -a, 0);
+    add(g, cyl(0.025, 0.025, 0.06, 8), metal, Math.cos(a) * 0.82, 0.1, Math.sin(a) * 0.82);
+    add(g, sph(0.06, 10), mat('#1c1c1c', { r: 0.5 }), Math.cos(a) * 0.82, 0.06, Math.sin(a) * 0.82);
   }
-  add(g, cyl(0.04, 0.05, 1.15, 10), metal, 0, 0.85, 0);
-  add(g, rbox(W * 0.85, 0.14, D * 0.7, 0.04), mat(f.upholstery, { r: 0.8 }), 0, 1.5, 0.05);
-  add(g, rbox(W * 0.8, 1.15, 0.28, 0.05), mat(f.upholstery, { r: 0.8 }), 0, 2.25, -D * 0.22);
-  add(g, rbox(0.12, 0.35, 0.55, 0.03), mat(f.upholstery, { r: 0.8 }), W * 0.38, 1.7, 0.05);
-  add(g, rbox(0.12, 0.35, 0.55, 0.03), mat(f.upholstery, { r: 0.8 }), -W * 0.38, 1.7, 0.05);
+  const seatY = 1.5, seatT = 0.14;
+  add(g, cyl(0.04, 0.05, seatY - 0.14 - 0.05, 10), metal, 0, 0.14 + (seatY - 0.14 - 0.05) / 2, 0); // gas column hub → seat plate
+  add(g, box(0.5, 0.06, 0.5), metal, 0, seatY - seatT / 2 - 0.02, 0); // seat plate
+  add(g, rbox(W * 0.85, seatT, D * 0.7, 0.04), mat(f.upholstery, { r: 0.8 }), 0, seatY, 0.05);
+  const backZ = -D * 0.3;
+  add(g, box(0.16, 0.95, 0.06), metal, 0, seatY + 0.2, backZ - 0.02); // back spine from seat into the backrest
+  add(g, box(0.16, 0.06, D * 0.3), metal, 0, seatY - seatT / 2 - 0.02, backZ / 2);
+  add(g, rbox(W * 0.8, 1.15, 0.28, 0.05), mat(f.upholstery, { r: 0.8 }), 0, seatY + 0.72, backZ + 0.1);
+  for (const s of [-1, 1]) {
+    add(g, box(0.06, 0.32, 0.06), metal, s * W * 0.38, seatY + 0.2, 0.05); // arm post from the seat
+    add(g, rbox(0.12, 0.08, 0.6, 0.03), mat('#2a2a2a', { r: 0.6 }), s * W * 0.38, seatY + 0.38, 0.05);
+  }
 }
 
 function buildMonitor(g, rec) {
@@ -681,12 +886,17 @@ function buildPowerRack(g, rec) {
 function buildWeightBench(g, rec) {
   const steel = mat('#2b2c2e', { r: 0.45, m: 0.4 });
   const pad = mat('#2a2a2a', { r: 0.85 });
+  add(g, box(0.25, 0.1, 3.4), steel, 0, 1.23, 0); // spine under the pad
   add(g, rbox(1.0, 0.14, 3.6, 0.03), pad, 0, 1.35, 0);
-  add(g, rbox(1.0, 0.14, 1.1, 0.03), pad, 0, 2.1, -1.4, 0.7, 0, 0);
-  add(g, box(0.08, 1.2, 0.08), steel, -0.35, 0.6, 1.3);
-  add(g, box(0.08, 1.2, 0.08), steel, 0.35, 0.6, 1.3);
-  add(g, box(0.08, 1.2, 0.08), steel, -0.35, 0.6, -1.3);
-  add(g, box(0.08, 1.2, 0.08), steel, 0.35, 0.6, -1.3);
+  for (const z of [1.3, -1.3]) {
+    for (const x of [-0.35, 0.35]) add(g, box(0.08, 1.24, 0.08), steel, x, 0.62, z);
+    add(g, box(0.78, 0.08, 0.08), steel, 0, 0.06, z); // foot bar joins each leg pair
+    add(g, box(0.78, 0.08, 0.08), steel, 0, 1.2, z);
+  }
+  // incline pad: lower edge rests on the flat pad, upper end on a strut
+  const th = 0.7, half = 0.55;
+  add(g, rbox(1.0, 0.14, 1.1, 0.03), pad, 0, 1.42 + 0.07 + half * Math.sin(th), -1.0 - half * Math.cos(th), th, 0, 0);
+  add(g, box(0.08, 0.47, 0.08), steel, 0, 1.42 + 0.235, -1.45);
 }
 
 function buildBarbell(g, rec) {
@@ -708,7 +918,8 @@ function buildDumbbellRack(g, rec) {
   add(g, box(0.08, H, 0.08), steel, -W / 2 + 0.08, H / 2, D / 2 - 0.08);
   add(g, box(0.08, H, 0.08), steel, W / 2 - 0.08, H / 2, D / 2 - 0.08);
   for (const y of [1.0, 1.9, 2.8]) {
-    add(g, box(W, 0.06, 0.06), steel, 0, y, 0);
+    add(g, box(W - 0.16, 0.06, 0.06), steel, 0, y, 0);
+    for (const s of [-1, 1]) add(g, box(0.08, 0.06, D - 0.16), steel, s * (W / 2 - 0.08), y, 0); // side rails post-to-post
     for (let i = 0; i < 5; i++) {
       const x = -W / 2 + 0.4 + i * ((W - 0.8) / 4);
       add(g, cyl(0.07, 0.07, 0.7, 10), mat('#2a2a2a', { r: 0.6 }), x, y + 0.12, 0, 0, 0, Math.PI / 2);
@@ -749,8 +960,8 @@ function buildFirepit(g, rec) {
 export const CATALOG = {
   sofa: { name: 'Sofa', category: 'living', w: 7.67, d: 3.33, h: 2.75, variants: ['roll-arm', 'track-arm'], finishes: Object.keys(FINISHES), build: buildSofa },
   sectional: { name: 'Sectional', category: 'living', w: 9.5, d: 6.5, h: 2.75, variants: ['roll-arm', 'track-arm'], finishes: Object.keys(FINISHES), build: buildSectional },
-  accentChair: { name: 'Accent chair', category: 'living', w: 2.55, d: 2.6, h: 3.05, variants: ['wing', 'spindle'], finishes: Object.keys(FINISHES), build: buildAccentChair },
-  coffeeTable: { name: 'Coffee table', category: 'living', w: 4.2, d: 2.3, h: 1.5, variants: ['wood', 'stone'], build: buildCoffeeTable },
+  accentChair: { name: 'Accent chair', category: 'living', w: 2.55, d: 2.6, h: 3.05, variants: ['wing', 'spindle', 'lounge'], finishes: Object.keys(FINISHES), build: buildAccentChair },
+  coffeeTable: { name: 'Coffee table', category: 'living', w: 4.2, d: 2.3, h: 1.5, variants: ['wood', 'stone', 'organic'], build: buildCoffeeTable },
   sideTable: { name: 'Side table', category: 'living', w: 1.7, d: 1.7, h: 2.1, build: buildSideTable },
   tableLamp: { name: 'Table lamp', category: 'decor', w: 1.0, d: 1.0, h: 2.15, build: buildTableLamp },
   rug: { name: 'Area rug', category: 'decor', w: 8, d: 6, h: 0.06, build: buildRug },
@@ -760,16 +971,18 @@ export const CATALOG = {
   nightstand: { name: 'Nightstand', category: 'bedroom', w: 1.85, d: 1.4, h: 2.25, build: buildNightstand },
   dresser: { name: 'Dresser', category: 'bedroom', w: 5.2, d: 1.7, h: 3.2, build: buildDresser },
   bench: { name: 'Bench', category: 'bedroom', w: 4.2, d: 1.45, h: 1.55, finishes: Object.keys(FINISHES), build: buildBench },
-  diningTable: { name: 'Dining table', category: 'kitchen', w: 6.5, d: 3.2, h: 2.5, variants: ['tapered', 'turned'], build: buildDiningTable },
+  diningTable: { name: 'Dining table', category: 'kitchen', w: 6.5, d: 3.2, h: 2.5, variants: ['tapered', 'turned', 'round'], build: buildDiningTable },
   diningChair: { name: 'Dining chair', category: 'kitchen', w: 1.6, d: 1.75, h: 3.15, finishes: Object.keys(FINISHES), build: buildDiningChair },
   barstool: { name: 'Barstool', category: 'kitchen', w: 1.45, d: 1.5, h: 3.5, finishes: Object.keys(FINISHES), build: buildBarstool },
-  pendant: { name: 'Pendant light', category: 'decor', w: 1.1, d: 1.1, h: 2.2, build: buildPendant },
+  pendant: { name: 'Pendant light', category: 'decor', w: 1.1, d: 1.1, h: 2.2, variants: ['bell', 'globe', 'rattan', 'linear', 'sputnik'], build: buildPendant },
+  tv: { name: 'Wall TV', category: 'living', w: 5.3, d: 0.3, h: 7.4, build: buildTv },
+  curtains: { name: 'Sheer curtains', category: 'decor', w: 8, d: 0.5, h: 8.6, build: buildCurtains },
   range: { name: 'Range & hood', category: 'kitchen', w: 2.5, d: 2.2, h: 7.5, build: buildRange },
   fridge: { name: 'Refrigerator', category: 'kitchen', w: 3.0, d: 2.4, h: 7.0, build: buildFridge },
   sink: { name: 'Sink & faucet', category: 'kitchen', w: 2.6, d: 1.8, h: 3.2, build: buildSink },
   counterItems: { name: 'Countertop items', category: 'kitchen', w: 1.6, d: 0.8, h: 0.6, build: buildCounterItems },
-  counter: { name: 'Counter', category: 'kitchen', w: 4, d: 2, h: 3, build: buildCounter },
-  island: { name: 'Kitchen island', category: 'kitchen', w: 6, d: 3, h: 3, build: buildIsland },
+  counter: { name: 'Counter', category: 'kitchen', w: 4, d: 2, h: 3, variants: ['shaker', 'waterfall'], build: buildCounter },
+  island: { name: 'Kitchen island', category: 'kitchen', w: 6, d: 3, h: 3, variants: ['shaker', 'waterfall', 'fluted', 'fluted-waterfall'], build: buildIsland },
   cabinet: { name: 'Cabinet', category: 'kitchen', w: 3, d: 1.15, h: 3.2, build: buildCabinet },
   desk: { name: 'Desk', category: 'office', w: 5.5, d: 2.5, h: 2.5, variants: ['legs', 'pedestal'], build: buildDesk },
   deskChair: { name: 'Desk chair', category: 'office', w: 2.0, d: 2.0, h: 3.2, finishes: Object.keys(FINISHES), build: buildDeskChair },
@@ -796,7 +1009,7 @@ export const CATALOG = {
   sportsCar: { name: 'Sports Car', category: 'garage', w: 14.6, d: 6.0, h: 4.2, finishes: Object.keys(VEHICLE_FINISHES), build: buildSportsCar },
 };
 
-Object.assign(CATALOG, YARD_CATALOG);
+Object.assign(CATALOG, YARD_CATALOG, FIREPLACE_CATALOG);
 
 export function itemFootprint(rec) {
   const t = CATALOG[rec.type] || CATALOG.sofa;
@@ -1027,6 +1240,15 @@ export function makeItem(type, opts = {}) {
     along: opts.along,
     panels: opts.panels,
     poolKind: opts.poolKind || opts.variant,
+    h: opts.h != null ? +opts.h : undefined,
+    sizeKey: opts.sizeKey,
+    color: opts.color,
+    field: opts.field,
+    carcass: opts.carcass,
+    door: opts.door,
+    metal: opts.metal,
+    shade: opts.shade,
+    ceil: opts.ceil != null ? +opts.ceil : undefined,
   };
 }
 
@@ -1042,6 +1264,17 @@ export function buildItemMesh(rec, ctx) {
   const typ = CATALOG[rec.type] || t;
   const baseZ = rec.z || 0;
   let lift = rec.type === 'pendant' ? baseZ + ((ctx?.ceiling || 8.2) - 2.0) : baseZ;
+  if (rec.type === 'pendant') {
+    // carry the cord all the way up so the fixture hangs from the ceiling (or a beam) instead of floating
+    const top = (rec.ceil || ctx?.ceiling || 8.2) - lift;
+    const brass = new THREE.MeshStandardMaterial({ color: rec.metal || '#c4a35a', roughness: 0.3, metalness: 0.55 });
+    if (top > 1.45) {
+      const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, top - 1.4, 6), brass);
+      cord.position.set(0, 1.4 + (top - 1.4) / 2, 0); g.add(cord);
+      const can = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.06, 14), brass);
+      can.position.set(0, top - 0.03, 0); g.add(can);
+    }
+  }
   if (typ.mount === 'roof' && rec.z != null) lift = rec.z;
   const { Wx, Wz } = ctx;
   g.position.set(Wx(rec.x), lift, Wz(rec.y));
@@ -1069,8 +1302,9 @@ export function isCoveredPorch(room) {
   return /porch|cover/.test(n) || String(room[2] || '') === 'porch';
 }
 export function isOutdoorItem(type) {
-  const c = (CATALOG[type] || {}).category;
-  return c === 'garage' || c === 'patio' || c === 'pool' || c === 'solar';
+  const t = CATALOG[type] || {};
+  const c = t.category;
+  return !!t.outdoor || c === 'garage' || c === 'patio' || c === 'pool' || c === 'solar' || c === 'site';
 }
 
 export function roomOfPoint(rooms, x, y) {
@@ -1142,6 +1376,7 @@ export function autoFurnish(M, WS) {
   for (const room of rooms) {
     currentRoom = room;
     const [name, , , , , , , o = {}] = room;
+    if (o.noAuto) continue; // the model furnishes this room itself
     if (o.outside && !/porch|patio|terrace|screen/i.test(name || '')) continue;
     if (!o.outside && SKIP_ROOMS.test(name || '')) continue;
     if (isHallName(name)) continue;

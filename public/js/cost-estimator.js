@@ -346,7 +346,12 @@ export function estimateBuild({
   const poolCost = poolSf * poolRate;
   const spaCost = spaCount * spaEach;
   const solarCost = solarKw * 1000 * solarWatt;
-  const mid = heatedCost + garageCost + porchCost + poolCost + spaCost + solarCost;
+  const tierX = (e, c) => (t.id === 'economy' ? e : t.id === 'custom' ? c : 1) * loc.multiplier;
+  const fireplaceCount = Math.max(0, Number(extras.fireplaceCount) || 0);
+  const fireplaceCost = Math.max(0, Number(extras.fireplaceCost) || 0) * tierX(0.85, 1.3);
+  const septicCost = Math.max(0, Number(extras.septicCost) || 0) * tierX(0.9, 1.15);
+  const wellCost = Math.max(0, Number(extras.wellCost) || 0) * tierX(0.9, 1.15);
+  const mid = heatedCost + garageCost + porchCost + poolCost + spaCost + solarCost + fireplaceCost + septicCost + wellCost;
   const low = mid * 0.88;
   const high = mid * 1.14;
   const items = BREAKDOWN.map((b) => {
@@ -365,6 +370,9 @@ export function estimateBuild({
   if (poolCost > 0) items.push({ id: 'pool', label: 'In-ground pool', amount: poolCost, pct: mid > 0 ? poolCost / mid : 0 });
   if (spaCost > 0) items.push({ id: 'spa', label: 'Hot tub / spa', amount: spaCost, pct: mid > 0 ? spaCost / mid : 0 });
   if (solarCost > 0) items.push({ id: 'solar', label: `Solar PV (${solarKw.toFixed(1)} kW)`, amount: solarCost, pct: mid > 0 ? solarCost / mid : 0 });
+  if (fireplaceCost > 0) items.push({ id: 'fireplace', label: fireplaceCount > 1 ? `Fireplaces (${fireplaceCount})` : 'Fireplace', amount: fireplaceCost, pct: mid > 0 ? fireplaceCost / mid : 0 });
+  if (septicCost > 0) items.push({ id: 'septic', label: 'Septic system (rough — soils/perc test vary)', amount: septicCost, pct: mid > 0 ? septicCost / mid : 0 });
+  if (wellCost > 0) items.push({ id: 'well', label: 'Drilled well + pump (rough — depth varies)', amount: wellCost, pct: mid > 0 ? wellCost / mid : 0 });
   return {
     heatedSqFt: heatedSf,
     garageSqFt: garageSf,
@@ -383,6 +391,9 @@ export function estimateBuild({
     poolCost,
     spaCost,
     solarCost,
+    fireplaceCost,
+    septicCost,
+    wellCost,
     poolSf,
     spaCount,
     solarKw,

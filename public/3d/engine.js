@@ -56,6 +56,23 @@ const TEX = {
   grass: canvasTex((g, s) => { g.fillStyle = '#7fb26a'; g.fillRect(0, 0, s, s); for (let i = 0; i < 3000; i++) { g.fillStyle = rnd(i) > .5 ? 'rgba(40,90,30,.18)' : 'rgba(200,230,150,.15)'; g.fillRect(rnd(i + 5) * s, rnd(i + 9) * s, 2, 3); } }),
   board: canvasTex((g, s) => { g.fillStyle = '#2a2c2f'; g.fillRect(0, 0, s, s); for (let i = 0; i < 8; i++) { g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(i * s / 8, 0, 3, s); g.fillStyle = 'rgba(255,255,255,.05)'; g.fillRect(i * s / 8 + 3, 0, 2, s); } }),
   brick: canvasTex((g, s) => { g.fillStyle = '#9a958e'; g.fillRect(0, 0, s, s); const rows = 16; for (let y = 0; y < rows; y++) for (let x = 0; x < 5; x++) { const v = 120 + rnd(x * 31 + y * 7) * 45; g.fillStyle = `rgb(${v},${v - 3},${v - 8})`; g.fillRect(x * s / 4 - (y % 2) * s / 8 + 1.5, y * s / rows + 1.5, s / 4 - 3, s / rows - 3); } }),
+  // white board-and-batten siding (modern farmhouse)
+  whiteBoard: canvasTex((g, s) => { g.fillStyle = '#f4f3ef'; g.fillRect(0, 0, s, s); for (let i = 0; i < 4; i++) { const x = i * s / 4; g.fillStyle = 'rgba(0,0,0,.10)'; g.fillRect(x + 7, 0, 2, s); g.fillStyle = '#fbfaf7'; g.fillRect(x, 0, 7, s); g.fillStyle = 'rgba(0,0,0,.06)'; g.fillRect(x - 1, 0, 1, s); } }),
+  // stacked ledgestone for wainscots and pillar bases
+  ledgestone: canvasTex((g, s) => {
+    g.fillStyle = '#6d665d'; g.fillRect(0, 0, s, s);
+    const rows = 9; let i = 0;
+    for (let y = 0; y < rows; y++) {
+      let x = -rnd(y + 40) * s * 0.3;
+      while (x < s) {
+        const w = s * (0.14 + rnd(i + 3) * 0.22), v = 120 + rnd(i) * 70, warm = rnd(i + 11) * 18;
+        g.fillStyle = `rgb(${v + warm},${v + warm * 0.6 - 4},${v - 10})`;
+        g.fillRect(x + 2, y * s / rows + 2, w - 4, s / rows - 4);
+        g.fillStyle = 'rgba(255,255,255,.10)'; g.fillRect(x + 2, y * s / rows + 2, w - 4, 3);
+        x += w; i++;
+      }
+    }
+  }, 512),
   metal: canvasTex((g, s) => { g.fillStyle = '#1d1e20'; g.fillRect(0, 0, s, s); for (let i = 0; i < 4; i++) { g.fillStyle = 'rgba(255,255,255,.10)'; g.fillRect(i * s / 4, 0, 3, s); g.fillStyle = 'rgba(0,0,0,.5)'; g.fillRect(i * s / 4 + 3, 0, 2, s); } }),
   shingle: canvasTex((g, s) => { g.fillStyle = '#4b5159'; g.fillRect(0, 0, s, s); for (let y = 0; y < 8; y++) { g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(0, y * s / 8, s, 2); for (let x = 0; x < 4; x++) g.fillRect(x * s / 4 + (y % 2) * s / 8, y * s / 8, 2, s / 8); } }),
   // English Country (bright, airy): cream limewash walls, pale plaster ceilings,
@@ -122,11 +139,13 @@ const TEX = {
   }, 256),
 };
 TEX.grass.repeat.set(90, 90);
-const TEXSCALE = { wood: 6, tile: 4, concrete: 10, porch: 4, gym: 4, stone: 3, terrace: 6, paver: 6, board: 4, brick: 5, metal: 6, shingle: 4, limewash: 8, palePlaster: 10, lightOak: 5, slate: 8, lightStone: 3 };
+const TEXSCALE = { whiteBoard: 6, ledgestone: 5, wood: 6, tile: 4, concrete: 10, porch: 4, gym: 4, stone: 3, terrace: 6, paver: 6, board: 4, brick: 5, metal: 6, shingle: 4, limewash: 8, palePlaster: 10, lightOak: 5, slate: 8, lightStone: 3 };
 const MAT = {};
 for (const k of ['wood', 'tile', 'concrete', 'porch', 'gym', 'stone', 'terrace', 'paver']) MAT[k] = new THREE.MeshLambertMaterial({ map: TEX[k] });
 MAT.brick = new THREE.MeshStandardMaterial({ map: TEX.brick, roughness: .95 });
 MAT.board = new THREE.MeshStandardMaterial({ map: TEX.board, roughness: .85 });
+MAT.whiteBoard = new THREE.MeshStandardMaterial({ map: TEX.whiteBoard, roughness: .82 });
+MAT.ledgestone = new THREE.MeshStandardMaterial({ map: TEX.ledgestone, roughness: .95 });
 MAT.glass = new THREE.MeshStandardMaterial({ color: '#9fd0ee', roughness: .1, metalness: .1, transparent: true, opacity: .45, side: THREE.DoubleSide });
 MAT.water = new THREE.MeshStandardMaterial({ color: '#36b3d9', roughness: .08, metalness: .15, transparent: true, opacity: .88, emissive: '#0b4f66', emissiveIntensity: .25 });
 MAT.slab = new THREE.MeshLambertMaterial({ color: '#9a9a96' });
@@ -618,6 +637,7 @@ let currentItems = [];
 let itemsGroup = null;
 let highlightGroup = null;
 let itemsOn = true;
+let itemFire = { flames: [], lights: [] }; // animated flames inside placed fireplace items
 let editMode = false;
 let defaultItems = [];
 const hlMat = new THREE.MeshStandardMaterial({ color: '#e0a95a', emissive: '#e0a95a', emissiveIntensity: 0.45, transparent: true, opacity: 0.35, depthWrite: false });
@@ -679,8 +699,35 @@ function refreshItems() {
     itemsGroup.add(mesh);
   }
   itemsGroup.visible = itemsOn;
+  addSepticRun();
+  itemFire = { flames: [], lights: [] };
+  itemsGroup.traverse((o) => {
+    if (o.userData?.flame) itemFire.flames.push(o);
+    if (o.userData?.fireLight) itemFire.lights.push(o);
+  });
   if (solids && M) {
     // keep architectural solids; item footprints are not walk-blockers except large islands
+  }
+}
+/** Faint dashed run from the house to each septic tank and on to the nearest drain field. */
+function addSepticRun() {
+  if (!itemsGroup || !M?.rooms?.length) return;
+  const tanks = (currentItems || []).filter((i) => /^septicTank/.test(i.type));
+  if (!tanks.length) return;
+  const fields = (currentItems || []).filter((i) => /^drainField/.test(i.type));
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const r of M.rooms) { if (r[7]?.outside || isPorchLike(r)) continue; x0 = Math.min(x0, r[3]); y0 = Math.min(y0, r[4]); x1 = Math.max(x1, r[5]); y1 = Math.max(y1, r[6]); }
+  if (x0 > x1) return;
+  const mat = new THREE.LineDashedMaterial({ color: '#5a4632', dashSize: 1.4, gapSize: 1.0, transparent: true, opacity: 0.8 });
+  for (const t of tanks) {
+    const hx = Math.max(x0, Math.min(t.x, x1)), hy = Math.max(y0, Math.min(t.y, y1));
+    const pts = [[hx, hy], [t.x, t.y]];
+    let best = null, bd = 1e9;
+    for (const f of fields) { const d = Math.hypot(f.x - t.x, f.y - t.y); if (d < bd) { bd = d; best = f; } }
+    if (best) pts.push([best.x, best.y]);
+    const geo = new THREE.BufferGeometry().setFromPoints(pts.map(([x, y]) => new THREE.Vector3(Wx(x), 0.14, Wz(y))));
+    const line = new THREE.Line(geo, mat); line.computeLineDistances(); line.userData.septicRun = true; line.raycast = () => {};
+    itemsGroup.add(line);
   }
 }
 function setItemsList(items, { soft } = {}) {
@@ -889,6 +936,7 @@ function addPorchPosts(kit, model) {
   };
   for (const r of rooms) {
     if (!isCoveredPorch(r)) continue;
+    if (r[7] && r[7].noPosts) continue; // model draws its own columns
     const x0 = r[3], y0 = r[4], x1 = r[5], y1 = r[6];
     const inset = 0.45;
     const pts = [];
@@ -1166,6 +1214,7 @@ function buildModel(model, opts = {}) {
   }
   wallsFull = buildWalls(false); wallsCut = buildWalls(true);
   root.add(wallsFull, wallsCut);
+  buildDoors(WS);
   // Counters are clipped and rendered as detailed items (not hallway/doorway slabs).
   for (const r of [...WS.ext, ...WS.int, ...WS.win, ...(WS.counter || [])]) solids.push([Wx(r[0]), Wz(r[1]), Wx(r[2]), Wz(r[3])]);
 
@@ -1184,6 +1233,7 @@ function buildModel(model, opts = {}) {
       const m = new THREE.Mesh(boxRect(a, b, c, d, h0, h1, MAT[color] ? TEXSCALE[color] : 0), getMat(color, o));
       m.castShadow = m.receiveShadow = true; furn.add(m);
       if (o.solid) solids.push([Wx(a), Wz(b), Wx(c), Wz(d)]);
+      if (o.roof) m.userData.roofPart = true; // shown/hidden with the Roof toggle (gable timbers, chimneys, vault beams)
       return m;
     },
     plane(a, b, c, d, type) { const m = new THREE.Mesh(planeRect(a, b, c, d, -0.55, TEXSCALE[type] || 6), MAT[type]); m.receiveShadow = true; furn.add(m); },
@@ -1405,7 +1455,7 @@ function buildModel(model, opts = {}) {
     kit.block = (a, b, c, d, z0, z1, color, opts) => {
       const w = Math.abs(c - a), dep = Math.abs(d - b), h = (z1 || 0) - (z0 || 0);
       const cx = (a + c) / 2, cy = (b + d) / 2;
-      if (h >= 6 && w <= 1.25 && dep <= 1.25 && (M.rooms || []).some((r) => isCoveredPorch(r) && cx >= r[3] && cx <= r[5] && cy >= r[4] && cy <= r[6])) {
+      if (!(opts && opts.keep) && h >= 6 && w <= 1.25 && dep <= 1.25 && (M.rooms || []).some((r) => isCoveredPorch(r) && !(r[7] && r[7].noPosts) && cx >= r[3] && cx <= r[5] && cy >= r[4] && cy <= r[6])) {
         return;
       }
       return _kitBlock(a, b, c, d, z0, z1, color, opts);
@@ -1449,11 +1499,14 @@ function buildModel(model, opts = {}) {
 
   // roofs
   roof = new THREE.Group(); roof.visible = roofOn; root.add(roof);
+  for (const c of [...furn.children]) if (c.userData.roofPart) roof.add(c);
   const roofTex = TEX[mats.roofTex || 'shingle'];
   const roofTop = new THREE.MeshStandardMaterial({ map: roofTex, color: '#ffffff', roughness: mats.roofTex === 'metal' ? .45 : .85, metalness: mats.roofTex === 'metal' ? .35 : 0, side: THREE.FrontSide });
-  const roofUnder = new THREE.MeshStandardMaterial({ color: mats.roofUnder || '#d9d4ca', roughness: .9, side: THREE.BackSide });
+  const roofUnder = new THREE.MeshStandardMaterial({ color: mats.roofUnder || '#d9d4ca', roughness: .9, side: THREE.BackSide, ...(mats.roofUnderGlow ? { emissive: mats.roofUnder || '#d9d4ca', emissiveIntensity: mats.roofUnderGlow } : {}) });
   const gableInside = new THREE.MeshStandardMaterial({ color: mats.int || '#f8f6f1', roughness: .95, side: THREE.BackSide });
-  const gableMat = { int: intMat, ext: extMat, brick: MAT.brick, board: MAT.board, glass: MAT.glass };
+  const gableMat = { int: intMat, ext: extMat, brick: MAT.brick, board: MAT.board, glass: MAT.glass, whiteBoard: MAT.whiteBoard };
+  // model-authored roof skins (e.g. valley infill where a wing roof dies into a taller cross gable)
+  for (const c of [...roof.children]) if (c.userData.roofSkin) { c.material = roofTop; const u = new THREE.Mesh(c.geometry, roofUnder); roof.add(u); }
   for (const rf of M.roofs || []) {
     if (rf.flat) { const m = new THREE.Mesh(boxRect(rf.x0, rf.y0, rf.x1, rf.y1, rf.h, rf.h + .8), new THREE.MeshStandardMaterial({ color: '#1d1e20', roughness: .7 })); m.castShadow = true; roof.add(m); continue; }
     if (rf.shed) { // single-slope roof: high edge at y0 (or x0 when along:'y'), low edge at y1 (x1)
@@ -1558,7 +1611,7 @@ function buildModel(model, opts = {}) {
           const s = wa[0] + (wa[1] - wa[0]) * k2 / divs;
           if (door && s > ds - 0.15 && s < de + 0.15) continue;
           const hh = gableZ + (Math.min(s - wa[0], wa[1] - s)) * pitch;
-          roof.add(kit.block(along ? s - .08 : e - .08, along ? e - .08 : s - .08, along ? s + .08 : e + .08, along ? e + .08 : s + .08, gableZ, hh, fm));
+          roof.add(kit.block(along ? s - .08 : e - .08, along ? e - .08 : s - .08, along ? s + .08 : e + .08, along ? e + .08 : s + .08, gableZ, hh, fm, { keep: true }));
         }
         if (aframe) {
           for (const frac of [0.28, 0.55]) {
@@ -1634,7 +1687,7 @@ const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in win
 const HELP = {
   orbit: isTouch ? 'Drag to rotate · pinch to zoom · two fingers to pan.' : 'Drag to rotate · scroll to zoom · right-drag (or Shift+drag) to pan.',
   top: 'Top-down plan view. Drag to pan/rotate, scroll or pinch to zoom.',
-  walk: isTouch ? 'Drag to look around · use the arrow pad to walk.' : 'Click the view to look with the mouse · W A S D / arrows to walk · Shift to run · Esc to release the mouse. Turn the Roof on to see vaulted ceilings.',
+  walk: isTouch ? 'Drag to look around · use the arrow pad to walk. Doors open as you walk up (turn off with Auto-open doors).' : 'Click the view to look with the mouse · W A S D / arrows to walk · Shift to run · Esc to release the mouse. Doors swing open as you walk up — use Auto-open doors to keep them shut. Turn the Roof on to see vaulted ceilings.',
 };
 const setBtn = (id, on) => $(id).classList.toggle('on', !!on);
 function animateCam(pos, target, ms = 700) {
@@ -1685,7 +1738,7 @@ function setRoof(v) {
   if (v && cutOn) setCut(false);
 }
 function setLabels(v) { labelsOn = v; if (labels) { labels.visible = v; labels.children.forEach(o => { o.visible = v; }); } setBtn('bLabels', v); }
-function setCut(v) { cutOn = v; if (wallsCut) { wallsCut.visible = v; wallsFull.visible = !v; } setBtn('bCut', v); if (v && roofOn) setRoof(false); }
+function setCut(v) { cutOn = v; if (wallsCut) { wallsCut.visible = v; wallsFull.visible = !v; } if (doorsGroup) doorsGroup.visible = !v; setBtn('bCut', v); if (v && roofOn) setRoof(false); }
 function setPlan(v) { planOn = v; if (planOverlay) planOverlay.visible = v; setBtn('bPlan', v); }
 $('bRoof').onclick = () => setRoof(!roofOn);
 $('bLabels').onclick = () => setLabels(!labelsOn);
@@ -1702,6 +1755,132 @@ $('bOrbit').onclick = () => setMode('orbit');
 $('bTop').onclick = () => setMode('top');
 $('bWalk').onclick = () => setMode('walk');
 $('toggleHud').onclick = () => { const h = $('hud'); h.classList.toggle('collapsed'); $('toggleHud').textContent = h.classList.contains('collapsed') ? '▸' : '▾'; };
+
+
+// ---------- doors: hinged leaves in every door opening; they swing open as you walk up ----------
+const DOOR_PREF = 'peakstead-auto-doors';
+let autoDoors = true;
+try { autoDoors = localStorage.getItem(DOOR_PREF) !== '0'; } catch {}
+let doors = [], doorsGroup = null;
+const DOOR_MAT = {
+  int: new THREE.MeshStandardMaterial({ color: '#f4f2eb', roughness: .55 }),
+  intPanel: new THREE.MeshStandardMaterial({ color: '#ebe8de', roughness: .6 }),
+  ext: new THREE.MeshStandardMaterial({ color: '#1d1e20', roughness: .42, metalness: .3 }),
+  glass: new THREE.MeshStandardMaterial({ color: '#a8c6d8', roughness: .06, metalness: .2, transparent: true, opacity: .38, side: THREE.DoubleSide }),
+  casing: new THREE.MeshStandardMaterial({ color: '#f7f5ef', roughness: .7 }),
+  casingExt: new THREE.MeshStandardMaterial({ color: '#232427', roughness: .6 }),
+  brass: new THREE.MeshStandardMaterial({ color: '#c4a35a', roughness: .3, metalness: .7 }),
+  black: new THREE.MeshStandardMaterial({ color: '#121212', roughness: .35, metalness: .55 }),
+};
+function doorPart(g, w, h, d, m, x, y, z) {
+  const ms = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+  ms.position.set(x, y, z); ms.castShadow = ms.receiveShadow = true; g.add(ms); return ms;
+}
+/** One leaf, centred on its own origin: width along x, height up from y=0, thickness along z. */
+function makeLeaf(lw, lh, lt, ext, freeSide) {
+  const g = new THREE.Group();
+  const handleX = freeSide * (lw / 2 - 0.25);
+  if (ext) {
+    // black steel-and-glass entry leaf (matches black window frames)
+    const st = Math.min(0.32, lw * 0.16);
+    doorPart(g, st, lh, lt, DOOR_MAT.ext, -lw / 2 + st / 2, lh / 2, 0);
+    doorPart(g, st, lh, lt, DOOR_MAT.ext, lw / 2 - st / 2, lh / 2, 0);
+    doorPart(g, lw - st * 2 + 0.02, st, lt, DOOR_MAT.ext, 0, lh - st / 2, 0);
+    doorPart(g, lw - st * 2 + 0.02, 0.85, lt, DOOR_MAT.ext, 0, 0.425, 0);
+    doorPart(g, lw - st * 2 + 0.02, lh - st - 0.85 + 0.02, 0.04, DOOR_MAT.glass, 0, 0.85 + (lh - st - 0.85) / 2, 0);
+    for (const s of [-1, 1]) doorPart(g, 0.05, 1.5, 0.06, DOOR_MAT.black, handleX, 3.5, s * (lt / 2 + 0.06));
+  } else {
+    // painted two-panel shaker leaf with brass knobs
+    doorPart(g, lw, lh, lt, DOOR_MAT.int, 0, lh / 2, 0);
+    const pw = lw - 0.55;
+    if (pw > 0.3) for (const s of [-1, 1]) {
+      doorPart(g, pw, lh * 0.36, 0.02, DOOR_MAT.intPanel, 0, lh * 0.72, s * (lt / 2 + 0.005));
+      doorPart(g, pw, lh * 0.34, 0.02, DOOR_MAT.intPanel, 0, lh * 0.27, s * (lt / 2 + 0.005));
+    }
+    for (const s of [-1, 1]) {
+      const k = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 10), DOOR_MAT.brass);
+      k.position.set(handleX, 3.0, s * (lt / 2 + 0.09)); g.add(k);
+      doorPart(g, 0.04, 0.04, 0.1, DOOR_MAT.brass, handleX, 3.0, s * (lt / 2 + 0.04));
+    }
+  }
+  return g;
+}
+function buildDoors(WS) {
+  doors = [];
+  doorsGroup = new THREE.Group(); doorsGroup.name = 'doors'; root.add(doorsGroup);
+  const cas = [], casExt = [];
+  for (const r of (WS.door || [])) {
+    const [x0, y0, x1, y1] = r, top = r[4] ?? 7, ext = !!r[6];
+    const horiz = (x1 - x0) >= (y1 - y0);
+    const width = horiz ? x1 - x0 : y1 - y0;
+    // garage overhead doors and wide cased openings stay open (no hinged leaf)
+    if (width < 1.6 || top < 6 || width > (ext ? 7.2 : 6.2)) continue;
+    const jt = 0.12, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const list = ext ? casExt : cas;
+    if (horiz) list.push(boxRect(x0, y0 - 0.03, x0 + jt, y1 + 0.03, 0, top), boxRect(x1 - jt, y0 - 0.03, x1, y1 + 0.03, 0, top), boxRect(x0, y0 - 0.03, x1, y1 + 0.03, top - jt, top));
+    else list.push(boxRect(x0 - 0.03, y0, x1 + 0.03, y0 + jt, 0, top), boxRect(x0 - 0.03, y1 - jt, x1 + 0.03, y1, 0, top), boxRect(x0 - 0.03, y0, x1 + 0.03, y1, top - jt, top));
+    const clear = width - jt * 2;
+    const n = clear > 4.0 ? 2 : 1;
+    const lw = clear / n - 0.03, lh = top - jt - 0.06, lt = 0.15;
+    const leaves = [];
+    for (let i = 0; i < n; i++) {
+      const dirSign = i === 0 ? 1 : -1; // leaf runs from its hinge toward the middle of the opening
+      const pivot = new THREE.Group();
+      const hx = horiz ? (i === 0 ? x0 + jt + 0.015 : x1 - jt - 0.015) : cx;
+      const hy = horiz ? cy : (i === 0 ? y0 + jt + 0.015 : y1 - jt - 0.015);
+      pivot.position.set(Wx(hx), 0.04, Wz(hy));
+      const holder = new THREE.Group();
+      if (!horiz) holder.rotation.y = -Math.PI / 2; // local +x → plan +y (world +z)
+      const leaf = makeLeaf(lw, lh, lt, ext, dirSign);
+      leaf.position.x = dirSign * lw / 2;
+      holder.add(leaf); pivot.add(holder); doorsGroup.add(pivot);
+      // +θ swings a +x leaf toward -z, a -x leaf toward +z, a +z leaf toward +x, a -z leaf toward -x
+      leaves.push({ pivot, sign: horiz ? -dirSign : dirSign });
+    }
+    doors.push({ cx, cy, horiz, half: width / 2, ext, leaves, open: 0, side: 1, maxDeg: n === 2 ? 95 : 92 });
+  }
+  const a = mesh(cas, DOOR_MAT.casing, true), b = mesh(casExt, DOOR_MAT.casingExt, true);
+  if (a) doorsGroup.add(a); if (b) doorsGroup.add(b);
+  doorsGroup.visible = !cutOn;
+}
+function updateDoors(dt) {
+  if (!doors.length) return;
+  let px = null, pz = null;
+  if (mode === 'walk' && autoDoors) {
+    const hp = housePose();
+    const loc = houseFromWorld(player.x, player.y, hp.x, hp.z, hp.yaw);
+    px = loc[0]; pz = loc[1];
+  }
+  for (const d of doors) {
+    let target = 0;
+    if (px != null) {
+      const dx = px - Wx(d.cx), dz = pz - Wz(d.cy);
+      const along = d.horiz ? dx : dz, across = d.horiz ? dz : dx;
+      if (Math.abs(along) < d.half + 1.3 && Math.abs(across) < 4.6) target = 1;
+      // pick the swing direction when it starts to open: away from whoever walked up
+      if (target && d.open < 0.02) d.side = across > 0 ? -1 : 1;
+    }
+    if (d.open === target) continue;
+    const step = dt * 1.9;
+    d.open = target > d.open ? Math.min(target, d.open + step) : Math.max(target, d.open - step * 0.75);
+    const e = d.open * d.open * (3 - 2 * d.open);
+    const ang = e * THREE.MathUtils.degToRad(d.maxDeg);
+    for (const lf of d.leaves) lf.pivot.rotation.y = d.side * lf.sign * ang;
+  }
+}
+function syncDoorsBtn() {
+  const b = $('bDoors'); if (!b) return;
+  b.classList.toggle('on', autoDoors);
+  b.setAttribute('aria-pressed', autoDoors ? 'true' : 'false');
+  b.textContent = autoDoors ? 'Auto-open doors: On' : 'Auto-open doors: Off';
+  b.title = autoDoors ? 'Doors swing open as you walk up to them (click to keep them closed)' : 'Doors stay closed (click to let them open as you walk up)';
+}
+function setAutoDoors(v) {
+  autoDoors = !!v;
+  try { localStorage.setItem(DOOR_PREF, autoDoors ? '1' : '0'); } catch {}
+  syncDoorsBtn();
+}
+if ($('bDoors')) { syncDoorsBtn(); $('bDoors').onclick = () => setAutoDoors(!autoDoors); }
 
 // ---------- walk-through ----------
 const EYE = 5.5, RADIUS = 0.75, player = new THREE.Vector2();
@@ -1777,7 +1956,7 @@ function disposeRoot() {
 function buildGLB(gltfScene, meta = {}) {
   disposeRoot();
   root = new THREE.Group(); scene.add(root);
-  wallsFull = wallsCut = labels = planOverlay = ceilings = null; solids = [];
+  wallsFull = wallsCut = labels = planOverlay = ceilings = null; solids = []; doors = []; doorsGroup = null;
   const box = new THREE.Box3().setFromObject(gltfScene), size = box.getSize(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.z) || 1;
   const k = maxDim < 80 ? 3.28084 : 1; // most exporters write metres; the engine works in feet
@@ -1838,7 +2017,7 @@ function resolveAsset(src) {
   return src;
 }
 function setModelUi(engine, hasRoof = true) {
-  for (const id of ['bLabels', 'bCut', 'bPlan', 'bEdit', 'bItems']) if ($(id)) $(id).style.display = engine ? '' : 'none';
+  for (const id of ['bLabels', 'bCut', 'bPlan', 'bEdit', 'bItems', 'bDoors']) if ($(id)) $(id).style.display = engine ? '' : 'none';
   if ($('editPlanBtn')) $('editPlanBtn').style.display = engine ? 'inline-flex' : 'none';
   if ($('bRoof')) $('bRoof').style.display = engine || hasRoof ? '' : 'none';
   if (engine && $('bPlan')) $('bPlan').style.display = M.planImage ? '' : 'none';
@@ -1989,6 +2168,7 @@ function syncAreaUi(M) {
 function loop() {
   const dt = Math.min(clock.getDelta(), 0.05);
   if (mode === 'walk') walkStep(dt); else orbit.update();
+  updateDoors(dt);
   updateNorth();
   if (labelsOn && labels) for (const o of labels.children) {
     const wp = o.getWorldPosition(new THREE.Vector3());
@@ -2006,6 +2186,19 @@ function loop() {
         fl.mesh.scale.y = k;
         fl.mesh.material.opacity = 0.5 + 0.35 * Math.sin(t * (6.5 + fl.phase * 0.7) + fl.phase);
       }
+    }
+  }
+  if (itemFire.flames.length || itemFire.lights.length) {
+    const t = performance.now() / 1000;
+    for (const l of itemFire.lights) {
+      const u = l.userData.fireLight;
+      l.intensity = u.base * (0.82 + 0.18 * Math.sin(t * 11 + u.t0) + 0.1 * Math.sin(t * 27 + 1.4));
+    }
+    for (const m of itemFire.flames) {
+      const u = m.userData.flame;
+      const k = 0.84 + 0.22 * Math.sin(t * (8.5 + u.phase) + u.phase);
+      m.scale.y = k; m.position.y = u.y0 + (u.baseH * k) / 2;
+      m.material.opacity = 0.5 + 0.35 * Math.sin(t * (6.5 + u.phase * 0.7) + u.phase);
     }
   }
   renderer.render(scene, camera); labelRenderer.render(scene, camera);
@@ -2115,6 +2308,9 @@ window.app = {
   getRoofs: () => M?.roofs || [],
   captureThumb,
   rebuildPlan,
+  setAutoDoors,
+  getAutoDoors: () => autoDoors,
+  getDoors: () => doors.map(d => ({ cx: d.cx, cy: d.cy, ext: d.ext, leaves: d.leaves.length, open: +d.open.toFixed(2) })),
 };
 if (SRC.kind === 'example') await loadExample(params.get('ex') || REGISTRY[0].id);
 else if (SRC.kind === 'draft') loadBuilderDraft();

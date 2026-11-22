@@ -12,6 +12,7 @@ export const EXAMPLE_AREAS = {
   'smith-10': { heated: 1853, garage: 768, porch: 591, buildType: 'home' },
   'smith-11': { heated: 2479, garage: 528, porch: 599, buildType: 'home' },
   'smith-12': { heated: 2156, garage: 663, porch: 621, buildType: 'home' },
+  'smith-13': { heated: 2489, garage: 979, porch: 1492, buildType: 'home' },
   'tiny-01': { heated: 310, garage: 0, porch: 0, buildType: 'tiny' },
   'tiny-02': { heated: 500, garage: 0, porch: 70, buildType: 'tiny' },
   'tiny-03': { heated: 540, garage: 0, porch: 128, buildType: 'tiny' },

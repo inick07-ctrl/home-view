@@ -226,9 +226,104 @@ function solarEntry(name, panels, mount) {
   };
 }
 
+
+// ---------------- septic + well (optional site items) ----------------
+// Sizes follow common residential practice: 1000 / 1250 / 1500 gal two-compartment concrete tanks
+// with risers to grade, and trench drain fields sized small / medium / large. Setback rings are the
+// TYPICAL 50 ft well→tank and 100 ft well→drain field; always confirm with local code (e.g. MN 7080 /
+// Stearns County Environmental Services).
+function groundTextPlane(lines, w, h, color = 'rgba(40,60,40,.85)') {
+  if (typeof document === 'undefined') return null;
+  const c = document.createElement('canvas'); c.width = 1024; c.height = Math.round(1024 * h / w);
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, c.width, c.height);
+  g.fillStyle = 'rgba(255,255,255,.72)';
+  g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = color; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const fs = Math.floor(c.height / (lines.length + 0.6) * 0.62);
+  g.font = `600 ${fs}px system-ui, sans-serif`;
+  lines.forEach((t, i) => g.fillText(t, c.width / 2, (i + 0.8) * c.height / (lines.length + 0.6)));
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tx, transparent: true, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2;
+  m.renderOrder = 3;
+  m.raycast = () => {};
+  return m;
+}
+function dashedRing(g, r, color, y = 0.06, dash = 2.2, gap = 1.6) {
+  const pts = [];
+  const n = Math.max(48, Math.round(r * 2));
+  for (let i = 0; i <= n; i++) { const a = (i / n) * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r)); }
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const line = new THREE.Line(geo, new THREE.LineDashedMaterial({ color, dashSize: dash, gapSize: gap, transparent: true, opacity: 0.85 }));
+  line.computeLineDistances();
+  line.raycast = () => {}; // decorative: never steal clicks from the floor or other items
+  g.add(line);
+  // faint fill so the zone reads from above
+  const disk = new THREE.Mesh(new THREE.RingGeometry(r - 0.5, r, n), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }));
+  disk.rotation.x = -Math.PI / 2; disk.position.y = y - 0.01; disk.raycast = () => {}; g.add(disk);
+  return line;
+}
+
+function buildSepticTank(g, rec) {
+  const W = rec.w || 5.5, D = rec.d || 9.5;
+  // buried concrete tank shown as a soil patch + faint outline, with two green risers/lids at grade
+  const soil = add(g, new THREE.BoxGeometry(W + 1.2, 0.05, D + 1.2), mat('#7d6a52', { r: 1 }), 0, 0.03, 0);
+  soil.castShadow = false;
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(W, 0.02, D)), new THREE.LineDashedMaterial({ color: '#3b3b3b', dashSize: 0.6, gapSize: 0.4 }));
+  edges.position.y = 0.07; edges.computeLineDistances(); g.add(edges);
+  const lid = mat('#2f6b3a', { r: 0.6 });
+  for (const z of [-D * 0.28, D * 0.3]) {
+    add(g, new THREE.CylinderGeometry(0.95, 0.95, 0.32, 24), lid, 0, 0.16, z);
+    add(g, new THREE.CylinderGeometry(0.75, 0.75, 0.05, 24), mat('#3f8a4c', { r: 0.5 }), 0, 0.34, z);
+  }
+  // effluent filter / inspection port
+  add(g, new THREE.CylinderGeometry(0.22, 0.22, 0.5, 12), mat('#f1f1ee', { r: 0.5 }), W * 0.3, 0.25, 0);
+}
+
+function buildDrainField(g, rec) {
+  const W = rec.w || 30, D = rec.d || 40;
+  const trenches = rec.trenches || Math.max(3, Math.round(W / 9));
+  const field = add(g, new THREE.BoxGeometry(W, 0.06, D), mat('#8fb873', { r: 1 }), 0, 0.03, 0);
+  field.castShadow = false;
+  // header / distribution box at the near (-z) end
+  add(g, new THREE.BoxGeometry(2.2, 0.35, 2.2), mat('#9a9893', { r: 0.8 }), 0, 0.18, -D / 2 + 1.4);
+  add(g, new THREE.BoxGeometry(W - 3, 0.07, 0.35), mat('#8a7a64', { r: 1 }), 0, 0.08, -D / 2 + 2.8);
+  for (let i = 0; i < trenches; i++) {
+    const x = -W / 2 + (i + 0.5) * W / trenches;
+    add(g, new THREE.BoxGeometry(2.6, 0.07, D - 4.5), mat('#a39985', { r: 1 }), x, 0.08, 1.2).castShadow = false; // gravel trench
+    add(g, new THREE.BoxGeometry(0.35, 0.08, D - 4.5), mat('#e9e7e1', { r: 0.6 }), x, 0.1, 1.2); // perforated pipe
+    add(g, new THREE.CylinderGeometry(0.16, 0.16, 0.7, 10), mat('#f4f4f1', { r: 0.5 }), x, 0.35, D / 2 - 2.0); // inspection port
+  }
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(W, 0.02, D)), new THREE.LineDashedMaterial({ color: '#2f4a2a', dashSize: 1.2, gapSize: 0.8 }));
+  edges.position.y = 0.09; edges.computeLineDistances(); g.add(edges);
+}
+
+function buildWell(g, rec) {
+  add(g, new THREE.BoxGeometry(4, 0.33, 4), mat('#b9b6ae', { r: 0.85 }), 0, 0.165, 0); // concrete pad
+  add(g, new THREE.CylinderGeometry(0.28, 0.28, 1.6, 16), mat('#6f7378', { r: 0.4, m: 0.6 }), 0, 0.33 + 0.8, 0); // 6" steel casing
+  add(g, new THREE.CylinderGeometry(0.36, 0.36, 0.22, 16), mat('#2b2e31', { r: 0.4, m: 0.4 }), 0, 0.33 + 1.6 + 0.11, 0); // vented well cap
+  add(g, new THREE.CylinderGeometry(0.04, 0.04, 0.3, 8), mat('#c9c9c9', { r: 0.4, m: 0.5 }), 0.18, 0.33 + 1.9, 0, 0, 0, Math.PI / 2.4);
+  if (rec.variant !== 'no-setbacks') {
+    dashedRing(g, 50, '#c0632b');
+    dashedRing(g, 100, '#b33a3a', 0.06, 3, 2.2);
+    const t1 = groundTextPlane(['Typical 50 ft: well → septic tank', 'check local code (Stearns Co., MN)'], 26, 4.2, 'rgba(150,70,20,.95)');
+    if (t1) { t1.position.set(0, 0.09, -50 + 3.2); g.add(t1); }
+    const t2 = groundTextPlane(['Typical 100 ft: well → drain field', 'check local code (Stearns Co., MN)'], 30, 4.6, 'rgba(150,40,40,.95)');
+    if (t2) { t2.position.set(0, 0.09, -100 + 3.6); g.add(t2); }
+    const t3 = groundTextPlane(['Well', 'pressure tank inside the house'], 9, 2.4, 'rgba(40,50,60,.9)');
+    if (t3) { t3.position.set(0, 0.09, 3.6); g.add(t3); }
+  }
+}
+
+function siteEntry(name, build, w, d, h, extra = {}) {
+  return { name, category: 'site', w, d, h, outdoor: true, build, ...extra };
+}
+
 export const YARD_CATEGORIES = [
   { id: 'pool', name: 'Pool' },
   { id: 'solar', name: 'Solar' },
+  { id: 'site', name: 'Septic & well' },
 ];
 
 export const YARD_CATALOG = {
@@ -245,4 +340,11 @@ export const YARD_CATALOG = {
   solarGround8: solarEntry('Ground array — 8 panels', 8, 'ground'),
   solarGround12: solarEntry('Ground array — 12 panels', 12, 'ground'),
   solarGround20: solarEntry('Ground array — 20 panels', 20, 'ground'),
+  septicTank1000: siteEntry('Septic tank 1000 gal', buildSepticTank, 5.5, 9.5, 0.4, { gallons: 1000 }),
+  septicTank1250: siteEntry('Septic tank 1250 gal', buildSepticTank, 5.5, 11, 0.4, { gallons: 1250 }),
+  septicTank1500: siteEntry('Septic tank 1500 gal', buildSepticTank, 6, 12, 0.4, { gallons: 1500 }),
+  drainFieldSmall: siteEntry('Drain field — small (30×40)', buildDrainField, 30, 40, 0.4, { trenches: 3 }),
+  drainFieldMedium: siteEntry('Drain field — medium (40×60)', buildDrainField, 40, 60, 0.4, { trenches: 4 }),
+  drainFieldLarge: siteEntry('Drain field — large (50×80)', buildDrainField, 50, 80, 0.4, { trenches: 5 }),
+  well: siteEntry('Well + setback rings', buildWell, 4, 4, 2.2, { variants: ['setback-rings', 'no-setbacks'] }),
 };
