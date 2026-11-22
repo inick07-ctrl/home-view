@@ -370,7 +370,12 @@ export function estimateBuild({
   if (poolCost > 0) items.push({ id: 'pool', label: 'In-ground pool', amount: poolCost, pct: mid > 0 ? poolCost / mid : 0 });
   if (spaCost > 0) items.push({ id: 'spa', label: 'Hot tub / spa', amount: spaCost, pct: mid > 0 ? spaCost / mid : 0 });
   if (solarCost > 0) items.push({ id: 'solar', label: `Solar PV (${solarKw.toFixed(1)} kW)`, amount: solarCost, pct: mid > 0 ? solarCost / mid : 0 });
-  if (fireplaceCost > 0) items.push({ id: 'fireplace', label: (fireplaceCount > 1 ? `Fireplaces (${fireplaceCount})` : 'Fireplace') + (extras.fireplaceRough ? ' (rough — antique/old-world stone varies)' : ''), amount: fireplaceCost, pct: mid > 0 ? fireplaceCost / mid : 0 });
+  if (fireplaceCost > 0) {
+    const fx = tierX(0.85, 1.3);
+    const lines = Array.isArray(extras.fireplaceLines) && extras.fireplaceLines.length ? extras.fireplaceLines : null;
+    if (lines) lines.forEach((ln, i) => { const amount = (Number(ln.cost) || 0) * fx; items.push({ id: 'fireplace' + (i ? '-' + i : ''), label: ln.label, amount, pct: mid > 0 ? amount / mid : 0 }); });
+    else items.push({ id: 'fireplace', label: (fireplaceCount > 1 ? `Fireplaces (${fireplaceCount})` : 'Fireplace') + ' (rough)', amount: fireplaceCost, pct: mid > 0 ? fireplaceCost / mid : 0 });
+  }
   if (septicCost > 0) items.push({ id: 'septic', label: 'Septic system (rough — soils/perc test vary)', amount: septicCost, pct: mid > 0 ? septicCost / mid : 0 });
   if (wellCost > 0) items.push({ id: 'well', label: 'Drilled well + pump (rough — depth varies)', amount: wellCost, pct: mid > 0 ? wellCost / mid : 0 });
   return {

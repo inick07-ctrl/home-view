@@ -398,6 +398,19 @@ export function mountPlanEditor(ctrl) {
       s.onchange = () => patchItem(it.id, { variant: s.value });
       row('Style', s);
     }
+    if (t.fuels) {
+      // fuel type: wood-burning (logs, andirons, chimney/flue) vs electric (insert + circuit); drives the estimate
+      const s = el('select', { id: 'editFuel' });
+      const cur = it.fuel || t.defaultFuel;
+      for (const [k, lab] of [['wood', 'Wood-burning'], ['electric', 'Electric']]) {
+        if (!t.fuels.includes(k)) continue;
+        const o = el('option', { value: k, text: lab });
+        if (cur === k) o.selected = true;
+        s.appendChild(o);
+      }
+      s.onchange = () => patchItem(it.id, { fuel: s.value });
+      row('Fuel type', s);
+    }
     const acts = el('div', { class: 'row' });
     const dup = el('button', { type: 'button', text: 'Duplicate' });
     dup.onclick = () => {

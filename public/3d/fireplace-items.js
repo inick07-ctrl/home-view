@@ -105,12 +105,71 @@ const TIMBER = () => mat('#7b5334', { r: 0.75 });
 const BLACK = () => mat('#141414', { r: 0.55, m: 0.25 });
 const SOOT = () => mat('#1b1612', { r: 0.95 });
 
+// Fuel type of the item being built ('wood' | 'electric'); set by the catalog wrapper (F) per build.
+let FUEL = 'wood';
+export const FUEL_TYPES = [['wood', 'Wood-burning'], ['electric', 'Electric']];
+
+/**
+ * Electric insert: a clean black trim box filling the opening, a dark glass front, a crystal media bed with
+ * pale ceramic faux logs, thin LED flame ribbons behind the glass and a soft (not fiery) light. No andirons,
+ * no ash, no soot. Opening `ow` × `oh`, bottom at `y0`, front at `zf`, depth `fd`.
+ */
+function electricInsert(g, { ow, oh, y0, zf, fd, twoSided = false }) {
+  const trim = mat('#121314', { r: 0.35, m: 0.4 });
+  const iw = ow - 0.12, ih = Math.min(oh - 0.12, Math.max(0.9, oh * 0.72));
+  const zc = twoSided ? 0 : zf - fd / 2, depth = twoSided ? zf * 2 : fd;
+  // trim kit closing the rest of the opening (above the insert) so the box reads as a finished unit
+  if (oh - ih > 0.05) add(g, B(ow, oh - ih, depth), trim, 0, y0 + ih + (oh - ih) / 2, zc);
+  // inner liner (dark, faintly ribbed)
+  const liner = mat('#1a1b1d', { r: 0.6, m: 0.2 });
+  if (!twoSided) add(g, B(iw, ih, 0.06), liner, 0, y0 + ih / 2, zf - fd + 0.03);
+  for (const sd of [-1, 1]) add(g, B(0.06, ih, depth), trim, sd * (ow / 2 - 0.03), y0 + ih / 2, zc);
+  add(g, B(ow, 0.1, depth), trim, 0, y0 + 0.05, zc);
+  // crystal media bed + faux logs
+  const crystals = [mat('#9fd3ff', { r: 0.15, m: 0.1, e: 0.35, ec: '#6fb8ff' }), mat('#ffd38a', { r: 0.15, e: 0.45, ec: '#ff9a3a' }), mat('#e8eef2', { r: 0.1, e: 0.15 })];
+  const nC = Math.round(iw * 14);
+  for (let i = 0; i < nC; i++) {
+    const c = add(g, new THREE.OctahedronGeometry(0.045 + rnd(i * 3 + 1) * 0.035, 0), crystals[i % 3], (rnd(i * 5) - 0.5) * (iw - 0.2), y0 + 0.13, zc + (rnd(i * 7) - 0.5) * depth * 0.5);
+    c.rotation.set(rnd(i), rnd(i + 2) * 3, 0); c.castShadow = false;
+  }
+  const ceramic = mat('#8d8478', { r: 0.8 });
+  for (let i = 0; i < Math.max(2, Math.round(iw / 1.6)); i++) {
+    const n = Math.max(2, Math.round(iw / 1.6));
+    add(g, new THREE.CylinderGeometry(0.1, 0.11, Math.min(1.1, iw / n), 10), ceramic, -iw / 2 + (i + 0.5) * iw / n, y0 + 0.22, zc - 0.05, 0, i % 2 ? 0.2 : -0.2, Math.PI / 2);
+  }
+  // LED flame ribbons: short, even, orange with a cool base; animated by the shared flame loop
+  const fm = (c, op) => new THREE.MeshBasicMaterial({ map: tex().flame, color: c, transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: op, blending: THREE.AdditiveBlending });
+  const nF = Math.max(4, Math.round(iw / 0.35));
+  for (let i = 0; i < nF; i++) {
+    const h = Math.min(ih * 0.6, 1.25) * (0.75 + rnd(i * 9) * 0.35);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.5, h), fm(i % 3 ? '#ff8a2a' : '#ffc060', 0.9));
+    const fy0 = y0 + 0.16;
+    m.position.set(-iw / 2 + (i + 0.5) * iw / nF, fy0 + h / 2, zc - depth * 0.18);
+    m.userData.flame = { baseH: h, phase: i * 0.9, y0: fy0, op: 1.6 };
+    m.castShadow = m.receiveShadow = false; m.renderOrder = 4; g.add(m);
+  }
+  const blue = new THREE.Mesh(new THREE.PlaneGeometry(iw - 0.2, 0.08), new THREE.MeshBasicMaterial({ color: '#4aa8ff', transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+  blue.position.set(0, y0 + 0.16, zc - depth * 0.15); g.add(blue);
+  // dark glass front(s)
+  const glass = new THREE.MeshPhysicalMaterial({ color: '#0d0f12', roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.18, clearcoat: 1, depthWrite: false });
+  const gl1 = add(g, B(iw, ih - 0.1, 0.03), glass, 0, y0 + 0.1 + (ih - 0.1) / 2, zf - 0.02); gl1.castShadow = false; gl1.renderOrder = 1;
+  if (twoSided) add(g, B(iw, ih - 0.1, 0.03), glass, 0, y0 + 0.1 + (ih - 0.1) / 2, -zf + 0.02).castShadow = false;
+  for (const z of twoSided ? [zf + 0.5, -zf - 0.5] : [zf + 0.5]) {
+    const light = new THREE.PointLight('#ffb070', 0.55, 9, 2);
+    light.position.set(0, y0 + 0.6, z); light.castShadow = false;
+    light.userData.fireLight = { base: 0.55, t0: rnd(ow * 3) * 10 };
+    g.add(light);
+  }
+}
+
 /**
  * Firebox + fire: opening `ow` × `oh` with the bottom at `y0`, front face at z = `zf`, depth `fd`.
  * kind 'wood' = logs + tall flames; 'gas' = glass front, ember bed, short ribbon of flames.
  * twoSided puts glass/opening on both faces (front at +zf, back at -zf).
  */
 function firebox(g, { ow, oh, y0, zf, fd, kind = 'wood', twoSided = false }) {
+  if (FUEL === 'electric') { electricInsert(g, { ow, oh, y0, zf, fd, twoSided }); return []; }
+  kind = 'wood'; // wood-burning: open firebox with logs, embers and real flames (no glass)
   const zc = twoSided ? 0 : zf - fd / 2;
   const depth = twoSided ? zf * 2 : fd;
   // sooty liner (back + sides + floor + top), left open at the front(s)
@@ -293,6 +352,7 @@ function buildStove(g, rec) {
   firebox(g, { ow: 1.25, oh: 1.0, y0: by + 0.45, zf: bd / 2 + 0.01, fd: 1.2, kind: 'wood' });
   add(g, B(1.45, 0.1, 0.06), steel, 0, by + 1.5, bd / 2 + 0.02);
   add(g, B(1.45, 0.1, 0.06), steel, 0, by + 0.4, bd / 2 + 0.02);
+  if (FUEL === 'electric') return; // electric stove: no flue pipe
   // stove pipe up toward the ceiling
   const top = (rec.h || 8.6) - (by + bh + 0.12);
   add(g, new THREE.CylinderGeometry(0.28, 0.28, top, 16), steel, 0, by + bh + 0.12 + top / 2, -0.25);
@@ -597,8 +657,13 @@ function buildOldWorld(g, rec) {
   xs.slice(0, -1).forEach((x, i) => slab(x, xs[i + 1], zJ, zJ + 1.7, i + 1));
   slab(-xi + 0.02, -0.15, fbBack + 0.05, zJ, 7); slab(-0.15, xi - 0.02, fbBack + 0.05, zJ, 8);
 
-  // ---- fire: crossed logs on the andiron bars, glowing ember bed, animated flame planes, warm lights
+  const brass = owMats.brass ||= new THREE.MeshPhysicalMaterial({ color: '#e6b84f', metalness: 0.55, roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.08, emissive: '#8a5a12', emissiveIntensity: 0.55 });
   const fz = (fbBack + zJ) / 2 - 0.05;
+  if (FUEL === 'electric') {
+    // electric insert set into the antique surround: clean black box, glass, media bed — no andirons or soot fire
+    electricInsert(g, { ow: ow - 0.1, oh, y0, zf: zJ - 0.08, fd: Math.min(1.6, zJ - fbBack - 0.1) });
+  } else {
+  // ---- fire: crossed logs on the andiron bars, glowing ember bed, animated flame planes, warm lights
   const ember = new THREE.MeshStandardMaterial({ color: '#9a3412', emissive: '#ff4a00', emissiveIntensity: 0.65, roughness: 1 });
   const ash = add(g, B(ow * 0.5, 0.05, 1.1), mat('#2a2420', { r: 1 }), 0, y0 + 0.025, fz); ash.castShadow = false;
   for (let i = 0; i < 46; i++) { // bed of glowing coals under the logs
@@ -649,7 +714,6 @@ function buildOldWorld(g, rec) {
   // ---- wrought-iron andirons with brass ball finials, standing on the hearth
   // polished brass reads dark without an env map, so give it a warm self-lit sheen + clearcoat highlight
   const iron = mat('#1c1a18', { r: 0.6, m: 0.5 });
-  const brass = owMats.brass ||= new THREE.MeshPhysicalMaterial({ color: '#e6b84f', metalness: 0.55, roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.08, emissive: '#8a5a12', emissiveIntensity: 0.55 });
   const baluster = new THREE.LatheGeometry([
     [0.0, 0], [0.1, 0], [0.1, 0.05], [0.06, 0.1], [0.055, 0.45], [0.09, 0.55], [0.055, 0.65], [0.05, 1.05], [0.075, 1.1], [0.035, 1.16], [0, 1.16],
   ].map(([r, y]) => new THREE.Vector2(r, y)), 16);
@@ -671,6 +735,7 @@ function buildOldWorld(g, rec) {
     add(g, B(0.07, 0.07, barL), iron, ax, y0 + 0.32, az - barL / 2);
     add(g, B(0.07, 0.32, 0.07), iron, ax, y0 + 0.16, az - barL + 0.035);
   }
+  } // wood-burning
 
   if (!styled) return;
   // ---- styling from the photo: woven log basket at the left, potted plant + brass ball stake on the shelf
@@ -697,24 +762,27 @@ function buildOldWorld(g, rec) {
 }
 
 const F = (name, build, w, d, h, extra = {}) => ({
-  name, category: 'fireplace', w, d, h, ...extra,
-  build: (g, rec) => build(g, { ...rec, opening: rec.opening || extra.opening, h: rec.h || h }),
+  name, category: 'fireplace', w, d, h, fuels: FUEL_TYPES.map(([k]) => k), defaultFuel: extra.fuel || 'wood', ...extra,
+  build: (g, rec) => {
+    FUEL = (rec.fuel || extra.fuel || 'wood') === 'electric' ? 'electric' : 'wood';
+    try { build(g, { ...rec, opening: rec.opening || extra.opening, h: rec.h || h }); } finally { FUEL = 'wood'; }
+  },
 });
 export const FIREPLACE_CATEGORIES = [{ id: 'fireplace', name: 'Fireplaces' }];
 export const FIREPLACE_CATALOG = {
-  fpMasonry36: F('Masonry wood-burning 36"', buildMasonry, 5.4, 2.4, 5.2, { opening: 3.0, variants: ['brick', 'stone'] }),
-  fpMasonry42: F('Masonry wood-burning 42"', buildMasonry, 6.2, 2.5, 5.6, { opening: 3.5, variants: ['brick', 'stone'] }),
-  fpMasonry48: F('Masonry wood-burning 48"', buildMasonry, 7.0, 2.6, 6.0, { opening: 4.0, variants: ['stone', 'brick'] }),
-  fpLinear48: F('Linear gas 48"', buildLinear, 6.2, 1.6, 8.0, { opening: 4.0, variants: ['stone-slab', 'plaster'] }),
-  fpLinear60: F('Linear gas 60"', buildLinear, 7.4, 1.6, 8.0, { opening: 5.0, variants: ['stone-slab', 'plaster'] }),
-  fpLinear72: F('Linear gas 72"', buildLinear, 8.6, 1.6, 8.0, { opening: 6.0, variants: ['plaster', 'stone-slab'] }),
-  fpStoneTrad: F('Floor-to-ceiling stone — 42" wood', buildStoneWall, 7.5, 2.6, 9.0, { opening: 3.5, variants: ['traditional', 'linear'] }),
-  fpStoneLinear: F('Floor-to-ceiling stone — 60" linear', buildStoneWall, 8.5, 2.6, 9.0, { opening: 5.0, variants: ['linear', 'traditional', 'marble-slab'] }),
-  fpFarmhouse36: F('Farmhouse shiplap + beam mantel 36"', buildFarmhouse, 6.0, 2.0, 9.0, { opening: 3.0, variants: ['white', 'greige', 'charcoal'] }),
-  fpFarmhouse42: F('Farmhouse shiplap + beam mantel 42"', buildFarmhouse, 7.0, 2.0, 9.0, { opening: 3.5, variants: ['white', 'greige', 'charcoal'] }),
-  fpSeeThrough: F('Two-sided see-through 48"', buildSeeThrough, 6.5, 3.0, 8.0, { opening: 4.0, variants: ['gas', 'wood'] }),
-  fpStove: F('Freestanding wood stove', buildStove, 3.4, 3.4, 8.6, { variants: ['black', 'enamel-red'] }),
-  fpMidCentury: F('Mid-century low horizontal', buildMidCentury, 9.0, 2.0, 2.3, { variants: ['plaster', 'brick'] }),
-  fpOldWorld60: F('Old-world limestone — 60" opening', buildOldWorld, 6.9, 3.4, 9.0, { variants: ['styled', 'plain'] }),
-  fpOldWorld72: F('Old-world limestone — 72" opening', buildOldWorld, 8.2, 3.55, 9.0, { variants: ['styled', 'plain'] }),
+  fpMasonry36: F('Masonry 36"', buildMasonry, 5.4, 2.4, 5.2, { fuel: 'wood', opening: 3.0, variants: ['brick', 'stone'] }),
+  fpMasonry42: F('Masonry 42"', buildMasonry, 6.2, 2.5, 5.6, { fuel: 'wood', opening: 3.5, variants: ['brick', 'stone'] }),
+  fpMasonry48: F('Masonry 48"', buildMasonry, 7.0, 2.6, 6.0, { fuel: 'wood', opening: 4.0, variants: ['stone', 'brick'] }),
+  fpLinear48: F('Linear 48"', buildLinear, 6.2, 1.6, 8.0, { fuel: 'electric', opening: 4.0, variants: ['stone-slab', 'plaster'] }),
+  fpLinear60: F('Linear 60"', buildLinear, 7.4, 1.6, 8.0, { fuel: 'electric', opening: 5.0, variants: ['stone-slab', 'plaster'] }),
+  fpLinear72: F('Linear 72"', buildLinear, 8.6, 1.6, 8.0, { fuel: 'electric', opening: 6.0, variants: ['plaster', 'stone-slab'] }),
+  fpStoneTrad: F('Floor-to-ceiling stone — 42" traditional', buildStoneWall, 7.5, 2.6, 9.0, { fuel: 'wood', opening: 3.5, variants: ['traditional', 'linear'] }),
+  fpStoneLinear: F('Floor-to-ceiling stone — 60" linear', buildStoneWall, 8.5, 2.6, 9.0, { fuel: 'electric', opening: 5.0, variants: ['linear', 'traditional', 'marble-slab'] }),
+  fpFarmhouse36: F('Farmhouse shiplap + beam mantel 36"', buildFarmhouse, 6.0, 2.0, 9.0, { fuel: 'electric', opening: 3.0, variants: ['white', 'greige', 'charcoal'] }),
+  fpFarmhouse42: F('Farmhouse shiplap + beam mantel 42"', buildFarmhouse, 7.0, 2.0, 9.0, { fuel: 'electric', opening: 3.5, variants: ['white', 'greige', 'charcoal'] }),
+  fpSeeThrough: F('Two-sided see-through 48"', buildSeeThrough, 6.5, 3.0, 8.0, { fuel: 'electric', opening: 4.0 }),
+  fpStove: F('Freestanding stove', buildStove, 3.4, 3.4, 8.6, { fuel: 'wood', variants: ['black', 'enamel-red'] }),
+  fpMidCentury: F('Mid-century low horizontal', buildMidCentury, 9.0, 2.0, 2.3, { fuel: 'electric', variants: ['plaster', 'brick'] }),
+  fpOldWorld60: F('Old-world limestone — 60" opening', buildOldWorld, 6.9, 3.4, 9.0, { fuel: 'wood', variants: ['styled', 'plain'] }),
+  fpOldWorld72: F('Old-world limestone — 72" opening', buildOldWorld, 8.2, 3.55, 9.0, { fuel: 'wood', variants: ['styled', 'plain'] }),
 };

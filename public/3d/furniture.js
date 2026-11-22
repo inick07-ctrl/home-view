@@ -1276,6 +1276,7 @@ export function makeItem(type, opts = {}) {
     metal: opts.metal,
     shade: opts.shade,
     ceil: opts.ceil != null ? +opts.ceil : undefined,
+    fuel: t.fuels ? (t.fuels.includes(opts.fuel) ? opts.fuel : t.defaultFuel) : undefined,
   };
 }
 
