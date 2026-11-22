@@ -322,54 +322,79 @@ let OW = null;
 function owTex() {
   if (OW) return OW;
   const lime = (base, soot) => canvasTex((g, s) => {
+    // warm grey-beige French limestone: broad cloudy mottling, fine pitting, rust/ochre blooms, grime streaks
     g.fillStyle = base; g.fillRect(0, 0, s, s);
+    const blob = (x, y, r, c) => { const grd = g.createRadialGradient(x, y, 0, x, y, r); grd.addColorStop(0, c); grd.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = grd; g.fillRect(x - r, y - r, r * 2, r * 2); };
     let i = 0;
-    // mottled grey-beige limestone clouds
-    for (; i < 900; i++) {
-      const r = 6 + rnd(i * 3 + 1) * 46, x = rnd(i * 5 + 2) * s, y = rnd(i * 7 + 3) * s;
-      const v = rnd(i * 11 + 4), warm = rnd(i * 13 + 5);
-      const c = v < 0.45 ? `rgba(${120 + warm * 30},${116 + warm * 22},${104 + warm * 10},${0.05 + v * 0.1})`
-        : `rgba(${214 + warm * 20},${206 + warm * 16},${190 + warm * 8},${0.04 + (v - 0.45) * 0.1})`;
-      const grd = g.createRadialGradient(x, y, 0, x, y, r);
-      grd.addColorStop(0, c); grd.addColorStop(1, 'rgba(0,0,0,0)');
-      g.fillStyle = grd; g.fillRect(x - r, y - r, r * 2, r * 2);
+    for (; i < 260; i++) { // big soft clouds (light + dark), wrapped so the tile repeats cleanly
+      const r = 40 + rnd(i * 3 + 1) * 120, x = rnd(i * 5 + 2) * s, y = rnd(i * 7 + 3) * s, v = rnd(i * 11 + 4), w = rnd(i * 13 + 5);
+      const c = v < 0.5 ? `rgba(${104 + w * 26},${96 + w * 18},${82 + w * 8},${0.05 + v * 0.1})` : `rgba(${222 + w * 18},${212 + w * 14},${190 + w * 6},${0.05 + (v - 0.5) * 0.12})`;
+      for (const dx of [-s, 0, s]) for (const dy of [-s, 0, s]) if (x + dx > -r && x + dx < s + r && y + dy > -r && y + dy < s + r) blob(x + dx, y + dy, r, c);
     }
-    // pits and fossil specks
-    for (let j = 0; j < 2600; j++) {
+    for (let j = 0; j < 700; j++) { // small mottles
+      const r = 4 + rnd(j * 3 + 7) * 22, v = rnd(j * 11 + 8);
+      blob(rnd(j * 5 + 9) * s, rnd(j * 7 + 10) * s, r, v < 0.6 ? `rgba(92,84,70,${0.06 + v * 0.1})` : `rgba(236,228,210,${0.08 + (v - 0.6) * 0.2})`);
+    }
+    for (let j = 0; j < 30; j++) blob(rnd(j * 43 + 1) * s, rnd(j * 47 + 2) * s, 10 + rnd(j * 53) * 34, `rgba(160,118,62,${0.06 + rnd(j * 59) * 0.08})`); // ochre iron stains
+    for (let j = 0; j < 2200; j++) { // pits, fossil specks
       const v = rnd(j * 17 + 9);
-      g.fillStyle = v < 0.7 ? `rgba(70,64,56,${0.18 + v * 0.3})` : `rgba(240,234,222,${0.25 + (v - 0.7)})`;
-      g.fillRect(rnd(j * 19 + 6) * s, rnd(j * 23 + 7) * s, 1 + (v > 0.92 ? 1 : 0), 1 + (v > 0.95 ? 1 : 0));
+      g.fillStyle = v < 0.72 ? `rgba(70,62,52,${0.08 + v * 0.2})` : `rgba(246,240,226,${0.15 + (v - 0.72) * 0.9})`;
+      const sz = v > 0.93 ? 2 : 1;
+      g.fillRect(rnd(j * 19 + 6) * s, rnd(j * 23 + 7) * s, sz + (v > 0.985 ? 1 : 0), sz);
     }
-    // vertical weathering / soot streaks
-    for (let j = 0; j < 26; j++) {
-      const x = rnd(j * 29 + 3) * s, w = 3 + rnd(j * 31) * 14, h = s * (0.2 + rnd(j * 37) * 0.7), y = rnd(j * 41) * s * 0.4;
+    for (let j = 0; j < 34; j++) { // vertical weathering / grime streaks
+      const x = rnd(j * 29 + 3) * s, w = 2 + rnd(j * 31) * 16, h = s * (0.25 + rnd(j * 37) * 0.75), y = rnd(j * 41) * s * 0.5;
       const grd = g.createLinearGradient(0, y, 0, y + h);
-      grd.addColorStop(0, `rgba(60,54,46,${soot})`); grd.addColorStop(1, 'rgba(60,54,46,0)');
+      grd.addColorStop(0, `rgba(54,47,38,${soot})`); grd.addColorStop(1, 'rgba(54,47,38,0)');
       g.fillStyle = grd; g.fillRect(x, y, w, h);
     }
   }, 512);
+  const rubble = canvasTex((g, s) => {
+    // aged firebox: irregular rough stone/brick courses, heavily blackened toward the top
+    g.fillStyle = '#0d0b09'; g.fillRect(0, 0, s, s);
+    let y = 0, i = 0;
+    while (y < s) {
+      const rh = s * (0.1 + rnd(i * 3 + 1) * 0.1);
+      let x = -rnd(i + 2) * s * 0.15;
+      while (x < s) {
+        const w = s * (0.14 + rnd(i * 7 + 3) * 0.3), v = rnd(i * 11 + 4), warm = rnd(i * 13 + 5);
+        const t = 1 - y / s; // 1 at bottom (lit), 0 at top (sooty)
+        const L = 22 + t * t * 70 + v * 28;
+        g.fillStyle = `rgb(${L + warm * 22 + t * 18},${L * 0.86 + warm * 10},${L * 0.72})`;
+        g.beginPath(); // slightly irregular, rounded block
+        const j = (k) => (rnd(i * 17 + k) - 0.5) * 10, x0 = x + 2 + rnd(i * 5) * 4, y0 = y + 2 + rnd(i * 9) * 5, x1 = x + w - 2 - rnd(i * 6) * 4, y1 = y + rh - 2 - rnd(i * 8) * 5, r = 9;
+        g.moveTo(x0 + r + j(1), y0 + j(2)); g.lineTo(x1 - r + j(3), y0 + j(4)); g.quadraticCurveTo(x1 + j(5), y0, x1 + j(6), y0 + r);
+        g.lineTo(x1 + j(7), y1 - r); g.quadraticCurveTo(x1, y1 + j(8), x1 - r, y1 + j(9)); g.lineTo(x0 + r + j(10), y1 + j(11));
+        g.quadraticCurveTo(x0 + j(12), y1, x0 + j(13), y1 - r); g.lineTo(x0 + j(14), y0 + r); g.closePath(); g.fill();
+        for (let k = 0; k < 40; k++) { // pitted face
+          g.fillStyle = `rgba(0,0,0,${0.1 + rnd(i * 23 + k) * 0.25})`;
+          g.fillRect(x + 4 + rnd(i * 29 + k) * (w - 8), y + 4 + rnd(i * 31 + k) * (rh - 8), 2, 2);
+        }
+        x += w; i++;
+      }
+      y += rh;
+    }
+    const sootG = g.createLinearGradient(0, 0, 0, s); // heavy soot from the top down
+    sootG.addColorStop(0, 'rgba(6,5,4,.92)'); sootG.addColorStop(0.45, 'rgba(8,6,5,.6)'); sootG.addColorStop(0.8, 'rgba(10,8,6,.15)'); sootG.addColorStop(1, 'rgba(10,8,6,0)');
+    g.fillStyle = sootG; g.fillRect(0, 0, s, s);
+    for (let j = 0; j < 46; j++) { // soot plumes
+      const x = rnd(j * 3) * s, yy = rnd(j * 5) * s * 0.75, r = 18 + rnd(j * 7) * 70;
+      const gr = g.createRadialGradient(x, yy, 0, x, yy, r);
+      gr.addColorStop(0, 'rgba(4,3,2,.45)'); gr.addColorStop(1, 'rgba(4,3,2,0)');
+      g.fillStyle = gr; g.fillRect(x - r, yy - r, r * 2, r * 2);
+    }
+  }, 512);
+  const glow = canvasTex((g, s) => { // warm fire glow on the firebox walls (bottom-centre hot)
+    g.fillStyle = '#000'; g.fillRect(0, 0, s, s);
+    const gr = g.createRadialGradient(s / 2, s * 1.05, 0, s / 2, s * 1.05, s * 0.85);
+    gr.addColorStop(0, 'rgba(255,170,90,1)'); gr.addColorStop(0.35, 'rgba(200,90,30,.6)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, s, s);
+  }, 128);
   OW = {
-    lime: lime('#b2aa9b', 0.12),
-    limeDark: lime('#958d7f', 0.2),
-    brick: canvasTex((g, s) => {
-      // aged firebox: big sooty brick / stone blocks, warmer toward the bottom where the fire lights them
-      const grd = g.createLinearGradient(0, 0, 0, s);
-      grd.addColorStop(0, '#120f0c'); grd.addColorStop(0.55, '#241d17'); grd.addColorStop(1, '#3a2c20');
-      g.fillStyle = grd; g.fillRect(0, 0, s, s);
-      const rows = 9;
-      for (let y = 0; y < rows; y++) for (let x = -1; x < 4; x++) {
-        const v = rnd(x * 7 + y * 13 + 2), t = y / rows;
-        const r = 34 + t * 58 + v * 26, gg = 30 + t * 44 + v * 22, b = 27 + t * 30 + v * 18;
-        g.fillStyle = `rgba(${r},${gg},${b},0.9)`;
-        g.fillRect(x * s / 3 + (y % 2) * s / 6 + 3, y * s / rows + 3, s / 3 - 6, s / rows - 6);
-      }
-      for (let j = 0; j < 40; j++) { // soot blooms
-        const x = rnd(j * 3) * s, y = rnd(j * 5) * s * 0.6, r = 20 + rnd(j * 7) * 60;
-        const gr = g.createRadialGradient(x, y, 0, x, y, r);
-        gr.addColorStop(0, 'rgba(10,8,6,.35)'); gr.addColorStop(1, 'rgba(10,8,6,0)');
-        g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
-      }
-    }, 256),
+    lime: lime('#dacbb0', 0.1),
+    limeDark: lime('#9d927f', 0.22),
+    brick: rubble,
+    glow,
     plaster: canvasTex((g, s) => {
       g.fillStyle = '#f1ebe0'; g.fillRect(0, 0, s, s);
       for (let j = 0; j < 4000; j++) {
@@ -398,9 +423,54 @@ function limeMat(kind = 'lime', rx = 1, ry = 1, tint = '#ffffff') {
   const t = owTex()[kind];
   if (!t) return (owMats[key] = mat(kind === 'brick' ? '#3a2e24' : '#b2aa9b', { r: 0.95 }));
   const tt = t.clone(); tt.needsUpdate = true; tt.repeat.set(rx, ry);
-  return (owMats[key] = new THREE.MeshStandardMaterial({ map: tt, color: tint, roughness: kind === 'wicker' ? 0.85 : 0.93 }));
+  const m = new THREE.MeshStandardMaterial({ map: tt, color: tint, roughness: kind === 'wicker' ? 0.85 : 0.93 });
+  if (kind === 'lime' || kind === 'limeDark') { m.emissiveMap = tt; m.emissive = new THREE.Color('#cdbb9c'); m.emissiveIntensity = 0.16; } // pale limestone bounce light
+  return (owMats[key] = m);
 }
 const boxL = (w, h, kind = 'lime', tint) => limeMat(kind, Math.max(0.35, w / 4), Math.max(0.35, h / 4), tint);
+
+let OWF = null;
+function owFlameTex() {
+  if (OWF) return OWF;
+  const mk = (draw) => { const t = canvasTex(draw, 256); if (t) t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; return t; };
+  const tongue = (g, s, w, blur, stops) => {
+    g.clearRect(0, 0, s, s); g.filter = `blur(${blur}px)`;
+    const grd = g.createLinearGradient(0, s, 0, 0);
+    stops.forEach(([o, c]) => grd.addColorStop(o, c));
+    g.fillStyle = grd; g.beginPath(); g.moveTo(s * 0.5, s * 0.97);
+    g.bezierCurveTo(s * (0.5 - w), s * 0.85, s * (0.5 - w * 0.75), s * 0.42, s * 0.47, s * 0.08);
+    g.bezierCurveTo(s * 0.52, s * 0.3, s * (0.5 + w * 0.9), s * 0.45, s * (0.5 + w * 0.55), s * 0.2);
+    g.bezierCurveTo(s * (0.5 + w * 1.05), s * 0.55, s * (0.5 + w), s * 0.85, s * 0.5, s * 0.97); g.fill(); g.filter = 'none';
+  };
+  OWF = {
+    outer: mk((g, s) => tongue(g, s, 0.36, 10, [[0, 'rgba(255,60,0,0)'], [0.08, 'rgba(255,70,10,.75)'], [0.4, 'rgba(255,110,20,.55)'], [0.8, 'rgba(220,60,10,.2)'], [1, 'rgba(160,30,0,0)']])),
+    mid: mk((g, s) => tongue(g, s, 0.3, 7, [[0, 'rgba(255,150,40,0)'], [0.1, 'rgba(255,190,70,.85)'], [0.5, 'rgba(255,150,40,.55)'], [0.85, 'rgba(255,110,20,.15)'], [1, 'rgba(255,90,10,0)']])),
+    core: mk((g, s) => tongue(g, s, 0.26, 6, [[0, 'rgba(255,250,220,0)'], [0.08, 'rgba(255,250,215,.95)'], [0.45, 'rgba(255,220,130,.6)'], [1, 'rgba(255,180,60,0)']])),
+    lick: mk((g, s) => tongue(g, s, 0.22, 5, [[0, 'rgba(255,120,30,0)'], [0.15, 'rgba(255,150,50,.8)'], [0.7, 'rgba(255,90,20,.3)'], [1, 'rgba(255,60,0,0)']])),
+    pool: mk((g, s) => { g.clearRect(0, 0, s, s); const gr = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2); gr.addColorStop(0, 'rgba(255,150,60,.9)'); gr.addColorStop(0.45, 'rgba(255,90,20,.4)'); gr.addColorStop(1, 'rgba(255,60,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, s, s); }),
+  };
+  return OWF;
+}
+
+// age/soot staining baked into vertex colours: fn(x, y, z) -> darkening 0..1 (item space)
+function sootify(geo, fn, toItem = (x, y, z) => [x, y, z]) {
+  const p = geo.attributes.position, c = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) {
+    const [x, y, z] = toItem(p.getX(i), p.getY(i), p.getZ(i));
+    const d = Math.max(0, Math.min(0.85, fn(x, y, z)));
+    c[i * 3] = 1 - d; c[i * 3 + 1] = 1 - d * 1.04; c[i * 3 + 2] = 1 - d * 1.1;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  return geo;
+}
+function vcMat(m) { const k = m.uuid + '|vc'; return owMats[k] ||= Object.assign(m.clone(), { vertexColors: true }); }
+function glowMat(kind, rx, ry, I) {
+  const k = 'glow|' + kind + rx.toFixed(2) + ry.toFixed(2) + I;
+  if (owMats[k]) return owMats[k];
+  const m = limeMat(kind, rx, ry).clone();
+  const gt = owTex().glow; if (gt) { m.emissiveMap = gt; m.emissive = new THREE.Color('#ff8a3c'); m.emissiveIntensity = I; }
+  return (owMats[k] = m);
+}
 
 function buildOldWorld(g, rec) {
   const H = rec.h || 9;
@@ -422,6 +492,12 @@ function buildOldWorld(g, rec) {
   const zJ = zP + JD;                           // jamb face
   const zF = zJ - 0.05;                         // frieze face
   const LIME = limeMat('lime', 0.25, 0.25);     // extrusions carry UVs in feet
+  const SLIME = vcMat(LIME);
+  const sst = (a, b, v) => Math.max(0, Math.min(1, (v - a) / (b - a)));
+  // soot climbs the inner jamb faces toward the lintel; grime at the feet
+  const jambSoot = (x, y) => 0.42 * (1 - sst(xi - 0.5, xi + 0.55, Math.abs(x))) * (0.35 + 0.65 * sst(0, JH, y)) + 0.12 * (1 - sst(0, 0.5, y));
+  // frieze: smoke-darkened over the opening, strongest at the lintel and centre
+  const friezeSoot = (x, y) => 0.42 * (1 - sst(ow * 0.15, ow * 0.62, Math.abs(x))) * (1 - sst(JH, JH + FH * 1.1, y)) + 0.08 * (1 - sst(JH, JH + FH, y)) + 0.03;
 
   // ---- chimney breast: plaster above the shelf (to the ceiling), mass behind the mantel below it
   const BW = W * 0.78;
@@ -451,7 +527,8 @@ function buildOldWorld(g, rec) {
     s.lineTo(X(W / 2), JH);
     s.lineTo(X(W / 2), 0);
     const geo = new THREE.ExtrudeGeometry(s, { depth: JD - 0.08, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.035, bevelSegments: 3, curveSegments: 18, steps: 1 });
-    const m = add(g, geo, LIME, 0, 0, zP + 0.04);
+    sootify(geo, (x, y) => jambSoot(x, y));
+    const m = add(g, geo, SLIME, 0, 0, zP + 0.04);
     // reeding: raised rounded ribs that follow the scroll on the jamb face
     for (const [o, wdt] of [[0.12, 0.07], [0.27, 0.07], [0.42, 0.07]]) {
       const pts = [];
@@ -461,16 +538,19 @@ function buildOldWorld(g, rec) {
       for (const [x, y] of pts.slice(1)) r.lineTo(X(x), y);
       for (const [x, y] of pts.slice().reverse()) r.lineTo(X(x + wdt), y);
       const rg = new THREE.ExtrudeGeometry(r, { depth: 0.02, bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.012, bevelSegments: 2 });
-      add(g, rg, limeMat('lime', 0.25, 0.25, '#e8e2d6'), 0, 0, zJ + 0.005);
+      sootify(rg, (x, y) => jambSoot(x, y) * 0.9);
+      add(g, rg, vcMat(limeMat('lime', 0.25, 0.25, '#ece5d8')), 0, 0, zJ + 0.005);
     }
     return m;
   };
   jamb(1); jamb(-1);
 
   // ---- frieze band + bead along the lintel, a fillet above
-  add(g, B(W, FH, zF - zP), boxL(W, FH), 0, JH + FH / 2, (zP + zF) / 2);
+  const fg = new THREE.BoxGeometry(W, FH, zF - zP, 28, 6, 1);
+  sootify(fg, friezeSoot, (x, y, z) => [x, y + JH + FH / 2, z]);
+  add(g, fg, vcMat(boxL(W, FH)), 0, JH + FH / 2, (zP + zF) / 2);
   const bead = new THREE.CylinderGeometry(0.06, 0.06, ow - 0.1, 14);
-  add(g, bead, LIME, 0, JH + 0.07, zF + 0.01, 0, 0, Math.PI / 2);
+  const bdM = add(g, bead, mat('#6f675a', { r: 0.95 }), 0, JH + 0.07, zF + 0.01, 0, 0, Math.PI / 2); // smoke-blackened lintel bead
   add(g, B(W + 0.04, 0.08, 0.1), boxL(W, 0.1), 0, JH + FH - 0.04, zF + 0.03);
   // soot smudged up the frieze above the fire
   const sootTex = canvasTex((c, s) => { const gr = c.createLinearGradient(0, s, 0, 0); gr.addColorStop(0, 'rgba(20,16,12,.55)'); gr.addColorStop(1, 'rgba(20,16,12,0)'); c.fillStyle = gr; c.fillRect(0, 0, s, s); }, 64);
@@ -491,14 +571,16 @@ function buildOldWorld(g, rec) {
   cs.lineTo(0.66, CH); cs.lineTo(-bk, CH); cs.lineTo(-bk, 0);
   const L = W + 0.55;
   const cg = new THREE.ExtrudeGeometry(cs, { depth: L, bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.02, bevelSegments: 2, curveSegments: 14 });
-  const cm = add(g, cg, LIME, L / 2, JH + FH, zF, 0, -Math.PI / 2, 0);
+  // under the shelf + low mouldings carry grime; the top/nose is worn lighter
+  sootify(cg, (x, y, z) => 0.3 * (1 - sst(0.05, 0.5, y)) * (0.55 + 0.45 * (1 - sst(0, L / 2, Math.abs(x)))) + 0.03 - 0.06 * sst(0.6, CH, y), (x, y, z) => [L / 2 - z, y, x]);
+  const cm = add(g, cg, SLIME, L / 2, JH + FH, zF, 0, -Math.PI / 2, 0);
 
   // ---- firebox: splayed sooty brick sides + back, smoke-shelf ceiling, all closed to the jambs
   const fbBack = zb + 0.12, bwid = ow * 0.8;
-  add(g, B(bwid, oh, 0.1), limeMat('brick', bwid / 3.2, oh / 3.2), 0, y0 + oh / 2, fbBack);
+  add(g, B(bwid, oh, 0.1), glowMat('brick', bwid / 3.6, 1, 0.55), 0, y0 + oh / 2, fbBack);
   for (const sd of [-1, 1]) {
     const dx = xi - bwid / 2, dz = zP - fbBack, len = Math.hypot(dx, dz);
-    const sw = add(g, B(0.1, oh, len), limeMat('brick', len / 3.2, oh / 3.2), sd * (bwid / 2 + dx / 2), y0 + oh / 2, (fbBack + zP) / 2);
+    const sw = add(g, B(0.1, oh, len), glowMat('brick', len / 3.6, 1, 0.35), sd * (bwid / 2 + dx / 2), y0 + oh / 2, (fbBack + zP) / 2);
     sw.rotation.y = sd * Math.atan2(dx, dz);
   }
   add(g, B(ow, 0.1, zP - fbBack), SOOT(), 0, JH + 0.05, (fbBack + zP) / 2);
@@ -517,10 +599,10 @@ function buildOldWorld(g, rec) {
 
   // ---- fire: crossed logs on the andiron bars, glowing ember bed, animated flame planes, warm lights
   const fz = (fbBack + zJ) / 2 - 0.05;
-  const ember = new THREE.MeshStandardMaterial({ color: '#c8461a', emissive: '#ff4a00', emissiveIntensity: 0.9, roughness: 1 });
+  const ember = new THREE.MeshStandardMaterial({ color: '#9a3412', emissive: '#ff4a00', emissiveIntensity: 0.65, roughness: 1 });
   const ash = add(g, B(ow * 0.5, 0.05, 1.1), mat('#2a2420', { r: 1 }), 0, y0 + 0.025, fz); ash.castShadow = false;
   for (let i = 0; i < 46; i++) { // bed of glowing coals under the logs
-    const c = add(g, new THREE.DodecahedronGeometry(0.06 + rnd(i * 5) * 0.05, 0), i % 3 ? ember : mat('#2a1a12', { r: 1 }), (rnd(i * 3) - 0.5) * ow * 0.42, y0 + 0.07, fz + (rnd(i * 7) - 0.5) * 0.9);
+    const c = add(g, new THREE.DodecahedronGeometry(0.06 + rnd(i * 5) * 0.05, 0), i % 2 ? ember : mat('#2a1a12', { r: 1 }), (rnd(i * 3) - 0.5) * ow * 0.42, y0 + 0.07, fz + (rnd(i * 7) - 0.5) * 0.9);
     c.rotation.set(rnd(i), rnd(i + 1) * 3, 0); c.castShadow = false;
   }
   const bark = mat('#3a2a1d', { r: 0.95 }), charred = mat('#1a1410', { r: 1 });
@@ -531,27 +613,43 @@ function buildOldWorld(g, rec) {
     const endM = new THREE.Mesh(new THREE.CircleGeometry(0.19, 12), ember);
     lg.add(endM); endM.position.set(0, Math.min(len, ow * 0.55) / 2 + 0.002, 0); endM.rotation.x = -Math.PI / 2;
   });
-  const fmat = (i) => new THREE.MeshBasicMaterial({ map: tex().flame, transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: 0.7, color: i % 2 ? '#ffd27a' : '#ff8a2a', blending: THREE.AdditiveBlending });
-  // one big merged flame body: a central tall tongue plus overlapping flankers, crossed for depth
-  const flameDefs = [[0, 1.0, 1.5, 0], [-0.22, 0.8, 1.2, 0.6], [0.25, 0.85, 1.2, -0.6], [-0.05, 0.92, 1.3, 1.57], [0.12, 0.7, 1.0, 0.9], [-0.42, 0.55, 0.7, -0.4], [0.45, 0.5, 0.7, 0.4]];
-  const fTall = Math.min(oh * 0.55, 2.0);
-  flameDefs.forEach(([x, hk, wk, ry], i) => {
-    const h = fTall * hk;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.75 * wk, h), fmat(i));
-    const fy0 = y0 + 0.55;
-    m.position.set(x * ow * 0.35, fy0 + h / 2, fz + (rnd(i + 3) - 0.5) * 0.2); m.rotation.y = ry;
-    m.userData.flame = { baseH: h, phase: i * 1.1, y0: fy0 };
-    m.castShadow = m.receiveShadow = false; g.add(m);
+  // layered, soft flames: wide deep-orange outer tongues, brighter yellow mid tongues, a pale core
+  // and small licks off the logs; all additive so overlaps bloom. Each flickers on its own phase.
+  const ft = owFlameTex();
+  const fl = (texK, color, op) => new THREE.MeshBasicMaterial({ map: ft[texK], color, transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: op, blending: THREE.AdditiveBlending });
+  const fTall = Math.min(oh * 0.78, 2.7);
+  const layers = [
+    // [texture, colour, op, x(frac of ow), height k, width, rotY, sway]
+    ['outer', '#ff5a14', 0.55, 0.0, 1.0, 1.5, 0.0, 0.07], ['outer', '#ff6a1c', 0.5, -0.17, 0.78, 1.25, 0.7, 0.08], ['outer', '#ff6a1c', 0.5, 0.18, 0.82, 1.25, -0.7, 0.08],
+    ['outer', '#ff5a14', 0.45, 0.02, 0.9, 1.3, 1.57, 0.06], ['outer', '#e8480e', 0.4, -0.33, 0.5, 0.9, -0.3, 0.1], ['outer', '#e8480e', 0.4, 0.34, 0.48, 0.9, 0.3, 0.1],
+    ['mid', '#ffb23c', 0.7, -0.04, 0.78, 0.85, 0.35, 0.06], ['mid', '#ffb23c', 0.7, 0.08, 0.7, 0.8, -0.45, 0.06], ['mid', '#ffc04a', 0.6, -0.2, 0.5, 0.6, 1.2, 0.08], ['mid', '#ffc04a', 0.6, 0.22, 0.46, 0.6, -1.1, 0.08],
+    ['core', '#fff0b8', 0.75, 0.0, 0.42, 0.55, 0.0, 0.05], ['core', '#ffe6a0', 0.7, 0.05, 0.36, 0.5, 1.57, 0.05],
+    ['lick', '#ff8a2a', 0.6, -0.27, 0.32, 0.35, 0.2, 0.12], ['lick', '#ff8a2a', 0.6, 0.29, 0.3, 0.35, -0.2, 0.12], ['lick', '#ffa040', 0.55, -0.1, 0.28, 0.3, 0.9, 0.12],
+  ];
+  layers.forEach(([tk, col, op, xf, hk, wk, ry, sway], i) => {
+    const h = fTall * hk, fy0 = y0 + 0.5;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(wk, h), fl(tk, col, op));
+    m.position.set(xf * ow * 0.42, fy0 + h / 2, fz + (rnd(i + 3) - 0.5) * 0.25); m.rotation.y = ry;
+    m.userData.flame = { baseH: h, phase: 0.6 + i * 0.83, y0: fy0, op: op / 0.55, sway };
+    m.renderOrder = 3; m.castShadow = m.receiveShadow = false; g.add(m);
   });
-  for (const [z, I, dist] of [[zJ + 1.0, 1.6, 18], [fz - 0.2, 0.5, 3.2]]) {
-    const light = new THREE.PointLight('#ffa94d', I, dist, 2);
+  // warm ember glow pooled on the ash bed and spilling onto the hearth stones
+  for (const [gw, gd, gz, op] of [[ow * 0.7, 1.5, fz, 0.85], [ow * 0.95, 1.6, zJ + 0.45, 0.32]]) {
+    const gm = new THREE.Mesh(new THREE.PlaneGeometry(gw, gd), new THREE.MeshBasicMaterial({ map: ft.pool, color: '#ff7a2a', transparent: true, depthWrite: false, opacity: op, blending: THREE.AdditiveBlending }));
+    gm.rotation.x = -Math.PI / 2; gm.position.set(0, y0 + 0.012 + (gz === fz ? 0.04 : 0), gz);
+    gm.userData.emberGlow = { base: op, t0: rnd(gz * 13) * 10 }; gm.renderOrder = 2; g.add(gm);
+  }
+  for (const [z, I, dist] of [[zJ + 1.0, 1.8, 18], [fz - 0.2, 0.9, 3.6], [zJ + 0.3, 0.5, 5]]) {
+    const light = new THREE.PointLight(z === zJ + 0.3 ? '#ff7a30' : '#ffa04a', I, dist, 2);
     light.position.set(0, y0 + 1.0, z); light.castShadow = false;
     light.userData.fireLight = { base: I, t0: rnd(W * 7 + z) * 10 };
     g.add(light);
   }
 
   // ---- wrought-iron andirons with brass ball finials, standing on the hearth
-  const iron = mat('#1c1a18', { r: 0.6, m: 0.5 }), brass = mat('#c9a043', { r: 0.25, m: 0.85 });
+  // polished brass reads dark without an env map, so give it a warm self-lit sheen + clearcoat highlight
+  const iron = mat('#1c1a18', { r: 0.6, m: 0.5 });
+  const brass = owMats.brass ||= new THREE.MeshPhysicalMaterial({ color: '#e6b84f', metalness: 0.55, roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.08, emissive: '#8a5a12', emissiveIntensity: 0.55 });
   const baluster = new THREE.LatheGeometry([
     [0.0, 0], [0.1, 0], [0.1, 0.05], [0.06, 0.1], [0.055, 0.45], [0.09, 0.55], [0.055, 0.65], [0.05, 1.05], [0.075, 1.1], [0.035, 1.16], [0, 1.16],
   ].map(([r, y]) => new THREE.Vector2(r, y)), 16);

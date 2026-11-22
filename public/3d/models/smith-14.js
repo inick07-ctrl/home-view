@@ -513,7 +513,7 @@ export default {
     const KC = { carcass: '#3b3b3a', door: '#444442', top: '#eeebe5', metal: '#c9a35a' };
     // Great room — old-world limestone fireplace on the west wall (the red mark), plaster breast, no TV
     P('fpOldWorld72', { x: XGR + 0.3 + 3.55 / 2, y: FP_Y, rot: 270, h: coreZ(FP_Y - 3.3) - 0.1, variant: 'styled' }); // plaster breast rises into the vault
-    P('rug', { x: 64.6, y: FP_Y, w: 12.5, d: 10, rot: 90, color: '#b9a37c', field: '#cdb994' });
+    P('rug', { x: 64.6, y: FP_Y, w: 12.5, d: 10, rot: 90, variant: 'jute', color: '#b9a37c', field: '#cdb994' });
     P('sectional', { x: 69.6, y: FP_Y + 0.3, rot: 90, w: 10.5, d: 6.4, finish: 'boucle', variant: 'track-arm', chaise: 'right', wood: 'walnut', pillow: '#b9ae9f' });
     P('coffeeTable', { x: 64.4, y: FP_Y, rot: 90, variant: 'organic', w: 4.8, d: 2.7, wood: 'walnut' });
     P('accentChair', { x: 62.4, y: 19.6, rot: 330, variant: 'lounge', finish: 'cognac' });
@@ -525,7 +525,7 @@ export default {
     P('curtains', { x: 73.9, y: YGRN + 0.75, rot: 0, w: 3.6, h: 7.4, d: 0.5, color: '#f1ede6' });
     P('plant', { x: 74.6, y: 16.0, variant: 'olive' });
     // Entry
-    P('rug', { x: CXP, y: 41.6, w: 7, d: 5, rot: 90, color: '#b9a37c', field: '#cdb994' });
+    P('rug', { x: CXP, y: 41.6, w: 7, d: 5, rot: 90, variant: 'jute', color: '#b9a37c', field: '#cdb994' });
     P('bench', { x: 55.0, y: 43.7, rot: 0, finish: 'cognac' });
     P('plant', { x: 52.6, y: 43.8, variant: 'fiddle', w: 1.6, d: 1.6 });
     P('cabinet', { x: 72.3, y: YFR - 0.75, w: 5, rot: 180, carcass: '#3b3b3a', door: '#444442', metal: '#c9a35a' });
@@ -554,7 +554,7 @@ export default {
     P('cabinet', { x: XDN + 0.75, y: 18.6, w: 5, rot: 270, carcass: '#3b3b3a', door: '#444442', metal: '#c9a35a' });
     // Sun room — smaller old-world limestone fireplace on the east wall
     P('fpOldWorld60', { x: XSUN - 0.3 - 3.4 / 2, y: 21.5, rot: 90, h: WH, variant: 'styled' });
-    P('rug', { x: 106.2, y: 21.0, w: 10, d: 8, rot: 90, color: '#b9a37c', field: '#cdb994' });
+    P('rug', { x: 106.2, y: 21.0, w: 10, d: 8, rot: 90, variant: 'jute', color: '#b9a37c', field: '#cdb994' });
     P('sofa', { x: 102.6, y: 21.0, rot: 270, finish: 'linen', variant: 'track-arm', w: 7.8, wood: 'walnut' });
     P('coffeeTable', { x: 105.6, y: 21.0, rot: 90, variant: 'wood', wood: 'walnut' });
     P('accentChair', { x: 108.2, y: 15.8, rot: 300, variant: 'wing', finish: 'cognac', wood: 'walnut' });
@@ -617,7 +617,7 @@ export default {
     P('mudBench', { x: XSV + 0.95, y: 47.6, rot: 270, w: 3.6 });
     P('mudBench', { x: 86.6, y: YSV - 0.95, rot: 180, w: 5.0 });
     // Hall
-    P('rug', { x: 28.0, y: 39.9, w: 12, d: 3.6, color: '#b9a37c', field: '#cdb994' });
+    P('rug', { x: 28.0, y: 39.9, w: 12, d: 3.6, variant: 'jute', color: '#b9a37c', field: '#cdb994' });
     P('bench', { x: 33.5, y: 47.6, rot: 270, finish: 'cognac' });
     // Covered deck + decks + front porch
     P('outdoorSofa', { x: 65.0, y: 7.4, rot: 180, finish: 'charcoal' });

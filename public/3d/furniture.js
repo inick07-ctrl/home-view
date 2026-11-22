@@ -358,8 +358,35 @@ function buildTableLamp(g, rec) {
   add(g, cyl(0.01, 0.01, 0.15, 8), base, 0, H - 0.02, 0);
 }
 
+let JUTE = null;
+function juteTex() { // chunky natural jute / sisal basket weave
+  if (JUTE !== null || typeof document === 'undefined') return JUTE;
+  const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+  g.fillStyle = '#a88a5c'; g.fillRect(0, 0, 256, 256);
+  const n = 16, q = 256 / n;
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const hz = (x + y) % 2 === 0, v = Math.sin((x * 31 + y * 17) * 12.9898) * 43758.5453 % 1;
+    const L = 0.92 + Math.abs(v) * 0.16;
+    for (let k = 0; k < 4; k++) { // four plies per block
+      const shade = (k % 2 ? 0.9 : 1.04) * L;
+      g.fillStyle = `rgb(${Math.min(255, 196 * shade)},${Math.min(255, 164 * shade)},${Math.min(255, 112 * shade)})`;
+      if (hz) g.fillRect(x * q + 1, y * q + k * q / 4 + 1, q - 2, q / 4 - 1); else g.fillRect(x * q + k * q / 4 + 1, y * q + 1, q / 4 - 1, q - 2);
+    }
+    g.fillStyle = 'rgba(60,40,15,.25)'; g.fillRect(x * q, y * q, q, 1); g.fillRect(x * q, y * q, 1, q);
+  }
+  JUTE = new THREE.CanvasTexture(c); JUTE.wrapS = JUTE.wrapT = THREE.RepeatWrapping; JUTE.colorSpace = THREE.SRGBColorSpace;
+  return JUTE;
+}
 function buildRug(g, rec) {
   const W = rec.w || 8, D = rec.d || 6;
+  if (rec.variant === 'jute') {
+    const t = juteTex();
+    let m;
+    if (t) { const tt = t.clone(); tt.needsUpdate = true; tt.repeat.set(W / 1.6, D / 1.6); m = new THREE.MeshStandardMaterial({ map: tt, roughness: 1 }); } else m = mat('#b89a6a', { r: 1 });
+    add(g, box(W, 0.05, D), mat('#8c6f45', { r: 1 }), 0, 0.025, 0);           // bound edge
+    add(g, box(W - 0.3, 0.006, D - 0.3), m, 0, 0.053, 0);
+    return;
+  }
   const col = rec.color || '#c4b8a4';
   add(g, box(W, 0.04, D), mat(col, { r: 0.95 }), 0, 0.025, 0);
   add(g, box(W - 0.25, 0.005, D - 0.25), mat(rec.field || '#ddd4c6', { r: 0.97 }), 0, 0.048, 0);
@@ -964,7 +991,7 @@ export const CATALOG = {
   coffeeTable: { name: 'Coffee table', category: 'living', w: 4.2, d: 2.3, h: 1.5, variants: ['wood', 'stone', 'organic'], build: buildCoffeeTable },
   sideTable: { name: 'Side table', category: 'living', w: 1.7, d: 1.7, h: 2.1, build: buildSideTable },
   tableLamp: { name: 'Table lamp', category: 'decor', w: 1.0, d: 1.0, h: 2.15, build: buildTableLamp },
-  rug: { name: 'Area rug', category: 'decor', w: 8, d: 6, h: 0.06, build: buildRug },
+  rug: { name: 'Area rug', category: 'decor', w: 8, d: 6, h: 0.06, variants: ['plain', 'jute'], build: buildRug },
   mediaConsole: { name: 'Media console', category: 'living', w: 6, d: 1.6, h: 2.2, build: buildMediaConsole },
   plant: { name: 'Potted tree', category: 'decor', w: 2.2, d: 2.2, h: 6.2, variants: ['fiddle', 'olive'], build: buildPlant },
   bed: { name: 'Bed', category: 'bedroom', w: 5.3, d: 6.8, h: 3.8, variants: ['upholstered', 'panel'], finishes: Object.keys(FINISHES), build: buildBed },

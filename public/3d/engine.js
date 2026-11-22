@@ -639,7 +639,7 @@ let currentItems = [];
 let itemsGroup = null;
 let highlightGroup = null;
 let itemsOn = true;
-let itemFire = { flames: [], lights: [] }; // animated flames inside placed fireplace items
+let itemFire = { flames: [], lights: [], glows: [] }; // animated flames inside placed fireplace items
 let editMode = false;
 let defaultItems = [];
 const hlMat = new THREE.MeshStandardMaterial({ color: '#e0a95a', emissive: '#e0a95a', emissiveIntensity: 0.45, transparent: true, opacity: 0.35, depthWrite: false });
@@ -702,10 +702,11 @@ function refreshItems() {
   }
   itemsGroup.visible = itemsOn;
   addSepticRun();
-  itemFire = { flames: [], lights: [] };
+  itemFire = { flames: [], lights: [], glows: [] };
   itemsGroup.traverse((o) => {
     if (o.userData?.flame) itemFire.flames.push(o);
     if (o.userData?.fireLight) itemFire.lights.push(o);
+    if (o.userData?.emberGlow) itemFire.glows.push(o);
   });
   if (solids && M) {
     // keep architectural solids; item footprints are not walk-blockers except large islands
@@ -2190,7 +2191,7 @@ function loop() {
       }
     }
   }
-  if (itemFire.flames.length || itemFire.lights.length) {
+  if (itemFire.flames.length || itemFire.lights.length || itemFire.glows.length) {
     const t = performance.now() / 1000;
     for (const l of itemFire.lights) {
       const u = l.userData.fireLight;
@@ -2200,7 +2201,12 @@ function loop() {
       const u = m.userData.flame;
       const k = 0.84 + 0.22 * Math.sin(t * (8.5 + u.phase) + u.phase);
       m.scale.y = k; m.position.y = u.y0 + (u.baseH * k) / 2;
-      m.material.opacity = 0.5 + 0.35 * Math.sin(t * (6.5 + u.phase * 0.7) + u.phase);
+      if (u.sway) m.scale.x = 1 + u.sway * Math.sin(t * (4.3 + u.phase * 0.5) + u.phase * 2.1);
+      m.material.opacity = (u.op ?? 1) * (0.5 + 0.35 * Math.sin(t * (6.5 + u.phase * 0.7) + u.phase));
+    }
+    for (const m of itemFire.glows) {
+      const u = m.userData.emberGlow;
+      m.material.opacity = u.base * (0.8 + 0.14 * Math.sin(t * 3.1 + u.t0) + 0.06 * Math.sin(t * 13.7 + u.t0 * 2));
     }
   }
   renderer.render(scene, camera); labelRenderer.render(scene, camera);
