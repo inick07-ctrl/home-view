@@ -1662,8 +1662,9 @@ function ensureEditor() {
     highlight: highlightSel,
     setEditMode: (on) => {
       editMode = !!on;
-      if (on && !cutOn) setCut(true);
-      else if (doorsGroup) doorsGroup.visible = !cutOn || editMode;
+      // Keep the user's cutaway setting. Wall picks work at full height;
+      // doors stay visible in edit mode so openings remain selectable.
+      if (doorsGroup) doorsGroup.visible = !cutOn || editMode;
     },
     pickDoor,
     pickWall,
