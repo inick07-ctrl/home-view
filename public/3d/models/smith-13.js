@@ -466,11 +466,12 @@ export function closeToHome(opts = {}) {
       }
       if (cur < xb) blk(cur, y, xb, y1, z0, z1, col);
     };
+    const westHoles = k.openingsOnX ? k.openingsOnX(0) : [[12, 17, 3, 7], [24.6, 34.6, -1, 8], [37.2, 47.2, -1, 8], [49.7, 59.7, -1, 8]];
     if (DARK_GARAGE) {
-    // garage west face (x = -0.4): three 10' overhead doors + exercise window
-    skinX(-0.41, YEX - 0.5, YGS + 0.5, -0.3, GH, [[12, 17, 3, 7], [24.6, 34.6, -1, 8], [37.2, 47.2, -1, 8], [49.7, 59.7, -1, 8]], 'board');
-    skinY(YEX - 0.41, -0.5, XG1 + 0.5, -0.3, GH, [[4, 9, 3, 7], [17, 22, 3, 7]], 'board', -1);
-    skinY(YGS + 0.41, -0.5, XG1 + 0.5, 2.9, GH, [[7.5, 11, 3.5, 7], [15, 18.5, 3.5, 7]], 'board', 1);
+    // garage west face (x = -0.4): overhead doors + exercise window (holes follow the current plan)
+    skinX(-0.41, YEX - 0.5, YGS + 0.5, -0.3, GH, westHoles, 'board');
+    skinY(YEX - 0.41, -0.5, XG1 + 0.5, -0.3, GH, k.openingsOnY ? k.openingsOnY(YEX) : [[4, 9, 3, 7], [17, 22, 3, 7]], 'board', -1);
+    skinY(YGS + 0.41, -0.5, XG1 + 0.5, 2.9, GH, k.openingsOnY ? k.openingsOnY(YGS) : [[7.5, 11, 3.5, 7], [15, 18.5, 3.5, 7]], 'board', 1);
     skinY(YGS + 0.41, -0.5, XG1 + 0.5, -0.3, 2.9, [], 'ledgestone', 1);
     box(CAP, -0.55, YGS + 0.4, XG1 + 0.55, YGS + 0.66, 2.85, 3.0);
     // east face of the garage block toward the west porch
@@ -482,7 +483,7 @@ export function closeToHome(opts = {}) {
     blk(XG1 + 0.41, 27.3, XG1 + 0.51, YGR + 0.4, 0, GH, 'board');
     blk(XG1 + 0.41, YLS - 0.4, XG1 + 0.51, YGS + 0.5, -0.3, GH, 'board');
     } else {
-      skinX(-0.41, YEX - 0.5, YGS + 0.5, -0.3, 2.85, [[24.6, 34.6, -1, 8], [37.2, 47.2, -1, 8], [49.7, 59.7, -1, 8]], 'ledgestone');
+      skinX(-0.41, YEX - 0.5, YGS + 0.5, -0.3, 2.85, westHoles, 'ledgestone');
       skinY(YGS + 0.41, -0.5, XG1 + 0.5, -0.3, 2.9, [], 'ledgestone', 1);
       box(CAP, -0.55, YGS + 0.4, XG1 + 0.55, YGS + 0.66, 2.85, 3.0);
       skinY(YEX - 0.41, -0.5, XG1 + 0.5, -0.3, 2.85, [], 'ledgestone', -1);
@@ -492,8 +493,9 @@ export function closeToHome(opts = {}) {
       // door leaves: engine overhead sectional doors (M.garageDoor); s/e kept for reference
       void s; void e;
     }
-    // gooseneck lights over the garage doors
-    for (const y of [29.6, 42.2, 54.7]) { box(BLACK, -0.9, y - 0.12, -0.42, y + 0.12, 8.6, 8.72); box('#f6e2a8', -1.05, y - 0.2, -0.75, y + 0.2, 8.42, 8.6); }
+    // gooseneck lights over the garage doors (follow current door centers)
+    const westDoors = k.garageDoorsOnX ? k.garageDoorsOnX(0) : [{ cy: 29.6 }, { cy: 42.2 }, { cy: 54.7 }];
+    for (const g of westDoors) { const y = g.cy; box(BLACK, -0.9, y - 0.12, -0.42, y + 0.12, 8.6, 8.72); box('#f6e2a8', -1.05, y - 0.2, -0.75, y + 0.2, 8.42, 8.6); }
     // stone wainscot on the front (south) faces
     const wain = (y, xa, xb, holes = []) => { skinY(y, xa, xb, -0.3, 2.85, holes, 'ledgestone', 1); box(CAP, xa - 0.05, y, xb + 0.05, y + 0.22, 2.85, 3.0); };
     wain(YB2 + 0.41, XW - 0.4, XD + 0.4);

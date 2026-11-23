@@ -419,11 +419,14 @@ export default {
     box(CAP, XK - 0.45, YGS + 0.4, XG + 0.45, YGS + 0.66, 8.2, 8.35);
     { const T = k.THREE; const g = new T.BoxGeometry(17.5, 0.18, 3.4); g.rotateX(0.32); g.translate(k.W(111.2), 9.05, k.Z(YGS + 2.0)); const m = k.block(0, 0, 0.05, 0.05, 0, 0.05, '#2b2d30', { keep: true }); if (m) { m.geometry.dispose(); m.geometry = g; } }
     for (const x of [102.6, 119.8]) slopeY(BLACK, x, YGS + 0.45, 7.6, YGS + 3.1, 8.6, 0.16, 0.16, false);
-    skinX(XG + 0.41, YGN - 0.4, YGS + 0.4, -0.4, 2.6, [[31, 40, -1, 9], [42.5, 51.5, -1, 9], [54, 63, -1, 9], [65.5, 74.5, -1, 9]], 'ledgestone', 1);
+    const eastHoles = k.openingsOnX ? k.openingsOnX(XG) : [[31, 40, -1, 9], [42.5, 51.5, -1, 9], [54, 63, -1, 9], [65.5, 74.5, -1, 9]];
+    skinX(XG + 0.41, YGN - 0.4, YGS + 0.4, -0.4, 2.6, eastHoles, 'ledgestone', 1);
     // overhead garage doors (charcoal, closed) — open interior bays, no stall walls, no cars
-    for (const [s, e] of [[31, 40], [42.5, 51.5], [54, 63], [65.5, 74.5]]) {
-      // door leaves: engine overhead sectional doors (M.garageDoor)
-      box(BLACK, XG + 0.42, (s + e) / 2 - 0.12, XG + 0.9, (s + e) / 2 + 0.12, 8.6, 8.72); box('#f6e2a8', XG + 0.75, (s + e) / 2 - 0.2, XG + 1.05, (s + e) / 2 + 0.2, 8.42, 8.6);
+    // door leaves: engine overhead sectional doors (M.garageDoor); lights follow current door centers
+    const eastDoors = k.garageDoorsOnX ? k.garageDoorsOnX(XG) : [{ cy: 35.5 }, { cy: 47 }, { cy: 58.5 }, { cy: 70 }];
+    for (const g of eastDoors) {
+      const y = g.cy;
+      box(BLACK, XG + 0.42, y - 0.12, XG + 0.9, y + 0.12, 8.6, 8.72); box('#f6e2a8', XG + 0.75, y - 0.2, XG + 1.05, y + 0.2, 8.42, 8.6);
     }
 
     // ------------------------------------------------------------ black window frames (both faces)

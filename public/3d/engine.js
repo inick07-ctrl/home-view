@@ -12,7 +12,7 @@ import { createWalkAudio } from './walk-audio.js';
 const $ = (id) => document.getElementById(id);
 const canvas = $('c');
 let renderer;
-try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true }); }
+try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true, logarithmicDepthBuffer: true }); }
 catch (e) { const er = $('err'); er.style.display = 'flex'; er.textContent = 'Your browser could not start WebGL, which this 3D model needs.'; throw e; }
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
@@ -23,7 +23,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#cfe3f2');
 scene.fog = new THREE.Fog('#cfe3f2', 260, 560);
-const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 2000);
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.2, 1000);
 const labelRenderer = new CSS2DRenderer();
 labelRenderer.setSize(innerWidth, innerHeight);
 Object.assign(labelRenderer.domElement.style, { position: 'fixed', inset: '0', pointerEvents: 'none', zIndex: 3 });
@@ -34,7 +34,7 @@ scene.add(hemi);
 const amb = new THREE.AmbientLight('#ffffff', 0);
 scene.add(amb);
 const sun = new THREE.DirectionalLight('#fff3df', 1.6);
-sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0006;
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
 scene.add(sun, sun.target);
 
 // ---------- textures ----------
@@ -530,6 +530,42 @@ let fires = [];
 let CX = 0, CZ = 0, BW = 90, BH = 80, solids = [];
 const Wx = (x) => x - CX, Wz = (y) => y - CZ;
 
+// Butt perpendicular wall boxes at corners so they no longer share a volume (z-fighting).
+function trimCornerOverlaps(rects) {
+  const out = rects.map((r) => r.slice());
+  const isH = (r) => (r[2] - r[0]) >= (r[3] - r[1]);
+  const ov = (a, b) => {
+    const x0 = Math.max(a[0], b[0]), x1 = Math.min(a[2], b[2]);
+    const y0 = Math.max(a[1], b[1]), y1 = Math.min(a[3], b[3]);
+    return (x1 - x0 > 0.001 && y1 - y0 > 0.001) ? [x0, y0, x1, y1] : null;
+  };
+  const at = (r, axis, o, eps = 0.06) => axis === 'x'
+    ? (Math.abs(o[0] - r[0]) < eps || Math.abs(o[2] - r[2]) < eps)
+    : (Math.abs(o[1] - r[1]) < eps || Math.abs(o[3] - r[3]) < eps);
+  const shrink = (r, axis, o) => {
+    if (axis === 'y') {
+      if (Math.abs(o[1] - r[1]) < 0.06) r[1] = o[3];
+      else if (Math.abs(o[3] - r[3]) < 0.06) r[3] = o[1];
+    } else {
+      if (Math.abs(o[0] - r[0]) < 0.06) r[0] = o[2];
+      else if (Math.abs(o[2] - r[2]) < 0.06) r[2] = o[0];
+    }
+  };
+  for (let i = 0; i < out.length; i++) {
+    for (let j = i + 1; j < out.length; j++) {
+      const a = out[i], b = out[j];
+      if (isH(a) === isH(b)) continue;
+      const o = ov(a, b); if (!o) continue;
+      const v = isH(a) ? b : a, h = isH(a) ? a : b;
+      const vEnd = at(v, 'y', o), hEnd = at(h, 'x', o);
+      if (vEnd && !hEnd) shrink(v, 'y', o);
+      else if (hEnd && !vEnd) shrink(h, 'x', o);
+      else if (vEnd && hEnd) shrink(v, 'y', o);
+    }
+  }
+  return out.filter((r) => (isH(r) ? r[2] - r[0] : r[3] - r[1]) > 0.02);
+}
+
 function boxRect(x0, y0, x1, y1, h0, h1, uvScale) {
   const g = new THREE.BoxGeometry(Math.max(x1 - x0, .01), Math.max(h1 - h0, .01), Math.max(y1 - y0, .01));
   g.translate(Wx((x0 + x1) / 2), (h0 + h1) / 2, Wz((y0 + y1) / 2));
@@ -648,13 +684,15 @@ let activeLayout = null;
 let currentItems = [];
 let itemsGroup = null;
 let highlightGroup = null;
+let wallPickGroup = null;
+let wallPickMat = null;
 let itemsOn = true;
 let itemFire = { flames: [], lights: [], glows: [] }; // animated flames inside placed fireplace items
 let chimneyMeshes = []; // model chimney/flue blocks tagged { chimney: [x, y] }: shown only while a wood-burning fireplace item sits near (x, y)
 let editMode = false;
 let defaultItems = [];
-const hlMat = new THREE.MeshStandardMaterial({ color: '#e0a95a', emissive: '#e0a95a', emissiveIntensity: 0.45, transparent: true, opacity: 0.35, depthWrite: false });
-const hlEdge = new THREE.MeshBasicMaterial({ color: '#e0a95a', transparent: true, opacity: 0.95 });
+const hlMat = new THREE.MeshStandardMaterial({ color: '#e0a95a', emissive: '#e0a95a', emissiveIntensity: 0.45, transparent: true, opacity: 0.35, depthWrite: false, depthTest: false });
+const hlEdge = new THREE.MeshBasicMaterial({ color: '#e0a95a', transparent: true, opacity: 0.95, depthTest: false });
 
 function snapshotOriginal(model) {
   planOriginal = { source: model, rooms: cloneRooms(model.rooms), walls: cloneWalls(model.walls) };
@@ -700,6 +738,7 @@ function rebuildPlan() {
   const keep = { mode, roofOn, labelsOn, cutOn, planOn };
   buildModel(planOriginal.source, { layout: activeLayout });
   setRoof(keep.roofOn); setLabels(keep.labelsOn); setCut(keep.cutOn); setPlan(keep.planOn);
+  try { dispatchEvent(new CustomEvent('peakstead-plan-changed')); } catch {}
 }
 let floorCtx = null, floorGroup = null, floorSig = '';
 function stairHoles() {
@@ -1084,18 +1123,97 @@ function setOpeningSpans(tmpl, horiz, perp, A, B, spans, oldIdx) {
   return { ok: true };
 }
 const GD_SIZES = { single: 9, double: 16 };
+const GD_TWO = { each: 9, gap: 1.5 };
+function fmtFtIn(w) {
+  const n = Math.max(0, +w || 0), tot = Math.round(n * 12), ft = Math.floor(tot / 12), inch = tot % 12;
+  return ft + '′' + (inch ? '-' + inch + '″' : '');
+}
+// clear run along the garage wall that this door can expand into (stops at other openings / wall end)
+function garageClearSpan(i) {
+  const d = M.walls.door[i]; if (!d) return null;
+  const info = doorInfo(d);
+  const horiz = info.horiz, perp = wallPerp(d, horiz), tol = 0.35;
+  const aOf = (w) => horiz ? w[0] : w[1], bOf = (w) => horiz ? w[2] : w[3];
+  const onLine = (w) => {
+    const h2 = (w[2] - w[0]) >= (w[3] - w[1]);
+    return h2 === horiz && Math.abs(wallPerp(w, horiz) - perp) < tol;
+  };
+  const segs = [];
+  for (const w of (M.walls.ext || [])) if (onLine(w)) segs.push({ a: aOf(w), b: bOf(w), kind: 'wall' });
+  (M.walls.door || []).forEach((w, j) => { if (onLine(w)) segs.push({ a: aOf(w), b: bOf(w), kind: 'door', j }); });
+  (M.walls.win || []).forEach((w) => { if (onLine(w)) segs.push({ a: aOf(w), b: bOf(w), kind: 'win' }); });
+  const me = segs.find((s) => s.kind === 'door' && s.j === i);
+  if (!me) return null;
+  let lo = me.a, hi = me.b, changed = true;
+  while (changed) {
+    changed = false;
+    for (const s of segs) {
+      if (s.kind !== 'wall') continue;
+      if (s.b > lo - 0.16 && s.a < lo + 0.16 && s.a < lo - 0.01) { lo = s.a; changed = true; }
+      if (s.a < hi + 0.16 && s.b > hi - 0.16 && s.b > hi + 0.01) { hi = s.b; changed = true; }
+    }
+  }
+  for (const s of segs) {
+    if (s.kind === 'wall' || (s.kind === 'door' && s.j === i)) continue;
+    if (s.b <= me.a + 0.05) lo = Math.max(lo, s.b);
+    if (s.a >= me.b - 0.05) hi = Math.min(hi, s.a);
+  }
+  return { lo, hi, horiz, perp, info, a0: me.a, b0: me.b };
+}
 function garageSizeOp(i, size) {
   const d = M.walls.door[i]; if (!d) return { ok: false, why: 'no door' };
   const info = doorInfo(d); if (!info.garage) return { ok: false, why: 'not a garage door' };
-  const c = info.horiz ? info.cx : info.cy, a0 = info.horiz ? d[0] : d[1], b0 = info.horiz ? d[2] : d[3];
-  const perp = info.horiz ? info.cy : info.cx;
-  const spans = size === 'two' ? [[c - 9.75, c - 0.75], [c + 0.75, c + 9.75]] : [[c - GD_SIZES[size] / 2, c + GD_SIZES[size] / 2]];
+  const range = garageClearSpan(i);
+  if (!range) return { ok: false, why: 'not enough garage wall there' };
+  const { lo, hi, horiz, perp, a0, b0 } = range;
+  const avail = hi - lo;
+  const twoW = GD_TWO.each * 2 + GD_TWO.gap;
+  const want = size === 'two' ? twoW : GD_SIZES[size];
+  if (!want) return { ok: false, why: 'unknown size' };
+  let W = want, clamped = false, placed = size;
+  if (W > avail + 0.02) { W = Math.floor(avail * 4) / 4; clamped = true; }
+  if (W < 7.5) return { ok: false, why: 'not enough garage wall there (only ' + fmtFtIn(avail) + ' clear next to neighboring openings)' };
+  const c0 = (a0 + b0) / 2;
+  let c = Math.min(Math.max(c0, lo + W / 2), hi - W / 2);
+  let spans;
+  if (size === 'two' && W >= twoW - 0.05) {
+    const half = twoW / 2;
+    spans = [[c - half, c - GD_TWO.gap / 2], [c + GD_TWO.gap / 2, c + half]];
+    placed = 'two';
+  } else if (size === 'two') {
+    spans = [[c - W / 2, c + W / 2]];
+    placed = W > 12 ? 'double' : 'single';
+    clamped = true;
+  } else {
+    spans = [[c - W / 2, c + W / 2]];
+    placed = W > 12 ? 'double' : 'single';
+  }
   const A = Math.min(a0, spans[0][0]), B = Math.max(b0, spans[spans.length - 1][1]);
   const snap = cloneWalls(M.walls);
   const tmpl = d.slice(); tmpl[4] = 8;
-  const res = setOpeningSpans(tmpl, info.horiz, perp, A, B, spans, i);
+  const res = setOpeningSpans(tmpl, horiz, perp, A, B, spans, i);
   if (!res.ok) { M.walls = snap; return res; }
-  rebuildPlan(); return res;
+  rebuildPlan();
+  const idxs = [];
+  for (const [sa, sb] of spans) {
+    const sc = (sa + sb) / 2;
+    const j = (M.walls.door || []).findIndex((dr, di) => {
+      if (idxs.includes(di)) return false;
+      const inf = doorInfo(dr);
+      if (!inf.garage) return false;
+      const mid = inf.horiz ? inf.cx : inf.cy;
+      const pr = inf.horiz ? inf.cy : inf.cx;
+      return Math.abs(mid - sc) < 0.25 && Math.abs(pr - perp) < 0.45;
+    });
+    if (j >= 0) idxs.push(j);
+  }
+  let why;
+  if (clamped) {
+    why = size === 'two' && placed !== 'two'
+      ? 'Two 9′ doors need ' + fmtFtIn(twoW) + ' of clear wall; fitted a ' + fmtFtIn(W) + ' door instead.'
+      : 'A ' + (size === 'double' ? '16′' : size === 'single' ? '9′' : fmtFtIn(twoW)) + ' door needs more clear wall; fitted ' + fmtFtIn(W) + ' (the most that fits next to neighboring openings).';
+  }
+  return { ok: true, index: idxs[0] ?? i, indexes: idxs, width: W, clamped, shifted: Math.abs(c - c0) > 0.15, why, size: placed };
 }
 function garageWallInfo(kind, index) {
   const w = (M.walls[kind] || [])[index]; if (!w || kind !== 'ext') return null;
@@ -1544,7 +1662,10 @@ function ensureEditor() {
     setEditMode: (on) => {
       editMode = !!on;
       if (on && !cutOn) setCut(true);
+      else if (doorsGroup) doorsGroup.visible = !cutOn || editMode;
     },
+    pickDoor,
+    pickWall,
     itemsGroup: () => itemsGroup,
     CX: () => CX, CZ: () => CZ,
     saveRemote: saveLayoutRemote,
@@ -1651,8 +1772,10 @@ function buildModel(model, opts = {}) {
     const grp = new THREE.Group();
     const out = { ext: [], int: [], glass: [] };
     const top = (h) => cut ? Math.min(4, h) : h;
-    for (const r of WS.ext) skinSplit(r, 0, top(r[4] || H), out);
-    for (const r of WS.int) out.int.push(boxRect(r[0], r[1], r[2], r[3], 0, top(r[4] || H)));
+    const extTrim = trimCornerOverlaps((WS.ext || []).map((r) => r.slice()));
+    const intTrim = trimCornerOverlaps((WS.int || []).map((r) => r.slice()));
+    for (const r of extTrim) skinSplit(r, 0, top(r[4] || H), out);
+    for (const r of intTrim) out.int.push(boxRect(r[0], r[1], r[2], r[3], 0, top(r[4] || H)));
     for (const r of WS.win) {
       const sill = r[4] ?? 3, head = r[5] ?? 7, h = r[6] || H, T = top(h);
       if (sill > 0.05) skinSplit(r, 0, Math.min(sill, T), out);
@@ -1670,6 +1793,7 @@ function buildModel(model, opts = {}) {
   }
   wallsFull = buildWalls(false); wallsCut = buildWalls(true);
   root.add(wallsFull, wallsCut);
+  buildWallPicks(WS, H);
   // baseboards: a 4" painted base on every interior wall face (both sides) and the inside face of exterior walls
   {
     const bb = [], bh = 0.33, bt = 0.04;
@@ -1691,7 +1815,7 @@ function buildModel(model, opts = {}) {
     for (const r of WS.int) { if (Math.max(r[2] - r[0], r[3] - r[1]) > 0.8 && (r[4] || H) > 2) { const [a, b] = sides(r); face(r, a, b); } }
     for (const r of WS.ext) { if (Math.max(r[2] - r[0], r[3] - r[1]) > 0.8) { const [a, b] = sides(r); face(r, a, b); } }
     for (const r of WS.win) { if ((r[4] ?? 3) > 0.6) { const [a, b] = sides(r); face(r, a, b); } }
-    const bm = mesh(bb, new THREE.MeshStandardMaterial({ color: '#f4f2ec', roughness: 0.6 }), false);
+    const bm = mesh(bb, new THREE.MeshStandardMaterial({ color: '#f4f2ec', roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }), false);
     if (bm) { bm.userData.baseboard = true; wallsFull.add(bm); }
   }
   baseIntColor = intMat.color ? intMat.color.clone() : new THREE.Color('#f8f6f1');
@@ -1711,10 +1835,23 @@ function buildModel(model, opts = {}) {
     const key = c + (o.m ?? 0) + (o.r ?? .8);
     return colorMats[key] ||= new THREE.MeshStandardMaterial({ color: c, roughness: o.r ?? .8, metalness: o.m ?? 0 });
   };
+  const offsetMats = {};
+  const withOffset = (mat) => {
+    if (!mat) return mat;
+    if (mat.userData && mat.userData.po) return mat;
+    return offsetMats[mat.uuid] ||= (() => {
+      const m = mat.clone();
+      m.polygonOffset = true; m.polygonOffsetFactor = -1; m.polygonOffsetUnits = -2;
+      m.userData = { ...(m.userData || {}), po: true };
+      return m;
+    })();
+  };
   const kit = {
     THREE, W: Wx, Z: Wz,
     block(a, b, c, d, h0, h1, color, o = {}) {
-      const m = new THREE.Mesh(boxRect(a, b, c, d, h0, h1, MAT[color] ? TEXSCALE[color] : 0), getMat(color, o));
+      const thin = !!(o && o.overlay) || Math.min(Math.abs(c - a), Math.abs(d - b)) <= 0.22;
+      const mat = thin ? withOffset(getMat(color, o)) : getMat(color, o);
+      const m = new THREE.Mesh(boxRect(a, b, c, d, h0, h1, MAT[color] ? TEXSCALE[color] : 0), mat);
       m.castShadow = m.receiveShadow = true; furn.add(m);
       if (o.solid) solids.push([Wx(a), Wz(b), Wx(c), Wz(d)]);
       if (o.roof) m.userData.roofPart = true; // shown/hidden with the Roof toggle (gable timbers, chimneys, vault beams)
@@ -1958,6 +2095,40 @@ function buildModel(model, opts = {}) {
     if (typeof kit[fn] !== 'function') continue;
     const orig = kit[fn].bind(kit);
     kit[fn] = (...a) => { const nums = a.filter(v => typeof v === 'number'); if (nums.length >= 2) { const cx = nums.length >= 4 ? (nums[0] + nums[2]) / 2 : nums[0], cy = nums.length >= 4 ? (nums[1] + nums[3]) / 2 : nums[1]; if (inDeleted(cx, cy)) return new THREE.Group(); } return orig(...a); };
+  }
+  kit.openingsOnX = (x, tol = 0.85) => openingsOnAxis('x', x, tol);
+  kit.openingsOnY = (y, tol = 0.85) => openingsOnAxis('y', y, tol);
+  kit.garageDoorsOnX = (x, tol = 0.85) => garageDoorsOnAxis('x', x, tol);
+  kit.garageDoorsOnY = (y, tol = 0.85) => garageDoorsOnAxis('y', y, tol);
+  function openingsOnAxis(axis, pos, tol) {
+    const holes = [];
+    const add = (r, isDoor) => {
+      const horiz = (r[2] - r[0]) >= (r[3] - r[1]);
+      if (axis === 'x' && horiz) return;
+      if (axis === 'y' && !horiz) return;
+      const perp = horiz ? (r[1] + r[3]) / 2 : (r[0] + r[2]) / 2;
+      if (Math.abs(perp - pos) > tol) return;
+      const s = horiz ? r[0] : r[1], e = horiz ? r[2] : r[3];
+      const z0 = isDoor ? -1 : (r[4] ?? 3);
+      const z1 = isDoor ? (r[4] ?? 8) : (r[5] ?? 7);
+      holes.push([s, e, z0, z1]);
+    };
+    for (const r of (WS.win || [])) add(r, false);
+    for (const r of (WS.door || [])) add(r, true);
+    return holes.sort((a, b) => a[0] - b[0]);
+  }
+  function garageDoorsOnAxis(axis, pos, tol) {
+    const out = [];
+    for (const r of (WS.door || [])) {
+      const inf = doorInfo(r);
+      if (!inf.garage || inf.noLeaf) continue;
+      const perp = inf.horiz ? inf.cy : inf.cx;
+      if (axis === 'x' && inf.horiz) continue;
+      if (axis === 'y' && !inf.horiz) continue;
+      if (Math.abs(perp - pos) > tol) continue;
+      out.push({ cx: inf.cx, cy: inf.cy, width: inf.width, top: inf.top, horiz: inf.horiz });
+    }
+    return out;
   }
   if (typeof M.furnish === 'function') M.furnish(kit);
   else if (Array.isArray(M.furnish)) { // JSON models: a list of [method, ...args] calls on the kit
@@ -2353,7 +2524,7 @@ function exitWalk() {
 function setMode(m, instant = false) {
   if (m !== 'walk' && walkSaved) {
     const w = walkSaved; walkSaved = null;
-    amb.intensity = w.amb; camera.near = 0.1; camera.updateProjectionMatrix();
+    amb.intensity = w.amb; camera.near = 0.2; camera.far = 1000; camera.updateProjectionMatrix();
     setRoof(w.roofOn); setCut(w.cutOn); setLabels(w.labelsOn);
   }
   if (mode === 'walk' && m !== 'walk') { exitWalk(); walkAudio.exitWalk(); }
@@ -2376,7 +2547,7 @@ function setMode(m, instant = false) {
     if (!walkSaved) walkSaved = { roofOn, cutOn, labelsOn, amb: amb.intensity };
     setCut(false); setRoof(true); setLabels(false);
     amb.intensity = (walkSaved.amb || 0) + 0.32; // interior fill so closed rooms are never pitch dark
-    orbit.enabled = false; camera.fov = 70; camera.near = 0.05; camera.updateProjectionMatrix();
+    orbit.enabled = false; camera.fov = 70; camera.near = 0.1; camera.far = 800; camera.updateProjectionMatrix();
     const s = M.walkStart || [CX, CZ + BH / 2 + 5, 0];
     const w = xfHouse(Wx(s[0]), Wz(s[1]), hp.x, hp.z, hp.yaw);
     player.set(w[0], w[1]); yaw = (s[2] || 0) - THREE.MathUtils.degToRad(hp.yaw); pitch = -0.05;
@@ -2394,7 +2565,78 @@ function setRoof(v) {
   if (v && cutOn) setCut(false);
 }
 function setLabels(v) { labelsOn = v; if (labels) { labels.visible = v; labels.children.forEach(o => { o.visible = v; }); } setBtn('bLabels', v); }
-function setCut(v) { cutOn = v; if (wallsCut) { wallsCut.visible = v; wallsFull.visible = !v; } if (doorsGroup) doorsGroup.visible = !v; syncWindows(); setBtn('bCut', v); if (v && roofOn) setRoof(false); }
+function buildWallPicks(WS, H) {
+  if (!wallPickMat) wallPickMat = new THREE.MeshBasicMaterial({
+    transparent: true, opacity: 0, depthWrite: false, depthTest: false, side: THREE.DoubleSide,
+  });
+  wallPickGroup = new THREE.Group();
+  wallPickGroup.name = 'wallPicks';
+  const pad = 0.18; // pad thickness only, so neighboring segments on the same line stay distinct
+  for (const kind of ['ext', 'int']) {
+    (WS[kind] || []).forEach((w, i) => {
+      if (!w) return;
+      const x0 = Math.min(w[0], w[2]), x1 = Math.max(w[0], w[2]);
+      const y0 = Math.min(w[1], w[3]), y1 = Math.max(w[1], w[3]);
+      const horiz = (x1 - x0) >= (y1 - y0);
+      const h = Math.max(1.2, w[4] || H || 9);
+      const gx = Math.max(x1 - x0, 0.06) + (horiz ? 0 : pad * 2);
+      const gz = Math.max(y1 - y0, 0.06) + (horiz ? pad * 2 : 0);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(gx, h, gz), wallPickMat);
+      m.position.set(Wx((x0 + x1) / 2), h / 2, Wz((y0 + y1) / 2));
+      m.castShadow = m.receiveShadow = false;
+      m.frustumCulled = false;
+      m.userData.wallPick = true;
+      m.userData.wallKind = kind;
+      m.userData.wallIndex = i;
+      m.userData.wallRect = [x0, y0, x1, y1];
+      wallPickGroup.add(m);
+    });
+  }
+  root.add(wallPickGroup);
+}
+function pickWall(ndc) {
+  if (!wallPickGroup || !camera || !ndc) return null;
+  const rc = new THREE.Raycaster();
+  rc.setFromCamera(ndc, camera);
+  const hits = rc.intersectObjects(wallPickGroup.children, false).filter((x) => x.object && x.object.userData && x.object.userData.wallPick);
+  if (!hits.length) return null;
+  const d0 = hits[0].distance;
+  const near = hits.filter((h) => h.distance <= d0 + 0.4);
+  let best = null, bestDist = Infinity, bestLen = Infinity;
+  for (const h of near) {
+    const ud = h.object.userData;
+    const r = ud.wallRect;
+    if (!r) continue;
+    const px = h.point.x + CX, py = h.point.z + CZ;
+    const dx = Math.max(r[0] - px, 0, px - r[2]);
+    const dy = Math.max(r[1] - py, 0, py - r[3]);
+    const dist = Math.hypot(dx, dy);
+    const len = Math.max(r[2] - r[0], r[3] - r[1]);
+    if (dist < bestDist - 0.02 || (Math.abs(dist - bestDist) < 0.02 && len < bestLen)) {
+      bestDist = dist; bestLen = len;
+      best = { kind: 'wall', wallKind: ud.wallKind, index: ud.wallIndex };
+    }
+  }
+  return best || { kind: 'wall', wallKind: hits[0].object.userData.wallKind, index: hits[0].object.userData.wallIndex };
+}
+function pickDoor(ndc) {
+  if (!doorsGroup || !camera || !ndc) return null;
+  const was = doorsGroup.visible;
+  doorsGroup.visible = true;
+  const rc = new THREE.Raycaster();
+  rc.setFromCamera(ndc, camera);
+  const hits = rc.intersectObjects(doorsGroup.children, true);
+  doorsGroup.visible = was;
+  for (const h of hits) {
+    let o = h.object;
+    while (o) {
+      if (o.userData && o.userData.doorIndex != null) return { kind: 'door', index: o.userData.doorIndex };
+      o = o.parent;
+    }
+  }
+  return null;
+}
+function setCut(v) { cutOn = v; if (wallsCut) { wallsCut.visible = v; wallsFull.visible = !v; } if (doorsGroup) doorsGroup.visible = !v || editMode; syncWindows(); setBtn('bCut', v); if (v && roofOn) setRoof(false); }
 function setPlan(v) { planOn = v; if (planOverlay) planOverlay.visible = v; setBtn('bPlan', v); }
 $('bRoof').onclick = () => setRoof(!roofOn);
 $('bLabels').onclick = () => setLabels(!labelsOn);
@@ -2424,8 +2666,8 @@ const DOOR_MAT = {
   intPanel: new THREE.MeshStandardMaterial({ color: '#ebe8de', roughness: .6 }),
   ext: new THREE.MeshStandardMaterial({ color: '#1d1e20', roughness: .42, metalness: .3 }),
   glass: new THREE.MeshStandardMaterial({ color: '#a8c6d8', roughness: .06, metalness: .2, transparent: true, opacity: .38, side: THREE.DoubleSide }),
-  casing: new THREE.MeshStandardMaterial({ color: '#f7f5ef', roughness: .7 }),
-  casingExt: new THREE.MeshStandardMaterial({ color: '#232427', roughness: .6 }),
+  casing: new THREE.MeshStandardMaterial({ color: '#f7f5ef', roughness: .7, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
+  casingExt: new THREE.MeshStandardMaterial({ color: '#232427', roughness: .6, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
   brass: new THREE.MeshStandardMaterial({ color: '#c4a35a', roughness: .3, metalness: .7 }),
   black: new THREE.MeshStandardMaterial({ color: '#121212', roughness: .35, metalness: .55 }),
 };
@@ -2485,12 +2727,13 @@ function doorInfo(r) {
   return { horiz, width, thick, cx, cy, top, ext, garage, inward, noLeaf: !!opt.noLeaf, color: opt.color, kind: garage ? 'garage' : ext ? 'ext' : 'int' };
 }
 let gdoors = [];
-function buildGarageDoor(r, info) {
+function buildGarageDoor(r, info, doorIndex) {
   const style = M.garageDoor || {};
   const H = r[5] || M.wallH || 9, top = info.top;
   const R = Math.max(0.25, Math.min(0.9, H - top - 0.2));
   const w = info.width - 0.08, n = Math.max(4, Math.round(top / 2)), ph = top / n, in0 = info.thick / 2 + 0.1;
   const holder = new THREE.Group(); holder.position.set(Wx(info.cx), 0, Wz(info.cy));
+  if (doorIndex != null) holder.userData.doorIndex = doorIndex;
   holder.rotation.y = info.horiz ? (info.inward > 0 ? 0 : Math.PI) : (info.inward > 0 ? Math.PI / 2 : -Math.PI / 2);
   const col = info.color || style.color || '#e9e7e2';
   const pm = new THREE.MeshStandardMaterial({ color: col, roughness: 0.5, metalness: 0.12 });
@@ -2624,20 +2867,20 @@ function buildDoors(WS) {
   doors = []; gdoors = [];
   doorsGroup = new THREE.Group(); doorsGroup.name = 'doors'; root.add(doorsGroup);
   const cas = [], casExt = [];
-  for (const r of (WS.door || [])) {
+  (WS.door || []).forEach((r, di) => {
     const [x0, y0, x1, y1] = r, top = r[4] ?? 7, ext = !!r[6];
     const horiz = (x1 - x0) >= (y1 - y0);
     const width = horiz ? x1 - x0 : y1 - y0;
     const info = doorInfo(r);
     // garage doors: overhead sectional door on tracks (unless removed → open opening)
-    if (info.garage) { if (!info.noLeaf) buildGarageDoor(r, info); continue; }
+    if (info.garage) { if (!info.noLeaf) buildGarageDoor(r, info, di); return; }
     // wide cased openings stay open (no hinged leaf)
-    if (width < 1.6 || top < 6 || width > (ext ? 7.2 : 6.2)) continue;
+    if (width < 1.6 || top < 6 || width > (ext ? 7.2 : 6.2)) return;
     const jt = 0.12, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     const list = ext ? casExt : cas;
     if (horiz) list.push(boxRect(x0, y0 - 0.03, x0 + jt, y1 + 0.03, 0, top), boxRect(x1 - jt, y0 - 0.03, x1, y1 + 0.03, 0, top), boxRect(x0, y0 - 0.03, x1, y1 + 0.03, top - jt, top));
     else list.push(boxRect(x0 - 0.03, y0, x1 + 0.03, y0 + jt, 0, top), boxRect(x0 - 0.03, y1 - jt, x1 + 0.03, y1, 0, top), boxRect(x0 - 0.03, y0, x1 + 0.03, y1, top - jt, top));
-    if (info.noLeaf) continue; // door removed in Edit Plan: keep the cased opening
+    if (info.noLeaf) return; // door removed in Edit Plan: keep the cased opening
     const clear = width - jt * 2;
     const n = clear > 4.0 ? 2 : 1;
     const lw = clear / n - 0.03, lh = top - jt - 0.06, lt = 0.15;
@@ -2653,11 +2896,12 @@ function buildDoors(WS) {
       const leaf = makeLeaf(lw, lh, lt, ext, dirSign, doorColorFor(r, ext));
       leaf.position.x = dirSign * lw / 2;
       holder.add(leaf); pivot.add(holder); doorsGroup.add(pivot);
+      pivot.userData.doorIndex = di;
       // +θ swings a +x leaf toward -z, a -x leaf toward +z, a +z leaf toward +x, a -z leaf toward -x
       leaves.push({ pivot, sign: horiz ? -dirSign : dirSign });
     }
     doors.push({ cx, cy, horiz, half: width / 2, ext, leaves, open: 0, side: 1, maxDeg: n === 2 ? 95 : 92, rec: r });
-  }
+  });
   const a = mesh(cas, DOOR_MAT.casing, true), b = mesh(casExt, DOOR_MAT.casingExt, true);
   if (a) doorsGroup.add(a); if (b) doorsGroup.add(b);
   doorsGroup.visible = !cutOn;
@@ -3215,7 +3459,7 @@ window.app = {
   holdGarage: (i, v) => { const g = gdoors[i]; if (g) { g.hold = v == null ? null : +v; poseGarage(g); } },
   getItemDoors: () => itemDoors.map(d => +d.open.toFixed(2)),
   getWindows: () => wins.map(w => ({ type: w.type, open: +w.open.toFixed(2) })),
-  setWindowsMode, doorList, removeDoor: removeDoorOp, restoreDoor: restoreDoorOp, garageSize: garageSizeOp, addGarageDoor: addGarageDoorOp,
+  setWindowsMode, doorList, removeDoor: removeDoorOp, restoreDoor: restoreDoorOp, garageSize: garageSizeOp, addGarageDoor: addGarageDoorOp, pickDoor, pickWall,
   removeRoomByName, getFinishes: () => finishes, setFinishes: setFinishesOp, getWalls: () => M?.walls,
   getWalkAudio: () => ({
     muted: !walkAudio.isEnabled(), unlocked: !!walkAudio.debug.unlocked(), inWalk: !!walkAudio.debug.inWalk(),

@@ -160,7 +160,8 @@ export function mountPlanEditor(ctrl) {
   document.body.appendChild(banner);
 
   let tab = 'items';
-  let selected = null; // { kind: 'item'|'room'|'wall', id, index, ... }
+  let selected = null; // { kind: 'item'|'room'|'wall'|'door', id, index, ... }
+  let doorNote = '';
   let placing = null; // catalog type to place
   let drawingWall = null; // { x0, y0 } while adding a wall
   let undo = [];
@@ -289,9 +290,14 @@ export function mountPlanEditor(ctrl) {
     ctrl.highlight(null);
     persist();
   }
+  function confirmRemoveWall(kind) {
+    if (kind !== 'ext') return true;
+    return confirm('Remove this exterior wall? The house will open to the outside at that edge, and the roof or ceiling may change. You can undo after.');
+  }
   function deleteSelected() {
     if (!selected || !canEdit()) return;
     if (selected.kind === 'wall') {
+      if (!confirmRemoveWall(selected.wallKind)) return;
       pushUndo();
       ctrl.removeWall(selected.wallKind, selected.index);
       select(null);
@@ -310,6 +316,7 @@ export function mountPlanEditor(ctrl) {
   }
   drawer.querySelector('[data-act=undo]').onclick = undoLast;
 
+  window.addEventListener('peakstead-plan-changed', () => { if (canEdit()) persist(); });
   window.addEventListener('keydown', (ev) => {
     if (!drawer.classList.contains('open') || !canEdit()) return;
     const typing = ev.target && /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName);
@@ -671,7 +678,7 @@ export function mountPlanEditor(ctrl) {
 
   function renderDoors(body) {
     const list0 = ctrl.doorList ? ctrl.doorList() : [];
-    body.appendChild(el('p', { id: 'editHint', text: canEdit() ? 'Pick a door to remove it (leaves an open cased opening, or fill it with wall), recolor it, or resize a garage door. Add a garage door from Walls → select an exterior garage wall.' : 'View only.' }));
+    body.appendChild(el('p', { id: 'editHint', class: doorNote ? 'warn' : '', text: doorNote || (canEdit() ? 'Pick a door to remove it (leaves an open cased opening, or fill it with wall), recolor it, or resize a garage door. Add a garage door from Walls → select an exterior garage wall. Click a door in the 3D view to select it.' : 'View only.') }));
     const list = el('div', { id: 'editList' });
     const groups = [['garage', 'Garage doors'], ['ext', 'Exterior doors'], ['int', 'Interior doors']];
     for (const [k, lab] of groups) {
@@ -714,10 +721,23 @@ export function mountPlanEditor(ctrl) {
       s.onchange = () => {
         pushUndo();
         const r = ctrl.garageSize(d.index, s.value);
-        if (!r.ok) { undo.pop(); $('editHint').textContent = 'Could not resize: ' + r.why; s.value = cur; return; }
-        selected = null; ctrl.highlightDoor(null); done();
+        if (!r.ok) {
+          undo.pop();
+          doorNote = 'Could not resize: ' + r.why;
+          if ($('editHint')) $('editHint').textContent = doorNote;
+          let note = $('gdSizeNote');
+          if (!note) { note = el('p', { id: 'gdSizeNote', class: 'editWarn' }); s.insertAdjacentElement('afterend', note); }
+          note.textContent = doorNote;
+          s.value = cur;
+          return;
+        }
+        doorNote = r.why || (r.shifted ? 'Door shifted slightly along the wall so the new size would fit.' : '');
+        selected = { kind: 'door', index: r.index != null ? r.index : d.index };
+        ctrl.highlightDoor(selected.index);
+        done();
       };
       wrap.appendChild(s);
+      if (doorNote) wrap.appendChild(el('p', { id: 'gdSizeNote', class: 'editWarn', text: doorNote }));
     }
     wrap.appendChild(el('label', { text: 'Door color' }));
     wrap.appendChild(swatches(DOOR_PALETTE, d.color, (c) => { pushUndo(); ctrl.setDoorColor(d.index, c); persist(); render(); }, true));
@@ -812,7 +832,7 @@ export function mountPlanEditor(ctrl) {
 
   function renderWalls(body) {
     const WS = ctrl.getWalls();
-    body.appendChild(el('p', { id: 'editHint', text: canEdit() ? 'Click a wall in 3D to select it (hover highlights it). Press Delete or use Remove wall. Add a wall, then click two points on the floor.' : 'View only.' }));
+    body.appendChild(el('p', { id: 'editHint', text: canEdit() ? 'Click any wall in the 3D view to select it (hover highlights it) — interior, exterior, garage, closet, and segments split by doors or windows. Press Delete or use Remove wall. Removing an exterior wall asks for confirmation. Add a wall, then click two points on the floor.' : 'View only.' }));
     const list = el('div', { id: 'editList' });
     const addKind = (kind, label) => {
       (WS[kind] || []).forEach((w, i) => {
@@ -858,6 +878,7 @@ export function mountPlanEditor(ctrl) {
     door.onclick = () => { pushUndo(); ctrl.addDoorway(kind, index); persist(); render(); };
     const del = el('button', { type: 'button', class: 'danger', text: 'Remove wall' });
     del.onclick = () => {
+      if (!confirmRemoveWall(kind)) return;
       pushUndo();
       ctrl.removeWall(kind, index);
       select(null);
@@ -988,6 +1009,23 @@ export function mountPlanEditor(ctrl) {
       }
     }
     if (!placing) {
+      const doorHit = pickDoorAt(ev);
+      if (doorHit) {
+        ev.preventDefault(); ev.stopPropagation();
+        tab = 'doors';
+        select({ kind: 'door', index: doorHit.index });
+        ctrl.highlightDoor(doorHit.index);
+        return;
+      }
+      const wallHit = pickWallAt(ev);
+      if (wallHit) {
+        ev.preventDefault(); ev.stopPropagation();
+        tab = 'walls';
+        select({ kind: 'wall', wallKind: wallHit.wallKind, index: wallHit.index });
+        return;
+      }
+    }
+    if (!placing) {
       const handle = hitResizeHandle(ev);
       if (handle) {
         ev.preventDefault(); ev.stopPropagation();
@@ -1049,13 +1087,14 @@ export function mountPlanEditor(ctrl) {
             const hitC = isOutdoorItem(placing) ? null : clearanceHit(itemRect(rec), ctrl.getRooms(), ctrl.getWalls(), 0.05);
             showClearance(!!hitC, hitC?.kind);
           }
-        } else if (tab === 'walls') {
-          const at = eventToPlan(ev);
-          const w = at && at.x != null ? nearestWall(at.x, at.y, 1.8) : null;
+        } else {
+          const w = pickWallAt(ev);
           if (w) {
             const isSel = selected?.kind === 'wall' && selected.wallKind === w.wallKind && selected.index === w.index;
             ctrl.highlight(isSel ? selected : { ...w, hover: true });
           } else if (selected?.kind === 'wall') ctrl.highlight(selected);
+          else if (selected?.kind === 'door') ctrl.highlightDoor(selected.index);
+          else if (selected) ctrl.highlight(selected);
           else ctrl.highlight(null);
         }
       }
@@ -1177,6 +1216,39 @@ export function mountPlanEditor(ctrl) {
     }
     return null;
   }
+  function pickWallAt(ev) {
+    const rec = canvas.getBoundingClientRect();
+    ndc.x = ((ev.clientX - rec.left) / rec.width) * 2 - 1;
+    ndc.y = -((ev.clientY - rec.top) / rec.height) * 2 + 1;
+    if (ctrl.pickWall) {
+      const hit = ctrl.pickWall(ndc);
+      if (hit) return hit;
+    }
+    const at = eventToPlan(ev);
+    if (!at || at.x == null) return null;
+    return nearestWall(at.x, at.y, 1.8);
+  }
+  function pickDoorAt(ev) {
+    const rec = canvas.getBoundingClientRect();
+    ndc.x = ((ev.clientX - rec.left) / rec.width) * 2 - 1;
+    ndc.y = -((ev.clientY - rec.top) / rec.height) * 2 + 1;
+    if (ctrl.pickDoor) {
+      const hit = ctrl.pickDoor(ndc);
+      if (hit) return hit;
+    }
+    const at = eventToPlan(ev);
+    if (!at || at.x == null) return null;
+    return nearestDoor(at.x, at.y, 0.85);
+  }
+  function nearestDoor(x, y, max = 0.85) {
+    const list = ctrl.getWalls()?.door || [];
+    let best = null, bestD = max;
+    list.forEach((w, i) => {
+      const d = distToSeg(x, y, w[0], w[1], w[2], w[3]);
+      if (d < bestD) { bestD = d; best = { kind: 'door', index: i }; }
+    });
+    return best;
+  }
   function nearestWall(x, y, max = 1.2) {
 
     const WS = ctrl.getWalls();
@@ -1190,14 +1262,20 @@ export function mountPlanEditor(ctrl) {
     return best;
   }
   function distToSeg(px, py, x0, y0, x1, y1) {
-    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-    const horiz = Math.abs(x1 - x0) >= Math.abs(y1 - y0);
-    if (horiz) {
-      if (px < Math.min(x0, x1) || px > Math.max(x0, x1)) return Math.hypot(px - cx, py - cy);
-      return Math.abs(py - cy);
+    // distance to the wall rectangle in plan (axis-aligned or a thin angled box)
+    const minx = Math.min(x0, x1), maxx = Math.max(x0, x1);
+    const miny = Math.min(y0, y1), maxy = Math.max(y0, y1);
+    const dx = Math.max(minx - px, 0, px - maxx);
+    const dy = Math.max(miny - py, 0, py - maxy);
+    const lenx = maxx - minx, leny = maxy - miny;
+    if (lenx > 0.3 && leny > 0.3 && Math.min(lenx, leny) > 0.6) {
+      // likely a fat/angled segment: also compare to the centerline
+      const ax = x1 - x0, ay = y1 - y0, l2 = ax * ax + ay * ay || 1;
+      let t = ((px - x0) * ax + (py - y0) * ay) / l2;
+      t = Math.max(0, Math.min(1, t));
+      return Math.min(Math.hypot(dx, dy), Math.hypot(px - (x0 + t * ax), py - (y0 + t * ay)));
     }
-    if (py < Math.min(y0, y1) || py > Math.max(y0, y1)) return Math.hypot(px - cx, py - cy);
-    return Math.abs(px - cx);
+    return Math.hypot(dx, dy);
   }
 
   const api = {
