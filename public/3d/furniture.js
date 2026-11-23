@@ -919,10 +919,12 @@ function buildToilet(g, rec) {
 }
 
 function buildShower(g, rec) {
-  const tile = mat('#e8e6e1', { r: 0.6 });
+  const tileCol = (rec.tile && String(rec.tile).replace(/^wood:/, '')) || '#e8e6e1';
+  const tile = mat(tileCol, { r: 0.62 });
   const glass = new THREE.MeshStandardMaterial({ color: '#cfe6f6', roughness: 0.15, metalness: 0.05, transparent: true, opacity: 0.3 });
   const W = rec.w || 4, D = rec.d || 3.2, H = rec.h || 8;
-  add(g, box(W, 0.08, D), mat('#d5d2cc', { r: 0.7 }), 0, 0.04, 0);
+  const floorCol = (rec.floorTile && String(rec.floorTile).replace(/^wood:/, '')) || '#d5d2cc';
+  add(g, box(W, 0.08, D), mat(floorCol, { r: 0.7 }), 0, 0.04, 0);
   add(g, box(0.08, H, D), tile, -W / 2 + 0.04, H / 2, 0);
   add(g, box(W, H, 0.08), tile, 0, H / 2, -D / 2 + 0.04);
   add(g, box(0.04, H - 0.4, D - 0.1), glass, W / 2 - 0.1, (H - 0.2) / 2, 0);

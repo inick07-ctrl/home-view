@@ -562,8 +562,8 @@ export function closeToHome(opts = {}) {
     const UP = MTN ? '#3f3f3d' : CAB;
     blk(XW + 0.2, YDK + 0.25, XW + 1.4, 35.85, 4.7, 7.9, UP);
     blk(XW + 0.2, 38.45, XW + 1.4, 40.35, 4.7, 7.9, UP);
-    box(UP, XW + 0.2, YDK + 0.25, XW + 1.4, 40.35, 7.9, 8.4);
-    box(MTN ? '#e9e5de' : '#f3f1ec', XW + 0.2, YDK + 0.25, XW + 0.32, 40.35, 3.1, 4.7); // backsplash
+    blk(XW + 0.2, YDK + 0.25, XW + 1.4, 40.35, 7.9, 8.4, UP);
+    blk(XW + 0.2, YDK + 0.25, XW + 0.32, 40.35, 3.1, 4.7, MTN ? '#e9e5de' : '#f3f1ec'); // backsplash
     // great room vault beams (scissor ties) + fan
     for (const y of [32.5, 37.75, 43.0]) box(TIMBER, XD + 0.3, y - 0.3, XGR - 0.3, y + 0.3, 12.6, 13.2, true);
     box(TIMBER, CXR - 0.33, YGR, CXR + 0.33, YK, ridgeZ - 1.3, ridgeZ - 0.4, true);

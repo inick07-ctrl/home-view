@@ -478,7 +478,7 @@ export default {
     // kitchen uppers on the east wall + hood surround; open shelves
     blk(XK - 1.35, 24.0, XK - 0.25, 29.2, 4.7, 8.6, '#3f3f3d');
     blk(XK - 1.35, 32.6, XK - 0.25, 36.9, 4.7, 8.6, '#3f3f3d');
-    box('#e9e5de', XK - 0.37, 24.0, XK - 0.25, 36.9, 3.1, 4.7);
+    blk(XK - 0.37, 24.0, XK - 0.25, 36.9, 3.1, 4.7, '#e9e5de'); // backsplash
     for (const [ya, yb] of [[24.0, 29.2], [32.6, 36.9]]) {             // upper door seams + brass pulls
       const n = Math.round((yb - ya) / 1.5);
       for (let i = 1; i < n; i++) { const y = ya + (i * (yb - ya)) / n; box('#2a2a29', XK - 1.4, y - 0.03, XK - 1.33, y + 0.03, 4.75, 8.55); box('#c9a35a', XK - 1.45, y - 0.15, XK - 1.38, y - 0.11, 5.0, 5.6); }

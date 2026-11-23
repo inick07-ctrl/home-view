@@ -110,12 +110,17 @@ const COLOR_RX = /^(wood:)?#[0-9a-f]{6}$/i;
 function sanitizeFinishes(f) {
   if (!f || typeof f !== 'object') return undefined;
   const out = {};
-  for (const k of ['wall', 'doorInt', 'doorExt']) if (typeof f[k] === 'string' && COLOR_RX.test(f[k])) out[k] = f[k];
+  for (const k of ['wall', 'doorInt', 'doorExt', 'cabinet', 'island']) if (typeof f[k] === 'string' && COLOR_RX.test(f[k])) out[k] = f[k];
   if (typeof f.hardware === 'string' && /^[a-z-]{3,30}$/.test(f.hardware)) out.hardware = f.hardware;
   if (f.rooms && typeof f.rooms === 'object') {
     const r = {};
     for (const [k, v] of Object.entries(f.rooms).slice(0, 200)) if (typeof v === 'string' && COLOR_RX.test(v)) r[String(k).slice(0, 60)] = v;
     if (Object.keys(r).length) out.rooms = r;
+  }
+  if (f.tiles && typeof f.tiles === 'object') {
+    const tiles = {};
+    for (const k of ['backsplash', 'bathFloor', 'shower', 'floor']) if (typeof f.tiles[k] === 'string' && COLOR_RX.test(f.tiles[k])) tiles[k] = f.tiles[k];
+    if (Object.keys(tiles).length) out.tiles = tiles;
   }
   return Object.keys(out).length ? out : undefined;
 }
@@ -127,6 +132,23 @@ export const WALL_PALETTE = [
 export const DOOR_PALETTE = [
   ['White', '#f4f2eb'], ['Black', '#1d1e20'], ['Natural oak', 'wood:#d2a679'], ['Walnut', 'wood:#6b4630'], ['Navy', '#2f3d4c'], ['Sage', '#97a088'], ['Charcoal', '#45474a'],
 ];
+export const CABINET_PALETTE = [
+  ['White', '#f4f1ea'], ['Cream', '#efe4d0'], ['Greige', '#c4b7a6'], ['Sage green', '#7d8b74'],
+  ['Navy', '#2c3a4a'], ['Charcoal', '#3a3b3d'], ['Black', '#1c1c1c'],
+  ['Natural oak', 'wood:#c4a06a'], ['Walnut', 'wood:#5c3a24'],
+];
+export const TILE_PALETTE = [
+  ['White subway', '#eef1f3'], ['Ivory', '#f0e6d4'], ['Soft gray', '#c5c8cc'], ['Warm beige', '#d9cbb8'],
+  ['Carrara marble', '#e8e4dc'], ['Charcoal', '#4a4d50'], ['Navy', '#3a4654'], ['Sage', '#9aa58e'],
+  ['Terracotta', '#c67b5c'], ['Slate', '#6d7378'], ['Black', '#2a2b2d'],
+];
+export function defaultIslandFor(cabinet) {
+  const hex = String(cabinet || '').replace(/^wood:/, '').toLowerCase();
+  if (!hex || !hex.startsWith('#')) return 'wood:#5c3a24';
+  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return lum > 0.45 ? 'wood:#5c3a24' : '#efe4d0';
+}
 
 export function mountPlanEditor(ctrl) {
   if (document.getElementById('editDrawer')) { if (ctrl) Object.assign(mountPlanEditor._ctrl || {}, ctrl); return mountPlanEditor._api; }
@@ -720,7 +742,7 @@ export function mountPlanEditor(ctrl) {
     const fin = ctrl.getFinishes ? ctrl.getFinishes() : {};
     const ok = canEdit();
     const set = (patch) => { pushUndo(); ctrl.setFinishes(patch); persist(); render(); };
-    body.appendChild(el('p', { id: 'editHint', text: ok ? 'Colors apply live. Pick a whole-house wall color, then override single rooms; door colors and the fixture/hardware finish work the same way. Per-door colors: Doors tab. Per-item metal finish: select the item.' : 'View only.' }));
+    body.appendChild(el('p', { id: 'editHint', text: ok ? 'Colors apply live. Pick a whole-house wall color, then override single rooms; door colors, kitchen cabinets, tiles, and the fixture/hardware finish work the same way. Per-door colors: Doors tab. Per-item metal finish: select the item.' : 'View only.' }));
     if (!ok) return;
     body.appendChild(el('h3', { text: 'Wall paint — whole house' }));
     body.appendChild(swatches(WALL_PALETTE, fin.wall, (c) => set({ wall: c }), true));
@@ -753,6 +775,39 @@ export function mountPlanEditor(ctrl) {
       hw.appendChild(b);
     }
     body.appendChild(hw);
+
+    body.appendChild(el('h3', { text: 'Kitchen cabinets' }));
+    body.appendChild(el('small', { text: 'Base cabinets, uppers and the island. Countertops stay as designed.' }));
+    body.appendChild(swatches(CABINET_PALETTE, fin.cabinet, (c) => {
+      const patch = { cabinet: c };
+      if (fin.island) patch.island = fin.island; // keep a two-tone island when the perimeter color changes
+      set(patch);
+    }, true));
+    const toneRow = el('label', { class: 'chk-row' });
+    const tone = el('input', { type: 'checkbox', id: 'twoToneIsland' });
+    tone.checked = !!fin.island;
+    tone.onchange = () => {
+      if (tone.checked) set({ island: fin.island || defaultIslandFor(fin.cabinet) });
+      else set({ island: null });
+    };
+    toneRow.append(tone, document.createTextNode(' Two-tone island (different color from the perimeter cabinets)'));
+    body.appendChild(toneRow);
+    if (fin.island) {
+      body.appendChild(el('label', { text: 'Island color' }));
+      body.appendChild(swatches(CABINET_PALETTE, fin.island, (c) => set({ island: c || defaultIslandFor(fin.cabinet) }), true));
+    }
+
+    body.appendChild(el('h3', { text: 'Tiles' }));
+    body.appendChild(el('small', { text: 'Each area can have its own color. “Default” restores the finish as designed.' }));
+    const setTile = (k, c) => set({ tiles: { [k]: c } });
+    body.appendChild(el('label', { text: 'Kitchen backsplash' }));
+    body.appendChild(swatches(TILE_PALETTE, fin.tiles?.backsplash, (c) => setTile('backsplash', c), true));
+    body.appendChild(el('label', { text: 'Bathroom floor' }));
+    body.appendChild(swatches(TILE_PALETTE, fin.tiles?.bathFloor, (c) => setTile('bathFloor', c), true));
+    body.appendChild(el('label', { text: 'Shower / wall tile' }));
+    body.appendChild(swatches(TILE_PALETTE, fin.tiles?.shower, (c) => setTile('shower', c), true));
+    body.appendChild(el('label', { text: 'Other tiled floors (entry, laundry, mud)' }));
+    body.appendChild(swatches(TILE_PALETTE, fin.tiles?.floor, (c) => setTile('floor', c), true));
   }
 
   function renderWalls(body) {
@@ -1190,7 +1245,7 @@ function buildDrawer() {
     el('button', { type: 'button', 'data-tab': 'rooms', text: 'Rooms' }),
     el('button', { type: 'button', 'data-tab': 'walls', text: 'Walls' }),
     el('button', { type: 'button', 'data-tab': 'doors', text: 'Doors', title: 'Remove, restore, recolor doors; add or resize garage doors' }),
-    el('button', { type: 'button', 'data-tab': 'colors', text: 'Colors', title: 'Wall paint, door colors, fixture & hardware finishes' }),
+    el('button', { type: 'button', 'data-tab': 'colors', text: 'Colors', title: 'Wall paint, doors, cabinets, tiles, fixture & hardware finishes' }),
   );
   d.append(header, tabs, el('div', { id: 'editBody' }), el('div', { id: 'editStatus', text: '' }));
   return d;

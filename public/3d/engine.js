@@ -7,6 +7,7 @@ import REGISTRY from './models/registry.js';
 import { parcelDefaults, lotStats, formatLotArea, worldRings, buildableRings, xfHouse, houseFromWorld } from '../js/parcel.js';
 import { sanitizeWalls, clipCounters, autoFurnish, installFurniture, buildItemMesh, makeItem, itemRect, clearanceHit, isCoveredPorch, isPorchLike, CATALOG as ITEM_CATALOG } from './furniture.js';
 import { mountPlanEditor, cloneWalls, cloneRooms, cloneItems, cloneRoofs, loadLocalLayout, sanitizeLayout } from './plan-editor.js';
+import { createWalkAudio } from './walk-audio.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('c');
@@ -47,6 +48,15 @@ const rnd = (i) => { const x = Math.sin(i * 99.13) * 43758.5453; return x - Math
 const TEX = {
   wood: canvasTex((g, s) => { const n = 8; for (let i = 0; i < n; i++) { const v = 205 + rnd(i) * 22; g.fillStyle = `rgb(${v + 12},${v - 22},${v - 70})`; g.fillRect(0, i * s / n, s, s / n); g.fillStyle = 'rgba(90,60,30,.35)'; g.fillRect(0, i * s / n, s, 1.5); g.fillRect(rnd(i + 7) * s, i * s / n, 1.5, s / n); } }),
   tile: canvasTex((g, s) => { g.fillStyle = '#e7eaed'; g.fillRect(0, 0, s, s); g.strokeStyle = 'rgba(120,130,140,.45)'; g.lineWidth = 2; for (let i = 0; i <= 2; i++) { g.beginPath(); g.moveTo(i * s / 2, 0); g.lineTo(i * s / 2, s); g.moveTo(0, i * s / 2); g.lineTo(s, i * s / 2); g.stroke(); } }),
+  subway: canvasTex((g, s) => {
+    g.fillStyle = '#f3f5f6'; g.fillRect(0, 0, s, s);
+    g.strokeStyle = 'rgba(100,106,112,.42)'; g.lineWidth = 3;
+    const h = s / 4, w = s / 2;
+    for (let row = 0; row < 5; row++) {
+      const off = (row % 2) * (w / 2);
+      for (let col = -1; col < 3; col++) g.strokeRect(col * w + off, row * h, w, h);
+    }
+  }),
   concrete: canvasTex((g, s) => { g.fillStyle = '#b9bbbd'; g.fillRect(0, 0, s, s); for (let i = 0; i < 1400; i++) { const c = rnd(i) > .5 ? 255 : 60; g.fillStyle = `rgba(${c},${c},${c},.08)`; g.fillRect(rnd(i + 1) * s, rnd(i + 2) * s, 2, 2); } g.strokeStyle = 'rgba(80,80,80,.35)'; g.strokeRect(0, 0, s, s); }),
   porch: canvasTex((g, s) => { const n = 6; for (let i = 0; i < n; i++) { const v = 170 + rnd(i + 3) * 18; g.fillStyle = `rgb(${v + 10},${v - 32},${v - 80})`; g.fillRect(i * s / n, 0, s / n, s); g.fillStyle = 'rgba(50,30,10,.55)'; g.fillRect(i * s / n, 0, 2, s); } }),
   gym: canvasTex((g, s) => { g.fillStyle = '#8fa9c7'; g.fillRect(0, 0, s, s); g.strokeStyle = 'rgba(40,60,90,.35)'; g.lineWidth = 2; g.strokeRect(1, 1, s - 2, s - 2); }),
@@ -141,9 +151,9 @@ const TEX = {
   }, 256),
 };
 TEX.grass.repeat.set(90, 90);
-const TEXSCALE = { whiteBoard: 6, ledgestone: 5, wood: 6, tile: 4, concrete: 10, porch: 4, gym: 4, stone: 3, terrace: 6, paver: 6, board: 4, brick: 5, metal: 6, shingle: 4, darkShingle: 5, limewash: 8, palePlaster: 10, lightOak: 5, slate: 8, lightStone: 3 };
+const TEXSCALE = { whiteBoard: 6, ledgestone: 5, wood: 6, tile: 4, subway: 3, concrete: 10, porch: 4, gym: 4, stone: 3, terrace: 6, paver: 6, board: 4, brick: 5, metal: 6, shingle: 4, darkShingle: 5, limewash: 8, palePlaster: 10, lightOak: 5, slate: 8, lightStone: 3 };
 const MAT = {};
-for (const k of ['wood', 'tile', 'concrete', 'porch', 'gym', 'stone', 'terrace', 'paver']) MAT[k] = new THREE.MeshLambertMaterial({ map: TEX[k] });
+for (const k of ['wood', 'tile', 'subway', 'concrete', 'porch', 'gym', 'stone', 'terrace', 'paver']) MAT[k] = new THREE.MeshLambertMaterial({ map: TEX[k] });
 MAT.brick = new THREE.MeshStandardMaterial({ map: TEX.brick, roughness: .95 });
 MAT.board = new THREE.MeshStandardMaterial({ map: TEX.board, roughness: .85 });
 MAT.whiteBoard = new THREE.MeshStandardMaterial({ map: TEX.whiteBoard, roughness: .82 });
@@ -725,9 +735,16 @@ function buildFloors() {
     const [, , type, a, b, c, d, o = {}] = r;
     if (o.noFloor) continue;
     const ft = (st.floors && st.floors[type]) || type;
-    for (const p of rectMinus([a, b, c, d], holes)) (byType[ft] ||= []).push(planeRect(p[0], p[1], p[2], p[3], 0.02, TEXSCALE[ft] || TEXSCALE[type] || 4));
+    const tint = tileTintFor(r);
+    const key = ft + '|' + (tint || '');
+    const bucket = (byType[key] ||= { ft, tint, geos: [] });
+    for (const p of rectMinus([a, b, c, d], holes)) bucket.geos.push(planeRect(p[0], p[1], p[2], p[3], 0.02, TEXSCALE[ft] || TEXSCALE[type] || 4));
   }
-  for (const [type, geos] of Object.entries(byType)) { const m = mesh(geos, MAT[type] || MAT.wood, false); if (m) floorGroup.add(m); }
+  for (const { ft, tint, geos } of Object.values(byType)) {
+    const base = MAT[ft] || MAT.wood;
+    const mat = tint ? tintedMat(base, finishHex(tint)) : base;
+    const m = mesh(geos, mat, false); if (m) floorGroup.add(m);
+  }
 }
 // walk-through collision for furniture & stairs (rugs, lights, roof/yard items excluded)
 let itemSolids = [], itemDoors = [];
@@ -761,8 +778,10 @@ function refreshItems() {
   const roofCol = mt.roof || ({ metal: '#2b2c2e', darkShingle: '#2e2f31', shingle: '#5d5952' }[mt.roofTex] || '#3a3b3d');
   const ctx = { Wx, Wz, ceiling: (M?.wallH || 9), house: { ext: mt.ext || '#e9e5dc', trim: mt.trim || (new THREE.Color(mt.ext || '#ffffff').getHSL({}).l < 0.35 ? '#1d1e20' : '#f4f2ec'), roof: roofCol, metal: mt.roofTex === 'metal' } };
   for (const rec of currentItems) {
-    const mesh = buildItemMesh(rec, ctx);
+    const painted = recWithFinishes(rec);
+    const mesh = buildItemMesh(painted, ctx);
     if (!mesh) continue;
+    if (painted.woodGrain) applyWoodGrain(mesh);
     applyItemHardware(rec, mesh);
     if (mesh.userData.mount === 'roof') mesh.visible = !!roofOn;
     itemsGroup.add(mesh);
@@ -1198,17 +1217,115 @@ function applyItemHardware(rec, mesh) {
     }
   });
 }
+function finishHex(c) { return typeof c === 'string' ? c.replace(/^wood:/i, '') : c; }
+function isWoodFinish(c) { return typeof c === 'string' && /^wood:/i.test(c); }
+let archFinishMeshes = [];
+const tintMatCache = {};
+function tintedMat(base, hex, mapOverride) {
+  const key = (base.uuid || 'm') + '|' + hex + '|' + (mapOverride ? 'x' : '');
+  if (tintMatCache[key]) return tintMatCache[key];
+  const m = base.clone();
+  m.color = new THREE.Color(hex);
+  if (mapOverride) { m.map = mapOverride; m.map.wrapS = m.map.wrapT = THREE.RepeatWrapping; }
+  return tintMatCache[key] = m;
+}
+function tileTintFor(room) {
+  const typ = room[2], tiles = finishes.tiles || {};
+  if (typ !== 'tile' && typ !== 'stone') return null;
+  const n = (room[0] || '').toLowerCase();
+  if (/bath|shower|powder|\bwc\b|toilet|spa/.test(n)) return tiles.bathFloor || null;
+  if (/kitchen|pantry/.test(n)) return tiles.floor || null;
+  return tiles.floor || null;
+}
+function classifyArch(a, b, c, d, h0, h1, color, o = {}) {
+  if (o.roof || o.chimney || o.role === 'structure' || o.role === 'trim') return null;
+  const col = String(color || '');
+  if (['glass', 'water', 'lightOak', 'limewash', 'palePlaster', 'slate', 'lightStone', 'wood', 'concrete', 'grass'].includes(col)) return null;
+  const w = Math.abs(c - a), dep = Math.abs(d - b), h = (h1 || 0) - (h0 || 0);
+  if (w < 0.08 && dep < 0.08) return null; // placeholder custom() blocks
+  const room = roomAtPt((a + c) / 2, (b + d) / 2, rr => !(rr[7]?.outside));
+  if (!room) return null;
+  const name = (room[0] || '').toLowerCase();
+  const thin = Math.min(w, dep) <= 0.45;
+  const isKit = /kitchen|pantry/.test(name);
+  const isBath = /bath|shower|powder|\bwc\b|toilet|spa/.test(name);
+  if (isKit && (h0 || 0) >= 2.85 && (h1 || 0) <= 5.6 && thin && h >= 0.8) return 'backsplash';
+  if (isKit && Math.min(w, dep) >= 0.7 && Math.min(w, dep) <= 2.2 && Math.max(w, dep) >= 1.2) {
+    if ((h0 || 0) >= 3.8 && (h1 || 0) <= 9.8 && h >= 0.35) return 'cabinet';
+    if ((h0 || 0) <= 0.35 && (h1 || 0) >= 2.5 && (h1 || 0) <= 9 && h >= 2) return 'cabinet';
+  }
+  if (isBath && thin && (h0 || 0) <= 0.5 && (h1 || 0) >= 5 && h >= 4 && !/glass|#cfe6|#e8f0/i.test(col)) return 'shower';
+  return null;
+}
+function recWithFinishes(rec) {
+  const out = { ...rec };
+  if (/^(counter|island|cabinet)$/.test(rec.type)) {
+    const col = rec.type === 'island' ? (finishes.island || finishes.cabinet) : finishes.cabinet;
+    if (col) {
+      const hex = finishHex(col);
+      out.carcass = hex; out.door = hex; out.woodGrain = isWoodFinish(col);
+    }
+  }
+  if (rec.type === 'shower') {
+    if (finishes.tiles?.shower) out.tile = finishHex(finishes.tiles.shower);
+    if (finishes.tiles?.bathFloor) out.floorTile = finishHex(finishes.tiles.bathFloor);
+  }
+  return out;
+}
+function applyWoodGrain(mesh) {
+  if (!mesh) return;
+  mesh.traverse(o => {
+    if (!o.isMesh || !o.material || Array.isArray(o.material)) return;
+    const m = o.material;
+    if ((m.metalness || 0) > 0.2 || (m.roughness || 1) < 0.6) return;
+    if (m.transparent) return;
+    const nm = m.clone();
+    nm.map = TEX.wood;
+    if (nm.map) { nm.map.wrapS = nm.map.wrapT = THREE.RepeatWrapping; }
+    o.material = nm;
+  });
+}
+function paintArchMesh(m, kind, color) {
+  if (!m) return;
+  if (!m.userData.finishOrig) m.userData.finishOrig = m.material;
+  if (!color) { m.material = m.userData.finishOrig; return; }
+  const hex = finishHex(color);
+  if (kind === 'backsplash') m.material = tintedMat(MAT.subway || MAT.tile, hex, TEX.subway || TEX.tile);
+  else if (kind === 'shower') m.material = tintedMat(MAT.tile, hex, TEX.tile);
+  else {
+    const base = m.userData.finishOrig.clone();
+    base.color = new THREE.Color(hex);
+    if (isWoodFinish(color)) { base.map = TEX.wood; if (base.map) { base.map.wrapS = base.map.wrapT = THREE.RepeatWrapping; } }
+    else if (base.map && base.map === TEX.wood) base.map = null;
+    m.material = base;
+  }
+}
+function applyArchFinishes() {
+  for (const m of archFinishMeshes) {
+    const kind = m.userData.finishKind;
+    if (kind === 'cabinet') paintArchMesh(m, kind, finishes.cabinet);
+    else if (kind === 'backsplash') paintArchMesh(m, kind, finishes.tiles?.backsplash);
+    else if (kind === 'shower') paintArchMesh(m, kind, finishes.tiles?.shower);
+  }
+}
 function setFinishesOp(patch) {
   const next = { ...finishes, ...patch };
   if (patch.rooms) next.rooms = { ...(finishes.rooms || {}), ...patch.rooms };
+  if (patch.tiles) next.tiles = { ...(finishes.tiles || {}), ...patch.tiles };
   for (const k of Object.keys(next)) if (next[k] == null || next[k] === '') delete next[k];
   if (next.rooms) { for (const k of Object.keys(next.rooms)) if (!next.rooms[k]) delete next.rooms[k]; if (!Object.keys(next.rooms).length) delete next.rooms; }
+  if (next.tiles) { for (const k of Object.keys(next.tiles)) if (!next.tiles[k]) delete next.tiles[k]; if (!Object.keys(next.tiles).length) delete next.tiles; }
   const doorsChanged = next.doorInt !== finishes.doorInt || next.doorExt !== finishes.doorExt;
   const hwChanged = next.hardware !== finishes.hardware;
+  const cabChanged = next.cabinet !== finishes.cabinet || next.island !== finishes.island;
+  const tilesChanged = JSON.stringify(next.tiles || {}) !== JSON.stringify(finishes.tiles || {});
   finishes = next;
   applyWallPaint();
   if (doorsChanged) rebuildDoorsOnly();
-  if (hwChanged) { applyHardwareDoors(); refreshItems(); }
+  if (hwChanged) applyHardwareDoors();
+  if (cabChanged || tilesChanged || hwChanged) refreshItems();
+  if (tilesChanged) buildFloors();
+  applyArchFinishes();
   captureLayout();
   return finishes;
 }
@@ -1814,6 +1931,7 @@ function buildModel(model, opts = {}) {
     },
   };
   itemsGroup = new THREE.Group(); itemsGroup.name = 'items'; root.add(itemsGroup);
+  archFinishMeshes = [];
   highlightGroup = new THREE.Group(); highlightGroup.name = 'highlight'; highlightGroup.renderOrder = 2; root.add(highlightGroup);
   const detected = {};
   installFurniture(kit, { rooms: M.rooms, WS, detected, Wx, Wz, itemsGroup, ceiling: H });
@@ -1829,6 +1947,10 @@ function buildModel(model, opts = {}) {
       if (inDeleted(cx, cy)) return new THREE.Group();
       const m = _kitBlock(a, b, c, d, z0, z1, color, opts);
       if (m && opts && Array.isArray(opts.chimney)) { m.userData.chimneyAt = opts.chimney; chimneyMeshes.push(m); }
+      if (m) {
+        const kind = classifyArch(a, b, c, d, z0, z1, color, opts || {});
+        if (kind) { m.userData.finishKind = kind; archFinishMeshes.push(m); }
+      }
       return m;
     };
   }
@@ -1887,6 +2009,7 @@ function buildModel(model, opts = {}) {
   activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])) };
   buildFloors();
   refreshItems();
+  applyArchFinishes();
   ensureEditor();
   syncAreaUi(M);
 
@@ -2233,7 +2356,7 @@ function setMode(m, instant = false) {
     amb.intensity = w.amb; camera.near = 0.1; camera.updateProjectionMatrix();
     setRoof(w.roofOn); setCut(w.cutOn); setLabels(w.labelsOn);
   }
-  if (mode === 'walk' && m !== 'walk') exitWalk();
+  if (mode === 'walk' && m !== 'walk') { exitWalk(); walkAudio.exitWalk(); }
   mode = m;
   document.body.classList.toggle('walk-pad', m === 'walk' && typeof isTouch !== 'undefined' && isTouch);
   setBtn('bOrbit', m === 'orbit'); setBtn('bTop', m === 'top'); setBtn('bWalk', m === 'walk');
@@ -2259,6 +2382,7 @@ function setMode(m, instant = false) {
     player.set(w[0], w[1]); yaw = (s[2] || 0) - THREE.MathUtils.degToRad(hp.yaw); pitch = -0.05;
     $('cross').style.display = 'block';
     if (isTouch) $('pad').style.display = 'grid'; else $('walkmsg').style.display = 'block';
+    walkAudio.enterWalk();
   }
 }
 function setRoof(v) {
@@ -2599,6 +2723,19 @@ function setAutoDoors(v) {
   syncDoorsBtn();
 }
 if ($('bDoors')) { syncDoorsBtn(); $('bDoors').onclick = () => setAutoDoors(!autoDoors); }
+const walkAudio = createWalkAudio();
+function walkAudioState() {
+  const hp = housePose();
+  const fireplaces = (currentItems || []).filter(isFireplaceItem).map((it) => {
+    const w = xfHouse(Wx(it.x), Wz(it.y), hp.x, hp.z, hp.yaw);
+    return { x: w[0], z: w[1], fuel: fuelOf(it) };
+  });
+  const garageDoors = (gdoors || []).map((g, i) => {
+    const w = xfHouse(Wx(g.cx), Wz(g.cy), hp.x, hp.z, hp.yaw);
+    return { id: i, x: w[0], z: w[1], open: g.hold != null ? g.hold : g.open };
+  });
+  return { mode, player, yaw, garageDoors, fireplaces };
+}
 
 // ---------- walk-through ----------
 const EYE = 5.5, RADIUS = 0.75, player = new THREE.Vector2();
@@ -2769,7 +2906,7 @@ function resolveAsset(src) {
   return src;
 }
 function setModelUi(engine, hasRoof = true) {
-  for (const id of ['bLabels', 'bCut', 'bPlan', 'bEdit', 'bItems', 'bDoors', 'bWindows']) if ($(id)) $(id).style.display = engine ? '' : 'none';
+  for (const id of ['bLabels', 'bCut', 'bPlan', 'bEdit', 'bItems', 'bDoors', 'bWindows', 'bSound']) if ($(id)) $(id).style.display = engine ? '' : 'none';
   if ($('editPlanBtn')) $('editPlanBtn').style.display = engine ? 'inline-flex' : 'none';
   if ($('bRoof')) $('bRoof').style.display = engine || hasRoof ? '' : 'none';
   if (engine && $('bPlan')) $('bPlan').style.display = M.planImage ? '' : 'none';
@@ -2924,6 +3061,7 @@ function loop() {
   const dt = Math.min(clock.getDelta(), 0.05);
   if (mode === 'walk') walkStep(dt); else orbit.update();
   updateDoors(dt);
+  walkAudio.update(walkAudioState());
   updateNorth();
   if (labelsOn && labels) for (const o of labels.children) {
     const wp = o.getWorldPosition(new THREE.Vector3());
@@ -3049,6 +3187,7 @@ if (SRC.kind === 'embed' && window.parent && window.parent !== window) {
   try { window.parent.postMessage({ type: 'peakstead-builder-ready' }, location.origin); } catch {}
 }
 
+window.__walkAudio = walkAudio.debug;
 window.app = {
   loadExample, loadJsonModel, scene, setMode, setRoof, setLabels, setCut, setPlan, setStyle, camera, orbit, player,
   setLook: (y, p) => { yaw = y; pitch = p; }, setPlayer: (fx, fy) => player.set(Wx(fx), Wz(fy)), current: null,
@@ -3072,12 +3211,26 @@ window.app = {
   setAutoDoors,
   getAutoDoors: () => autoDoors,
   getDoors: () => doors.map(d => ({ cx: d.cx, cy: d.cy, ext: d.ext, leaves: d.leaves.length, open: +d.open.toFixed(2) })),
-  getGarageDoors: () => gdoors.map(g => ({ cx: g.cx, cy: g.cy, width: +(g.half * 2).toFixed(2), open: +g.open.toFixed(2) })),
+  getGarageDoors: () => gdoors.map(g => ({ cx: g.cx, cy: g.cy, width: +(g.half * 2).toFixed(2), open: +g.open.toFixed(2), hold: g.hold })),
   holdGarage: (i, v) => { const g = gdoors[i]; if (g) { g.hold = v == null ? null : +v; poseGarage(g); } },
   getItemDoors: () => itemDoors.map(d => +d.open.toFixed(2)),
   getWindows: () => wins.map(w => ({ type: w.type, open: +w.open.toFixed(2) })),
   setWindowsMode, doorList, removeDoor: removeDoorOp, restoreDoor: restoreDoorOp, garageSize: garageSizeOp, addGarageDoor: addGarageDoorOp,
   removeRoomByName, getFinishes: () => finishes, setFinishes: setFinishesOp, getWalls: () => M?.walls,
+  getWalkAudio: () => ({
+    muted: !walkAudio.isEnabled(), unlocked: !!walkAudio.debug.unlocked(), inWalk: !!walkAudio.debug.inWalk(),
+    fire: { ...(walkAudio.debug.fire || {}) }, garage: (walkAudio.debug.garage || []).map((g) => ({ ...g })),
+  }),
+  setWalkSound: (v) => walkAudio.setEnabled(!!v),
+  getWalkPos: () => ({ x: player.x, y: player.y }),
+  setWalkPos: (x, z) => { player.x = +x; player.y = +z; walkVel.x = 0; walkVel.z = 0; if (mode === 'walk') camera.position.set(+x, EYE, +z); },
+  setWalkPlan: (fx, fy) => {
+    const hp = housePose();
+    const w = xfHouse(Wx(fx), Wz(fy), hp.x, hp.z, hp.yaw);
+    player.x = w[0]; player.y = w[1]; walkVel.x = 0; walkVel.z = 0;
+    if (mode === 'walk') camera.position.set(w[0], EYE, w[1]);
+    return { x: w[0], y: w[1] };
+  },
   getLayout: () => captureLayout(),
   dbg: () => ({ roof, root, ceilings, wallsFull, M, itemsGroup }),
 };
