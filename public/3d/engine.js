@@ -8,6 +8,7 @@ import { parcelDefaults, lotStats, formatLotArea, worldRings, buildableRings, xf
 import { sanitizeWalls, clipCounters, autoFurnish, installFurniture, buildItemMesh, makeItem, itemRect, clearanceHit, isCoveredPorch, isPorchLike, CATALOG as ITEM_CATALOG } from './furniture.js';
 import { mountPlanEditor, cloneWalls, cloneRooms, cloneItems, cloneRoofs, loadLocalLayout, sanitizeLayout } from './plan-editor.js';
 import { createWalkAudio } from './walk-audio.js';
+import { mountPlanExport, setPlan2d, openExportDialog, exportPlansPdf, buildPlanSvgSet } from './plan-export.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('c');
@@ -729,7 +730,7 @@ function wallsOnRoom(WS, room, slack = 0.6) {
 }
 function translateSeg(w, dx, dy) { w[0] += dx; w[1] += dy; w[2] += dx; w[3] += dy; }
 function captureLayout() {
-  activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])) };
+  activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])), planInfo: (activeLayout && activeLayout.planInfo) ? { ...activeLayout.planInfo } : undefined };
   return activeLayout;
 }
 function rebuildPlan() {
@@ -2177,7 +2178,7 @@ function buildModel(model, opts = {}) {
       }
     }
   } else currentItems = cloneItems(defaultItems);
-  activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])) };
+  activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])), planInfo: (activeLayout && activeLayout.planInfo) ? { ...activeLayout.planInfo } : undefined };
   buildFloors();
   refreshItems();
   applyArchFinishes();
@@ -3150,7 +3151,7 @@ function resolveAsset(src) {
   return src;
 }
 function setModelUi(engine, hasRoof = true) {
-  for (const id of ['bLabels', 'bCut', 'bPlan', 'bEdit', 'bItems', 'bDoors', 'bWindows', 'bSound']) if ($(id)) $(id).style.display = engine ? '' : 'none';
+  for (const id of ['bLabels', 'bCut', 'bPlan', 'bEdit', 'bItems', 'bDoors', 'bWindows', 'bSound', 'bPlan2d', 'bExportPlans']) if ($(id)) $(id).style.display = engine ? '' : 'none';
   if ($('editPlanBtn')) $('editPlanBtn').style.display = engine ? 'inline-flex' : 'none';
   if ($('bRoof')) $('bRoof').style.display = engine || hasRoof ? '' : 'none';
   if (engine && $('bPlan')) $('bPlan').style.display = M.planImage ? '' : 'none';
@@ -3482,3 +3483,48 @@ if (SRC.kind === 'example') await loadExample(params.get('ex') || REGISTRY[0].id
 else if (SRC.kind === 'draft') loadBuilderDraft();
 else if (SRC.kind !== 'embed') await loadProjectModel();
 loop();
+
+
+function getPlanSnapshot() {
+  const info = (activeLayout && activeLayout.planInfo) ? { ...activeLayout.planInfo } : undefined;
+  const stairTypes = new Set(Object.entries(ITEM_CATALOG).filter(([, v]) => v && v.stair).map(([k]) => k));
+  const outbuilding = new Set(Object.entries(ITEM_CATALOG).filter(([, v]) => v && (v.outbuilding || v.category === 'outbuilding')).map(([k]) => k));
+  const parcel = siteCfg.parcel ? parcelDefaults(siteCfg.parcel) : null;
+  let lot = null;
+  if (parcel) {
+    try { lot = lotStats(parcel, M, { cx: CX, cz: CZ, bw: BW, bh: BH }); } catch (e) { console.warn('lot stats', e); }
+  }
+  return {
+    id: (M && (M.id || M.name)) || currentId || 'plan',
+    exampleId: currentId,
+    title: (M && (M.title || M.name)) || 'Untitled plan',
+    subtitle: (M && M.subtitle) || '',
+    name: (M && (M.name || M.title)) || '',
+    rooms: M?.rooms || [],
+    walls: M?.walls || { ext: [], int: [], win: [], door: [] },
+    roofs: M?.roofs || [],
+    items: currentItems || [],
+    finishes: finishes || {},
+    areas: M ? modelAreas(M) : { heated: 0, garage: 0, porch: 0 },
+    wallH: M?.wallH || 9,
+    doorList: typeof doorList === 'function' ? doorList() : [],
+    front: (parcel && parcel.front) || 's',
+    parcel,
+    lot,
+    getLot: () => lot,
+    src: SRC,
+    planInfo: info,
+    stairTypes,
+    itemTypes: { outbuilding },
+    onPlanInfo: (rec) => {
+      if (!activeLayout) captureLayout();
+      if (activeLayout) activeLayout.planInfo = rec;
+    },
+  };
+}
+window.app.getPlanSnapshot = getPlanSnapshot;
+window.app.setPlan2d = setPlan2d;
+window.app.openExportDialog = openExportDialog;
+window.app.exportPlansPdf = exportPlansPdf;
+window.app.buildPlanSvgSet = buildPlanSvgSet;
+mountPlanExport(getPlanSnapshot);

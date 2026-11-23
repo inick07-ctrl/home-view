@@ -103,8 +103,19 @@ export function sanitizeLayout(raw) {
   const finishes = sanitizeFinishes(raw.finishes);
   const deleted = Array.isArray(raw.deleted) ? raw.deleted.slice(0, 100).filter((d) => d && Array.isArray(d.rect) && d.rect.length === 4 && d.rect.every(Number.isFinite))
     .map((d) => ({ name: String(d.name || 'Room').slice(0, 60), rect: d.rect.slice(), cat: ['heated', 'garage', 'porch'].includes(d.cat) ? d.cat : 'heated', area: +d.area || 0 })) : undefined;
-  if (!items && !rooms && !walls && !roofs && !finishes) return null;
-  return { version: Math.max(1, Math.min(3, Math.floor(+raw.version) || 1)), items, rooms, walls, roofs, finishes, deleted };
+  let planInfo;
+  if (raw.planInfo && typeof raw.planInfo === 'object') {
+    planInfo = {
+      project: String(raw.planInfo.project || '').slice(0, 80),
+      address: String(raw.planInfo.address || '').slice(0, 120),
+      owner: String(raw.planInfo.owner || '').slice(0, 80),
+      revision: String(raw.planInfo.revision || '0').slice(0, 12),
+      size: ['arch-d', 'tabloid', 'letter'].includes(raw.planInfo.size) ? raw.planInfo.size : 'tabloid',
+      schedule: raw.planInfo.schedule !== false,
+    };
+  }
+  if (!items && !rooms && !walls && !roofs && !finishes && !planInfo) return null;
+  return { version: Math.max(1, Math.min(3, Math.floor(+raw.version) || 1)), items, rooms, walls, roofs, finishes, deleted, planInfo };
 }
 const COLOR_RX = /^(wood:)?#[0-9a-f]{6}$/i;
 function sanitizeFinishes(f) {
@@ -189,6 +200,7 @@ export function mountPlanEditor(ctrl) {
       roofs: cloneRoofs(ctrl.getRoofs ? ctrl.getRoofs() : []),
       finishes: JSON.parse(JSON.stringify(ctrl.getFinishes ? ctrl.getFinishes() : {})),
       deleted: JSON.parse(JSON.stringify(ctrl.getDeleted ? ctrl.getDeleted() : [])),
+      planInfo: (ctrl.getLayout && ctrl.getLayout()?.planInfo) || (typeof window !== 'undefined' && window.app?.getPlanSnapshot?.()?.planInfo) || undefined,
     };
   }
   function pushUndo() {
