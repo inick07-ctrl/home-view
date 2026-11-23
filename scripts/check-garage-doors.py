@@ -7,6 +7,11 @@ above it (full-height opening), that undo/restore brings the header back,
 that a saved-layout reload keeps the opening full-height, and that
 fill-with-wall still produces a solid wall.
 
+Also asserts that removing an interior wall that hosts a door (wall alone,
+or door-then-wall) leaves no door, frame, trim, or wall geometry in that
+footprint above the floor, and that undo / applyLayout restores the wall
+and its openings.
+
 Usage:
   python3 scripts/check-garage-doors.py [--url http://127.0.0.1:3000] [--shots /workspace/shots]
 """
@@ -398,6 +403,87 @@ def check_door_headers(page, url, mid, bust):
     return out
 
 
+
+def check_host_wall_openings(page, url, mid, bust):
+    """Remove each interior wall that hosts a door, in both orders."""
+    out = {"ok": True, "errors": [], "steps": [], "nHosts": 0}
+    load_model(page, url, mid, bust + 800)
+    ready = page.evaluate("() => !!(window.app && window.app.removeWall && window.app.probeFootprintClear && window.app.openingHostedByWall)")
+    if not ready:
+        out["ok"] = False
+        out["errors"].append({"step": "host-walls", "issues": ["removeWall/probeFootprintClear not available"]})
+        return out
+    res = page.evaluate(
+        r"""() => {
+      const hosted = window.app.openingHostedByWall;
+      const layout0 = window.app.getLayout();
+      const walls0 = window.app.getWalls();
+      const hosts = [];
+      (walls0.int || []).forEach((w, i) => {
+        const doorIdx = [];
+        const openings = [w.slice()];
+        (walls0.door || []).forEach((d, j) => {
+          if (hosted(d, w)) { doorIdx.push(j); openings.push(d.slice()); }
+        });
+        (walls0.win || []).forEach((win) => { if (hosted(win, w)) openings.push(win.slice()); });
+        if (doorIdx.length) hosts.push({ i, doorIdx, wall: w.slice(), openings });
+      });
+      const issues = [];
+      const doorStillAt = (rec) => {
+        const doors = (window.app.getWalls().door || []);
+        const cx = (rec[0] + rec[2]) / 2, cy = (rec[1] + rec[3]) / 2;
+        return doors.some((d) => Math.abs(((d[0] + d[2]) / 2) - cx) < 0.2 && Math.abs(((d[1] + d[3]) / 2) - cy) < 0.2);
+      };
+      const wallBack = (h) => {
+        const w = ((window.app.getWalls().int || [])[h.i]) || null;
+        return !!(w && Math.abs(w[0] - h.wall[0]) < 0.08 && Math.abs(w[1] - h.wall[1]) < 0.08
+          && Math.abs(w[2] - h.wall[2]) < 0.08 && Math.abs(w[3] - h.wall[3]) < 0.08);
+      };
+      const doorsBack = (h) => h.doorIdx.every((j) => (window.app.getWalls().door || [])[j]);
+      const run = (label, h, before) => {
+        if (!window.app.removeWall('int', h.i)) issues.push(`${label} int[${h.i}]: removeWall failed`);
+        const p = window.app.probeFootprintClear(h.openings.slice(1), { kinds: ['door-trim', 'trim'] });
+        if (p && p.clear === false) {
+          issues.push(`${label} int[${h.i}]: geometry still in the removed wall/opening footprint (${p.nHits} hits)`);
+        }
+        for (const rec of h.openings.slice(1, 1 + h.doorIdx.length)) {
+          if (doorStillAt(rec)) issues.push(`${label} int[${h.i}]: hosted door record still present`);
+        }
+        const removedLayout = window.app.getLayout();
+        window.app.applyLayout(before);
+        if (!wallBack(h) || !doorsBack(h)) issues.push(`${label} int[${h.i}]: undo did not restore the wall and its openings`);
+        return removedLayout;
+      };
+      for (const h of hosts) {
+        window.app.applyLayout(layout0);
+        const removedLayout = run('wall-alone', h, layout0);
+        window.app.applyLayout(layout0);
+        for (const j of h.doorIdx) window.app.removeDoor(j, 'opening');
+        run('door-then-wall', h, layout0);
+        // Saved-layout reload of a wall-alone remove should stay clean.
+        if (removedLayout) {
+          window.app.applyLayout(layout0);
+          window.app.applyLayout(removedLayout);
+          const p = window.app.probeFootprintClear(h.openings.slice(1), { kinds: ['door-trim', 'trim'] });
+          if (p && p.clear === false) issues.push(`reload int[${h.i}]: leftover geometry after saved-layout reload (${p.nHits} hits)`);
+          for (const rec of h.openings.slice(1, 1 + h.doorIdx.length)) {
+            if (doorStillAt(rec)) issues.push(`reload int[${h.i}]: hosted door record came back on reload`);
+          }
+        }
+      }
+      window.app.applyLayout(layout0);
+      return { nHosts: hosts.length, nIssues: issues.length, issues };
+    }"""
+    )
+    out["nHosts"] = res.get("nHosts") or 0
+    issues = res.get("issues") or []
+    out["steps"].append({"label": "host-walls", "nHosts": out["nHosts"], "issues": issues})
+    if issues:
+        out["ok"] = False
+        out["errors"].append({"step": "host-walls", "issues": issues})
+    return out
+
+
 def wait_app(page, timeout=60000):
     page.wait_for_function("() => window.app && window.app.getGarageDoors && window.app.garageSize && window.app.getRooms", timeout=timeout)
     page.wait_for_timeout(400)
@@ -490,6 +576,15 @@ def main():
                 if not header["ok"]:
                     row["ok"] = False
                     row["errors"].extend(header["errors"])
+
+                # Removing an interior wall that hosts a door must take the
+                # door, frame, trim, and returns with it (both orders).
+                hostw = check_host_wall_openings(page, args.url, mid, bust)
+                row["nHostWalls"] = hostw.get("nHosts")
+                row["steps"].extend(hostw.get("steps") or [])
+                if not hostw["ok"]:
+                    row["ok"] = False
+                    row["errors"].extend(hostw["errors"])
 
                 # Remove each garage door: the opener (motor, rails, tracks, hangers)
                 # must disappear with it, come back on restore, and stay gone after a

@@ -1103,7 +1103,7 @@ function shootBandAt(cx, cy, horiz, y, halfThick) {
   const rc = new THREE.Raycaster(origin, dir, 0, span);
   const hits = rc.intersectObjects(collectHeaderTargets(), false);
   const h0 = hits[0];
-  return { hit: hits.length > 0, dist: h0 ? h0.distance : null, name: h0 ? (h0.object.name || h0.object.userData?.finishKind || h0.object.userData?.kind || '') : '' };
+  return { hit: hits.length > 0, dist: h0 ? h0.distance : null, name: h0 ? (h0.object.name || h0.object.userData?.finishKind || h0.object.userData?.kind || '') : '', obj: h0 ? h0.object : null };
 }
 function probeDoorHeader(i) {
   const d = M?.walls?.door?.[i]; if (!d) return null;
@@ -1859,18 +1859,144 @@ function addDoorwayOp(kind, index) {
   else M.walls.door.push([w[0], mid - half, w[2], mid + half, 7, w[4] || null, kind === 'ext' ? 1 : 0]);
   rebuildPlan();
 }
+function openingHostedByWall(opening, wall, pad = 0.35) {
+  // Same centerline (tight, so a parallel face-touching wall or a
+  // perpendicular T-wall is not a host) and overlapping or abutting
+  // along that line. Short thick stubs/piers still match because we
+  // do not infer orientation from length vs thickness.
+  if (!opening || !wall) return false;
+  const ox0 = Math.min(opening[0], opening[2]), ox1 = Math.max(opening[0], opening[2]);
+  const oy0 = Math.min(opening[1], opening[3]), oy1 = Math.max(opening[1], opening[3]);
+  const wx0 = Math.min(wall[0], wall[2]), wx1 = Math.max(wall[0], wall[2]);
+  const wy0 = Math.min(wall[1], wall[3]), wy1 = Math.max(wall[1], wall[3]);
+  const overlapX = Math.min(ox1, wx1) + pad >= Math.max(ox0, wx0);
+  const overlapY = Math.min(oy1, wy1) + pad >= Math.max(oy0, wy0);
+  const midY = Math.abs(((oy0 + oy1) / 2) - ((wy0 + wy1) / 2));
+  const midX = Math.abs(((ox0 + ox1) / 2) - ((wx0 + wx1) / 2));
+  if (midY <= 0.16 && overlapX) return true;
+  if (midX <= 0.16 && overlapY) return true;
+  return false;
+}
+function openingHasHost(opening, WS, pad = 0.35) {
+  // Looser than openingHostedByWall: used to drop truly isolated leftover
+  // openings after their wall is gone, without deleting catalog doors whose
+  // jamb wall is a slightly offset or thinner stub on the same run.
+  const loose = (a, b) => {
+    if (!a || !b || a === b) return false;
+    const ax0 = Math.min(a[0], a[2]), ax1 = Math.max(a[0], a[2]);
+    const ay0 = Math.min(a[1], a[3]), ay1 = Math.max(a[1], a[3]);
+    const bx0 = Math.min(b[0], b[2]), bx1 = Math.max(b[0], b[2]);
+    const by0 = Math.min(b[1], b[3]), by1 = Math.max(b[1], b[3]);
+    const overlapX = Math.min(ax1, bx1) + pad >= Math.max(ax0, bx0);
+    const overlapY = Math.min(ay1, by1) + pad >= Math.max(ay0, by0);
+    const midY = Math.abs(((ay0 + ay1) / 2) - ((by0 + by1) / 2));
+    const midX = Math.abs(((ax0 + ax1) / 2) - ((bx0 + bx1) / 2));
+    return (midY <= 0.55 && overlapX) || (midX <= 0.55 && overlapY);
+  };
+  const solids = [...(WS.ext || []), ...(WS.int || [])];
+  const links = [...solids, ...(WS.win || []), ...(WS.door || [])];
+  const seen = new Set();
+  const q = [opening];
+  seen.add(opening);
+  while (q.length) {
+    const cur = q.pop();
+    for (const s of solids) { if (loose(cur, s)) return true; }
+    for (const o of links) {
+      if (seen.has(o)) continue;
+      if (loose(cur, o)) { seen.add(o); q.push(o); }
+    }
+  }
+  return false;
+}
+function pruneOrphanOpenings(WS) {
+  if (!WS) return WS;
+  for (const k of ['door', 'win']) WS[k] = (WS[k] || []).filter((d) => openingHasHost(d, WS));
+  return WS;
+}
+function probeFootprintClear(rects, opts = {}) {
+  const list = (rects || []).filter((r) => r && r.length >= 4);
+  const z0 = opts.z0 != null ? +opts.z0 : 0.12;
+  const hits = [];
+  const classify = (obj) => {
+    let p = obj;
+    while (p) {
+      const n = (p.name || '').toLowerCase();
+      const u = p.userData || {};
+      if (u.doorCasing || u.openingReturn || u.garagePanel || u.garageOpener || u.garageDoor || n === 'doors' || n === 'garageopener') return 'door-trim';
+      if (p === wallsFull || p === wallsCut || u.extWalls || u.intWalls) return 'wall';
+      if (p === ceilings || p === floorGroup || p === roof || n === 'floors' || n === 'ceilings' || n === 'roof' || u.roofSurface) return 'structure';
+      if (p === itemsGroup || n === 'items' || /cabinet|counter|island|shelf|vanity|appliance|fridge|wardrobe|bed|sofa|table|chair/.test(n)) return 'item';
+      p = p.parent;
+    }
+    return 'other';
+  };
+  for (const r of list) {
+    const horiz = (r[2] - r[0]) >= (r[3] - r[1]);
+    const a0 = horiz ? r[0] : r[1], a1 = horiz ? r[2] : r[3];
+    const span = Math.abs(a1 - a0) || 0.4;
+    const perp = horiz ? (r[1] + r[3]) / 2 : (r[0] + r[2]) / 2;
+    const half = Math.max(0.12, (horiz ? Math.abs(r[3] - r[1]) : Math.abs(r[2] - r[0])) / 2);
+    const top = Math.max(r[4] || 0, r[5] || 0, doorOpeningTop(r, M?.wallH || 9), 7);
+    const zs = [z0, 1.5, 3.2, Math.max(z0 + 0.1, Math.min(top - 0.25, 6.4))];
+    const ts = span < 1.2 ? [0.35, 0.65] : [0.15, 0.35, 0.5, 0.65, 0.85];
+    const crosses = (along) => {
+      const WS = M && M.walls;
+      if (!WS) return false;
+      for (const kind of ['ext', 'int']) {
+        for (const w of (WS[kind] || [])) {
+          const wh = (w[2] - w[0]) >= (w[3] - w[1]);
+          if (wh === horiz) continue;
+          const tPerp = wh ? (w[1] + w[3]) / 2 : (w[0] + w[2]) / 2;
+          const t0 = wh ? w[0] : w[1], t1 = wh ? w[2] : w[3];
+          if (Math.abs(tPerp - along) < 0.4 && Math.min(t0, t1) - 0.2 <= perp && Math.max(t0, t1) + 0.2 >= perp) return true;
+        }
+      }
+      return false;
+    };
+    for (const t of ts) {
+      const along = a0 + span * t;
+      if (crosses(along)) continue;
+      const cx = horiz ? along : perp;
+      const cy = horiz ? perp : along;
+      // A remaining door or window at this point (a corner leaf or a
+      // stacked/offset opening on the same run) is not leftover frame.
+      const stillOpen = (() => {
+        const hit = (rr, pad = 0.7) => cx >= Math.min(rr[0], rr[2]) - pad && cx <= Math.max(rr[0], rr[2]) + pad
+          && cy >= Math.min(rr[1], rr[3]) - pad && cy <= Math.max(rr[1], rr[3]) + pad;
+        if (!M || !M.walls) return false;
+        for (const k of ['door', 'win']) for (const rr of (M.walls[k] || [])) if (hit(rr)) return true;
+        return false;
+      })();
+      if (stillOpen) continue;
+      for (const y of zs) {
+        const shot = shootBandAt(cx, cy, horiz, y, half + 0.08);
+        if (!shot || !shot.hit || shot.skipped) continue;
+        const kind = classify(shot.obj || { name: shot.name });
+        const allowed = opts.kinds || ['door-trim', 'wall', 'trim'];
+        if (allowed.includes(kind)) {
+          hits.push({ kind, y, along: t, name: shot.name || '', cx, cy });
+        }
+      }
+    }
+  }
+  return { clear: hits.length === 0, nHits: hits.length, hits: hits.slice(0, 12) };
+}
 function removeWallOp(kind, index) {
   const w = (M.walls[kind] || [])[index];
-  if (!w) return;
+  if (!w) return false;
+  // Take every opening this wall hosts (door, window, garage) with it.
+  const hosted = [];
+  if (kind === 'ext' || kind === 'int') {
+    for (const k of ['door', 'win']) {
+      (M.walls[k] || []).forEach((d, i) => { if (openingHostedByWall(d, w)) hosted.push({ k, i }); });
+    }
+  }
   M.walls[kind].splice(index, 1);
-  const mx = (w[0] + w[2]) / 2, my = (w[1] + w[3]) / 2;
   for (const k of ['door', 'win']) {
-    M.walls[k] = (M.walls[k] || []).filter(d => {
-      const dx = (d[0] + d[2]) / 2, dy = (d[1] + d[3]) / 2;
-      return Math.hypot(dx - mx, dy - my) > 1.2;
-    });
+    M.walls[k] = (M.walls[k] || []).filter((d) => !openingHostedByWall(d, w));
   }
   rebuildPlan();
+  return true;
 }
 function patchWallOp(kind, index, patch) {
   const w = (M.walls[kind] || [])[index];
@@ -2023,6 +2149,7 @@ function buildModel(model, opts = {}) {
   }
   const layout = opts.layout || activeLayout;
   M = modelWithLayout(srcModel.rooms ? srcModel : model, layout);
+  if (M.walls) pruneOrphanOpenings(M.walls);
   finishes = (layout && layout.finishes && typeof layout.finishes === 'object') ? JSON.parse(JSON.stringify(layout.finishes)) : {};
   deletedRooms = (layout && Array.isArray(layout.deleted)) ? JSON.parse(JSON.stringify(layout.deleted)) : [];
   if (deletedRooms.length && Array.isArray(M.ceilings)) M.ceilings = M.ceilings.filter(c => !deletedRooms.some(d => { const cx = (c[0] + c[2]) / 2, cy = (c[1] + c[3]) / 2; return cx > d.rect[0] && cx < d.rect[2] && cy > d.rect[1] && cy < d.rect[3] && !roomAtPt(cx, cy); }));
@@ -2113,7 +2240,7 @@ function buildModel(model, opts = {}) {
       if (T > sill) out.glass.push(boxRect(...g, sill, Math.min(head, T)));
     }
     if (!cut) for (const r of WS.door) {
-      if (doorOpts(r).noLeaf) { addDoorReturns(r, H, out); continue; }
+      if (doorOpts(r).noLeaf) { if (openingHasHost(r, WS)) addDoorReturns(r, H, out); continue; }
       const tp = r[4] ?? 7, h = r[5] || H;
       if (h > tp + 0.05) { if (r[6]) skinSplit(r, tp, h, out); else out.int.push(boxRect(r[0], r[1], r[2], r[3], tp, h)); }
     }
@@ -3921,11 +4048,13 @@ window.app = {
   holdGarage: (i, v) => { const g = gdoors[i]; if (g) { g.hold = v == null ? null : +v; poseGarage(g); } },
   applyLayout: (layout) => {
     activeLayout = (typeof sanitizeLayout === 'function' ? (sanitizeLayout(layout) || layout) : layout);
+    if (activeLayout && activeLayout.walls) pruneOrphanOpenings(activeLayout.walls);
     if (planOriginal) buildModel(planOriginal.source, { layout: activeLayout });
   },
   getItemDoors: () => itemDoors.map(d => +d.open.toFixed(2)),
   getWindows: () => wins.map(w => ({ type: w.type, open: +w.open.toFixed(2) })),
-  setWindowsMode, doorList, removeDoor: removeDoorOp, restoreDoor: restoreDoorOp, garageSize: garageSizeOp, addGarageDoor: addGarageDoorOp, garageWallInfo: (k, i) => !!garageWallInfo(k, i), probeDoorHeader, probeBandAt, probeOpeningClear, pickDoor, pickWall,
+  setWindowsMode, doorList, removeDoor: removeDoorOp, restoreDoor: restoreDoorOp, garageSize: garageSizeOp, addGarageDoor: addGarageDoorOp, garageWallInfo: (k, i) => !!garageWallInfo(k, i), probeDoorHeader, probeBandAt, probeOpeningClear, probeFootprintClear, openingHostedByWall, pickDoor, pickWall,
+  removeWall: removeWallOp,
   removeRoomByName, getFinishes: () => finishes, setFinishes: setFinishesOp, getWalls: () => M?.walls,
   getWalkAudio: () => ({
     muted: !walkAudio.isEnabled(), unlocked: !!walkAudio.debug.unlocked(), inWalk: !!walkAudio.debug.inWalk(),
