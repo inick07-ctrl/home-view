@@ -212,9 +212,11 @@ def collect_door_headers(page):
       const list = (window.app.doorList && window.app.doorList()) || [];
       return list.map((d) => {
         const p = window.app.probeDoorHeader ? window.app.probeDoorHeader(d.index) : null;
+        const c = window.app.probeOpeningClear ? window.app.probeOpeningClear(d.index) : null;
         return Object.assign({
           index: d.index, kind: d.kind, width: d.width, room: d.room,
           removed: !!d.removed, openingTop: d.openingTop, missing: !p,
+          openingClear: c ? c.clear : null, trimHits: c ? (c.nHits || 0) : 0,
         }, p || {});
       });
     }"""
@@ -238,6 +240,8 @@ def header_fail(probes, expect_clear, label, stock_by=None):
         if expect_clear:
             if not clear:
                 issues.append(f"{tag}: wall still occupies the header band at y={p.get('midY')}")
+            if p.get("openingClear") is False:
+                issues.append(f"{tag}: door, frame, or trim still in the opening ({p.get('trimHits')} hits)")
             if p.get("ceilingIntact") is False and s.get("ceilingIntact") is True:
                 issues.append(f"{tag}: ceiling/roof missing above the full-height opening")
             if p.get("removed") is False:

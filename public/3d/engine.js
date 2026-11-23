@@ -1145,6 +1145,167 @@ function probeBandAt(cx, cy, horiz, y, halfThick) {
   const mid = shootBandAt(cx, cy, horiz, y, halfThick);
   return { cx, cy, horiz, y, headerClear: !mid.hit, hit: !!mid.hit };
 }
+function removedDoorPrisms() {
+  const out = [];
+  for (const r of (M?.walls?.door || [])) {
+    if (!doorOpts(r).noLeaf) continue;
+    const horiz = (r[2] - r[0]) >= (r[3] - r[1]);
+    const x0 = Math.min(r[0], r[2]), x1 = Math.max(r[0], r[2]);
+    const y0 = Math.min(r[1], r[3]), y1 = Math.max(r[1], r[3]);
+    const top = doorOpeningTop(r, M.wallH || 9);
+    const along = 0.05; // keep flush wall-end returns at the jambs
+    const across = 0.55; // catch proud casing, brick-mold, cladding frames
+    out.push({
+      horiz,
+      x0: horiz ? x0 + along : x0 - across,
+      x1: horiz ? x1 - along : x1 + across,
+      y0: horiz ? y0 - across : y0 + along,
+      y1: horiz ? y1 + across : y1 - along,
+      z0: 0.03, z1: top - 0.02,
+    });
+  }
+  return out;
+}
+function stripOpeningTrim() {
+  const holes = removedDoorPrisms();
+  if (!holes.length || !root) return;
+  const skipObj = (o) => {
+    if (!o) return true;
+    if (o === ceilings || o === floorGroup || o === itemsGroup || o === labels || o === planOverlay || o === roof || o === wallsFull || o === wallsCut) return true;
+    const n = (o.name || '').toLowerCase();
+    if (n === 'floors' || n === 'items' || n === 'ceilings' || n === 'roof' || n === 'wallpicks' || n === 'highlight' || n === 'doors') return true;
+    const u = o.userData || {};
+    return !!(u.roofSurface || u.roofSpec || u.specU || u.roof || u.wallPick || u.openingReturn || u.baseboard);
+  };
+  const meshes = [];
+  root.traverse((o) => {
+    if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
+    let p = o;
+    while (p) { if (skipObj(p)) return; p = p.parent; }
+    meshes.push(o);
+  });
+  const v0 = new THREE.Vector3(), v1 = new THREE.Vector3(), v2 = new THREE.Vector3();
+  const inHole = (a, b, c) => {
+    const px = (a.x + b.x + c.x) / 3 + CX;
+    const py = (a.z + b.z + c.z) / 3 + CZ;
+    const z = (a.y + b.y + c.y) / 3;
+    return holes.some((h) => px >= h.x0 && px <= h.x1 && py >= h.y0 && py <= h.y1 && z >= h.z0 && z <= h.z1);
+  };
+  for (const mesh of meshes) {
+    const geo = mesh.geometry;
+    const pos = geo.attributes.position;
+    mesh.updateWorldMatrix(true, false);
+    const mw = mesh.matrixWorld;
+    const get = (i, t) => t.fromBufferAttribute(pos, i).applyMatrix4(mw);
+    if (geo.index) {
+      const src = geo.index.array;
+      const keep = [];
+      for (let i = 0; i < src.length; i += 3) {
+        get(src[i], v0); get(src[i + 1], v1); get(src[i + 2], v2);
+        if (!inHole(v0, v1, v2)) keep.push(src[i], src[i + 1], src[i + 2]);
+      }
+      if (keep.length === src.length) continue;
+      if (!keep.length) { mesh.visible = false; continue; }
+      geo.setIndex(keep);
+      geo.computeBoundingBox(); geo.computeBoundingSphere();
+    } else {
+      const n = pos.count;
+      const keepTri = [];
+      for (let i = 0; i < n; i += 3) {
+        get(i, v0); get(i + 1, v1); get(i + 2, v2);
+        if (!inHole(v0, v1, v2)) keepTri.push(i);
+      }
+      if (keepTri.length * 3 === n) continue;
+      if (!keepTri.length) { mesh.visible = false; continue; }
+      const attrs = Object.keys(geo.attributes);
+      const next = {};
+      for (const name of attrs) {
+        const attr = geo.attributes[name];
+        const item = attr.itemSize;
+        const arr = new attr.array.constructor(keepTri.length * 3 * item);
+        let o = 0;
+        for (const i of keepTri) {
+          arr.set(attr.array.subarray(i * item, (i + 3) * item), o);
+          o += 3 * item;
+        }
+        next[name] = new THREE.BufferAttribute(arr, item, attr.normalized);
+      }
+      const g2 = new THREE.BufferGeometry();
+      for (const name of attrs) g2.setAttribute(name, next[name]);
+      if (geo.groups && geo.groups.length) g2.groups = geo.groups.slice();
+      g2.computeBoundingBox(); g2.computeBoundingSphere();
+      mesh.geometry = g2;
+    }
+  }
+}
+function probeOpeningClear(i) {
+  const d = M?.walls?.door?.[i]; if (!d) return null;
+  const horiz = (d[2] - d[0]) >= (d[3] - d[1]);
+  const cx = (d[0] + d[2]) / 2, cy = (d[1] + d[3]) / 2;
+  const leafTop = d[4] ?? 7;
+  const H = d[5] || M.wallH || 9;
+  const openTop = doorOpeningTop(d, H);
+  const half = (horiz ? Math.abs(d[3] - d[1]) : Math.abs(d[2] - d[0])) / 2;
+  const width = horiz ? Math.abs(d[2] - d[0]) : Math.abs(d[3] - d[1]);
+  const removed = !!doorOpts(d).noLeaf;
+  const alongs = [0.2, 0.5, 0.8];
+  const heights = [0.25, Math.max(1.2, leafTop * 0.45), Math.max(leafTop + 0.3, (leafTop + openTop) / 2), Math.max(leafTop + 0.4, openTop - 0.35)];
+  const bad = [];
+  const thinFrame = (obj) => {
+    if (!obj || !obj.geometry) return false;
+    if (!obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
+    obj.updateWorldMatrix(true, false);
+    const b = obj.geometry.boundingBox.clone().applyMatrix4(obj.matrixWorld);
+    const sx = b.max.x - b.min.x, sy = b.max.y - b.min.y, sz = b.max.z - b.min.z;
+    return Math.min(sx, sz) < 0.3 && sy > 2;
+  };
+  const classify = (obj) => {
+    let p = obj;
+    while (p) {
+      const n = (p.name || '').toLowerCase();
+      const u = p.userData || {};
+      if (u.doorCasing || u.garagePanel || u.garageOpener || u.garageDoor || n === 'doors' || n === 'garageopener') return 'door-trim';
+      if (p === wallsFull || p === wallsCut || u.extWalls || u.intWalls || u.openingReturn) return 'wall';
+      if (p === ceilings || p === floorGroup || p === roof || n === 'floors' || n === 'ceilings' || n === 'roof' || u.roofSurface) return 'structure';
+      if (p === itemsGroup || n === 'items' || /cabinet|counter|island|shelf|vanity|appliance|fridge|wardrobe|bed|sofa|table|chair/.test(n)) return 'item';
+      p = p.parent;
+    }
+    return thinFrame(obj) ? 'trim' : 'other';
+  };
+  for (const a of alongs) {
+    const px = horiz ? (d[0] + width * a) : cx;
+    const py = horiz ? cy : (d[1] + width * a);
+    for (const y of heights) {
+      if (y <= 0.05 || y >= openTop - 0.02) continue;
+      const shot = shootBandAt(px, py, horiz, y, half);
+      if (!shot.hit) continue;
+      // shootBandAt doesn't return the object; do a targeted classify shoot
+      const pad = half < 0.2 ? 0.03 : 0.12;
+      const dd = half + pad;
+      const ox = horiz ? Wx(px) : Wx(px - dd);
+      const oz = horiz ? Wz(py - dd) : Wz(py);
+      const tx = horiz ? Wx(px) : Wx(px + dd);
+      const tz = horiz ? Wz(py + dd) : Wz(py);
+      const origin = new THREE.Vector3(ox, y, oz);
+      const dir = new THREE.Vector3(tx - ox, 0, tz - oz);
+      const span = dir.length();
+      if (span < 0.04) continue;
+      dir.normalize();
+      const rc = new THREE.Raycaster(origin, dir, 0, span);
+      const targets = collectHeaderTargets();
+      if (doorsGroup) doorsGroup.traverse((o) => { if (o.isMesh) targets.push(o); });
+      const hits = rc.intersectObjects(targets, false);
+      for (const h of hits) {
+        const kind = classify(h.object);
+        if (kind === 'door-trim' || kind === 'trim') {
+          bad.push({ kind, y, along: a, name: h.object.name || h.object.userData?.finishKind || '' });
+          break;
+        }
+      }
+    }
+  }
+  return { index: i, removed, openTop, width, clear: bad.length === 0, hits: bad.slice(0, 8), nHits: bad.length };
+}
 function removeDoorOp(i, as = 'opening') {
   const d = M.walls.door[i]; if (!d) return false;
   if (as === 'wall') {
@@ -1922,6 +2083,19 @@ function buildModel(model, opts = {}) {
     else { skin = skinOnA ? [r[0], r[1], r[0] + sk, r[3]] : [r[2] - sk, r[1], r[2], r[3]]; core = skinOnA ? [r[0] + sk, r[1], r[2], r[3]] : [r[0], r[1], r[2] - sk, r[3]]; }
     out.ext.push(boxRect(...skin, h0, h1, 4)); out.int.push(boxRect(...core, h0, h1));
   }
+  function addDoorReturns(r, wallH, out) {
+    // Flush wall-end caps at each jamb, in the wall's own finish — no trim, no frame.
+    const top = doorOpeningTop(r, wallH);
+    const horiz = (r[2] - r[0]) >= (r[3] - r[1]);
+    const cap = 0.04;
+    if (horiz) {
+      out.int.push(boxRect(r[0], r[1], r[0] + cap, r[3], 0, top));
+      out.int.push(boxRect(r[2] - cap, r[1], r[2], r[3], 0, top));
+    } else {
+      out.int.push(boxRect(r[0], r[1], r[2], r[1] + cap, 0, top));
+      out.int.push(boxRect(r[0], r[3] - cap, r[2], r[3], 0, top));
+    }
+  }
   function buildWalls(cut) {
     const grp = new THREE.Group();
     const out = { ext: [], int: [], glass: [] };
@@ -1939,7 +2113,7 @@ function buildModel(model, opts = {}) {
       if (T > sill) out.glass.push(boxRect(...g, sill, Math.min(head, T)));
     }
     if (!cut) for (const r of WS.door) {
-      if (doorOpts(r).noLeaf) continue; // removed door: full-height opening, no header strip
+      if (doorOpts(r).noLeaf) { addDoorReturns(r, H, out); continue; }
       const tp = r[4] ?? 7, h = r[5] || H;
       if (h > tp + 0.05) { if (r[6]) skinSplit(r, tp, h, out); else out.int.push(boxRect(r[0], r[1], r[2], r[3], tp, h)); }
     }
@@ -2355,6 +2529,7 @@ function buildModel(model, opts = {}) {
   buildFloors();
   refreshItems();
   applyArchFinishes();
+  stripOpeningTrim();
   ensureEditor();
   syncAreaUi(M);
 
@@ -3137,19 +3312,15 @@ function buildDoors(WS) {
     const info = doorInfo(r);
     // garage doors: overhead sectional door on tracks (unless removed → open opening)
     if (info.garage) { if (!info.noLeaf) buildGarageDoor(r, info, di); return; }
+    // Removed door (keep opening): no leaf, jambs, casing, stops, head, or threshold.
+    // Wall-end returns are added in buildWalls so the cut is a flush wall finish.
+    if (info.noLeaf) return;
     // wide cased openings stay open (no hinged leaf)
     if (width < 1.6 || top < 6 || width > (ext ? 7.2 : 6.2)) return;
     const jt = 0.12, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     const list = ext ? casExt : cas;
-    const casTop = info.noLeaf ? doorOpeningTop(r, M?.wallH || 9) : top;
-    if (horiz) {
-      list.push(boxRect(x0, y0 - 0.03, x0 + jt, y1 + 0.03, 0, casTop), boxRect(x1 - jt, y0 - 0.03, x1, y1 + 0.03, 0, casTop));
-      if (!info.noLeaf) list.push(boxRect(x0, y0 - 0.03, x1, y1 + 0.03, top - jt, top));
-    } else {
-      list.push(boxRect(x0 - 0.03, y0, x1 + 0.03, y0 + jt, 0, casTop), boxRect(x0 - 0.03, y1 - jt, x1 + 0.03, y1, 0, casTop));
-      if (!info.noLeaf) list.push(boxRect(x0 - 0.03, y0, x1 + 0.03, y1, top - jt, top));
-    }
-    if (info.noLeaf) return; // door removed: full-height opening, jamb casing only
+    if (horiz) list.push(boxRect(x0, y0 - 0.03, x0 + jt, y1 + 0.03, 0, top), boxRect(x1 - jt, y0 - 0.03, x1, y1 + 0.03, 0, top), boxRect(x0, y0 - 0.03, x1, y1 + 0.03, top - jt, top));
+    else list.push(boxRect(x0 - 0.03, y0, x1 + 0.03, y0 + jt, 0, top), boxRect(x0 - 0.03, y1 - jt, x1 + 0.03, y1, 0, top), boxRect(x0 - 0.03, y0, x1 + 0.03, y1, top - jt, top));
     const clear = width - jt * 2;
     const n = clear > 4.0 ? 2 : 1;
     const lw = clear / n - 0.03, lh = top - jt - 0.06, lt = 0.15;
@@ -3172,7 +3343,8 @@ function buildDoors(WS) {
     doors.push({ cx, cy, horiz, half: width / 2, ext, leaves, open: 0, side: 1, maxDeg: n === 2 ? 95 : 92, rec: r });
   });
   const a = mesh(cas, DOOR_MAT.casing, true), b = mesh(casExt, DOOR_MAT.casingExt, true);
-  if (a) doorsGroup.add(a); if (b) doorsGroup.add(b);
+  if (a) { a.userData.doorCasing = true; doorsGroup.add(a); }
+  if (b) { b.userData.doorCasing = true; doorsGroup.add(b); }
   doorsGroup.visible = !cutOn;
 }
 function updateDoors(dt) {
@@ -3753,7 +3925,7 @@ window.app = {
   },
   getItemDoors: () => itemDoors.map(d => +d.open.toFixed(2)),
   getWindows: () => wins.map(w => ({ type: w.type, open: +w.open.toFixed(2) })),
-  setWindowsMode, doorList, removeDoor: removeDoorOp, restoreDoor: restoreDoorOp, garageSize: garageSizeOp, addGarageDoor: addGarageDoorOp, garageWallInfo: (k, i) => !!garageWallInfo(k, i), probeDoorHeader, probeBandAt, pickDoor, pickWall,
+  setWindowsMode, doorList, removeDoor: removeDoorOp, restoreDoor: restoreDoorOp, garageSize: garageSizeOp, addGarageDoor: addGarageDoorOp, garageWallInfo: (k, i) => !!garageWallInfo(k, i), probeDoorHeader, probeBandAt, probeOpeningClear, pickDoor, pickWall,
   removeRoomByName, getFinishes: () => finishes, setFinishes: setFinishesOp, getWalls: () => M?.walls,
   getWalkAudio: () => ({
     muted: !walkAudio.isEnabled(), unlocked: !!walkAudio.debug.unlocked(), inWalk: !!walkAudio.debug.inWalk(),
