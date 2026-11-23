@@ -79,7 +79,7 @@ export function sanitizeLayout(raw) {
     if (!Array.isArray(r) || r.length < 7) return null;
     const x0 = +r[3], y0 = +r[4], x1 = +r[5], y1 = +r[6];
     if (![x0, y0, x1, y1].every(Number.isFinite)) return null;
-    return [String(r[0] || 'Room').slice(0, 60), String(r[1] || ''), String(r[2] || 'wood').slice(0, 24), x0, y0, x1, y1, r[7] && typeof r[7] === 'object' ? r[7] : {}];
+    return [r[0] == null ? 'Room' : String(r[0]).slice(0, 60), String(r[1] || ''), String(r[2] || 'wood').slice(0, 24), x0, y0, x1, y1, r[7] && typeof r[7] === 'object' ? r[7] : {}];
   }).filter(Boolean) : undefined;
   let walls;
   if (raw.walls && typeof raw.walls === 'object') {

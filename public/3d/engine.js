@@ -2801,13 +2801,27 @@ function doorInfo(r) {
   return { horiz, width, thick, cx, cy, top, ext, garage, inward, noLeaf: !!opt.noLeaf, color: opt.color, kind: garage ? 'garage' : ext ? 'ext' : 'int' };
 }
 let gdoors = [];
+function ceilingHeightAt(fx, fy, fallback) {
+  const list = M?.ceilings || [];
+  for (const c of list) {
+    if (fx > c[0] - 0.05 && fx < c[2] + 0.05 && fy > c[1] - 0.05 && fy < c[3] + 0.05) return c[4] || fallback;
+  }
+  const room = roomAtPt(fx, fy);
+  if (room && (room[7]?.h || room[7]?.wallH)) return room[7].h || room[7].wallH;
+  return fallback;
+}
 function buildGarageDoor(r, info, doorIndex) {
   const style = M.garageDoor || {};
   const H = r[5] || M.wallH || 9, top = info.top;
-  const R = Math.max(0.25, Math.min(0.9, H - top - 0.2));
+  const sample = info.horiz
+    ? [info.cx, info.cy + info.inward * 2]
+    : [info.cx + info.inward * 2, info.cy];
+  const ceilH = Math.max(top + 1.2, ceilingHeightAt(sample[0], sample[1], H) - 0.12);
+  const R = Math.max(0.25, Math.min(1.15, ceilH - top - 0.55));
   const w = info.width - 0.08, n = Math.max(4, Math.round(top / 2)), ph = top / n, in0 = info.thick / 2 + 0.1;
   const holder = new THREE.Group(); holder.position.set(Wx(info.cx), 0, Wz(info.cy));
   if (doorIndex != null) holder.userData.doorIndex = doorIndex;
+  holder.userData.garageDoor = true;
   holder.rotation.y = info.horiz ? (info.inward > 0 ? 0 : Math.PI) : (info.inward > 0 ? Math.PI / 2 : -Math.PI / 2);
   const col = info.color || style.color || '#e9e7e2';
   const pm = new THREE.MeshStandardMaterial({ color: col, roughness: 0.5, metalness: 0.12 });
@@ -2822,19 +2836,39 @@ function buildGarageDoor(r, info, doorIndex) {
     pg.userData.garagePanel = true;
     holder.add(pg); panels.push(pg);
   }
-  // steel tracks: vertical at the jambs, a quarter-round radius, then horizontal under the ceiling; centre opener rail
+  // Tracks, centre rail, motor and hangers live on this group so removing the
+  // door (or skipping build when noLeaf is set) always takes the opener with it.
+  const opener = new THREE.Group(); opener.name = 'garageOpener'; opener.userData.garageOpener = true;
   const steel = new THREE.MeshStandardMaterial({ color: '#8a8d90', roughness: 0.45, metalness: 0.6 });
-  const L = top + 0.4;
+  const motorMat = new THREE.MeshStandardMaterial({ color: '#d8d8d4', roughness: 0.6 });
+  // Sit the motor and rail up under the ceiling plate; hangers reach that plate.
+  const motorH = 0.4;
+  const motorY = ceilH - motorH / 2;
+  const railY = Math.min(top + R + 0.15, motorY - motorH / 2 - 0.08);
+  const L = Math.max(4.5, Math.min(top + 0.4, 10));
   for (const sx of [-1, 1]) {
     const x = sx * (w / 2 + 0.08);
-    doorPart(holder, 0.07, top, 0.12, steel, x, top / 2, in0);
-    for (let a = 0; a < 4; a++) { const t0 = (a + 0.5) / 4 * Math.PI / 2; doorPart(holder, 0.07, 0.12, 0.12, steel, x, top + R * Math.sin(t0), in0 + R * (1 - Math.cos(t0))); }
-    doorPart(holder, 0.07, 0.12, L, steel, x, top + R, in0 + R + L / 2);
+    doorPart(opener, 0.07, top, 0.12, steel, x, top / 2, in0);
+    for (let a = 0; a < 4; a++) { const t0 = (a + 0.5) / 4 * Math.PI / 2; doorPart(opener, 0.07, 0.12, 0.12, steel, x, top + R * Math.sin(t0), in0 + R * (1 - Math.cos(t0))); }
+    doorPart(opener, 0.07, 0.12, L, steel, x, top + R, in0 + R + L / 2);
   }
-  doorPart(holder, 0.18, 0.1, L + 0.6, steel, 0, top + R + 0.15, in0 + R + (L + 0.6) / 2);
-  doorPart(holder, 0.9, 0.45, 1.2, new THREE.MeshStandardMaterial({ color: '#d8d8d4', roughness: 0.6 }), 0, top + R + 0.05, in0 + R + L + 0.6);
+  const railLen = L + 0.6;
+  doorPart(opener, 0.18, 0.1, railLen, steel, 0, railY, in0 + R + railLen / 2);
+  const motorZ = in0 + R + L + 0.55;
+  doorPart(opener, 0.9, motorH, 1.15, motorMat, 0, motorY, motorZ);
+  // Ceiling hangers / brackets along the rail and at the motor, tight to the plate.
+  const hangTop = ceilH;
+  const hangAt = (z) => {
+    const h = Math.max(0.12, hangTop - railY);
+    doorPart(opener, 0.06, h, 0.06, steel, 0, railY + h / 2, z);
+    doorPart(opener, 0.36, 0.05, 0.1, steel, 0, hangTop, z);
+  };
+  hangAt(in0 + R + railLen * 0.28);
+  hangAt(in0 + R + railLen * 0.58);
+  hangAt(motorZ);
+  holder.add(opener);
   doorsGroup.add(holder);
-  const g = { holder, panels, n, ph, top, R, in0, cx: info.cx, cy: info.cy, half: info.width / 2, horiz: info.horiz, open: 0, hold: null };
+  const g = { holder, opener, panels, n, ph, top, R, in0, cx: info.cx, cy: info.cy, half: info.width / 2, horiz: info.horiz, open: 0, hold: null, railLen, railY, motorZ, motorY };
   poseGarage(g); gdoors.push(g);
 }
 function poseGarage(g) {
@@ -3531,7 +3565,31 @@ window.app = {
   getAutoDoors: () => autoDoors,
   getDoors: () => doors.map(d => ({ cx: d.cx, cy: d.cy, ext: d.ext, leaves: d.leaves.length, open: +d.open.toFixed(2) })),
   getGarageDoors: () => gdoors.map(g => ({ cx: g.cx, cy: g.cy, width: +(g.half * 2).toFixed(2), open: +g.open.toFixed(2), hold: g.hold })),
+  getGarageOpeners: () => {
+    const out = [];
+    const rootObj = (typeof root !== 'undefined' && root) || (typeof scene !== 'undefined' && scene);
+    if (rootObj) rootObj.traverse((o) => {
+      if (o.userData && o.userData.garageOpener) {
+        let holder = o.parent, idx = holder && holder.userData ? holder.userData.doorIndex : null;
+        const e = o.matrixWorld.elements;
+        out.push({ doorIndex: idx, cx: holder && holder.userData && holder.userData.cx, x: e[12], y: e[13], z: e[14], meshCount: o.children.length });
+      }
+    });
+    // Always include live door-built openers (authoritative, even if a group is mid-rebuild).
+    return gdoors.map((g, i) => {
+      let meshes = 0; if (g.opener) g.opener.traverse((o) => { if (o.isMesh) meshes++; });
+      return {
+        i, cx: g.cx, cy: g.cy, width: +(g.half * 2).toFixed(2),
+        meshes, hasOpener: !!(g.opener && meshes > 0),
+        railLen: g.railLen, motorY: g.motorY, doorIndex: g.holder && g.holder.userData && g.holder.userData.doorIndex,
+      };
+    });
+  },
   holdGarage: (i, v) => { const g = gdoors[i]; if (g) { g.hold = v == null ? null : +v; poseGarage(g); } },
+  applyLayout: (layout) => {
+    activeLayout = (typeof sanitizeLayout === 'function' ? (sanitizeLayout(layout) || layout) : layout);
+    if (planOriginal) buildModel(planOriginal.source, { layout: activeLayout });
+  },
   getItemDoors: () => itemDoors.map(d => +d.open.toFixed(2)),
   getWindows: () => wins.map(w => ({ type: w.type, open: +w.open.toFixed(2) })),
   setWindowsMode, doorList, removeDoor: removeDoorOp, restoreDoor: restoreDoorOp, garageSize: garageSizeOp, addGarageDoor: addGarageDoorOp, garageWallInfo: (k, i) => !!garageWallInfo(k, i), pickDoor, pickWall,

@@ -58,11 +58,15 @@ CHECK_JS = r"""
     return { horiz, a, b, perp, cx, cy, width, w };
   };
 
-  // Mesh list should match every plan garage door (width + center).
+  // Mesh list should match every *present* (not removed) plan garage door.
   for (const d of list) {
     const g = doorGeom(d.index);
     if (!g) { issues.push({ door: d.index, issue: 'missing wall' }); continue; }
     const mesh = gds.find(m => Math.abs(m.cx - g.cx) < 0.2 && Math.abs(m.cy - g.cy) < 0.2);
+    if (d.removed) {
+      if (mesh) issues.push({ door: d.index, issue: 'removed door still has a 3D leaf/opener mesh', cx: g.cx, cy: g.cy });
+      continue;
+    }
     if (!mesh) issues.push({ door: d.index, issue: 'no 3D mesh for opening', cx: g.cx, cy: g.cy, width: g.width });
     else if (Math.abs(mesh.width - g.width) > 0.06) {
       issues.push({ door: d.index, issue: 'mesh width != opening', mesh: mesh.width, opening: g.width });
@@ -142,7 +146,41 @@ CHECK_JS = r"""
     });
     if (!hit) issues.push({ issue: 'orphan 3D garage mesh', mesh: m });
   }
-  return { issues, doors: items, meshCount: gds.length };
+
+  // Opener motor / rails / tracks / hangers: one assembly per present door,
+  // none for a removed door, and sized / centered to match the opening.
+  const present = list.filter(d => !d.removed);
+  const openers = (window.app.getGarageOpeners && window.app.getGarageOpeners()) || [];
+  if (window.app.getGarageOpeners) {
+    if (openers.length !== present.length) {
+      issues.push({ issue: 'opener count != present garage doors', openers: openers.length, doors: present.length });
+    }
+    for (const op of openers) {
+      if (!op.hasOpener || (op.meshes || 0) < 8) issues.push({ issue: 'opener missing motor/rails/tracks', op });
+      const g = present.map(d => doorGeom(d.index)).find(dg => dg && Math.abs(dg.cx - op.cx) < 0.3 && Math.abs(dg.cy - op.cy) < 0.3);
+      if (!g) issues.push({ issue: 'opener not lined up with a door', op });
+      else if (Math.abs(op.width - g.width) > 0.1) issues.push({ issue: 'opener width != door', opener: op.width, door: g.width });
+    }
+    // Scene-graph orphans: a garageOpener group with no matching live door.
+    const root = window.app.dbg && window.app.dbg().root;
+    if (root) {
+      let orphan = 0, tagged = 0;
+      root.traverse(o => {
+        if (!(o.userData && o.userData.garageOpener)) return;
+        tagged++;
+        const holder = o.parent;
+        const hx = holder ? holder.position.x : null;
+        const match = openers.some(op => Math.abs((op.cx ?? 1e9) - (holder && holder.userData && 0)) < 9e9) || openers.length;
+        // Match by doorIndex on the holder.
+        const idx = holder && holder.userData && holder.userData.doorIndex;
+        const live = idx == null ? true : present.some(d => d.index === idx);
+        if (present.length === 0) orphan++;
+        else if (idx != null && !present.some(d => d.index === idx) && !openers.some(op => op.doorIndex === idx)) orphan++;
+      });
+      if (present.length === 0 && tagged > 0) issues.push({ issue: 'orphaned opener groups after all doors removed', tagged });
+    }
+  }
+  return { issues, doors: items, meshCount: gds.length, openerCount: openers.length };
 }
 """
 
@@ -244,6 +282,62 @@ def main():
                 if stock["issues"]:
                     row["ok"] = False
                     row["errors"].append({"step": "stock", "issues": stock["issues"]})
+
+                # Remove each garage door: the opener (motor, rails, tracks, hangers)
+                # must disappear with it, come back on restore, and stay gone after a
+                # saved-layout reload that already has the door removed.
+                for di, door_i in enumerate(stock_idx):
+                    load_model(page, args.url, mid, bust + 400 + di)
+                    before_op = page.evaluate("() => (window.app.getGarageOpeners && window.app.getGarageOpeners()) || []")
+                    before_g = page.evaluate("() => window.app.getGarageDoors() || []")
+                    layout_before = page.evaluate("() => window.app.getLayout && window.app.getLayout()")
+                    removed = page.evaluate("(i) => window.app.removeDoor(i, 'opening')", door_i)
+                    after_rm = check(page, f"remove-{door_i}")
+                    after_op = page.evaluate("() => (window.app.getGarageOpeners && window.app.getGarageOpeners()) || []")
+                    after_g = page.evaluate("() => window.app.getGarageDoors() || []")
+                    layout_removed = page.evaluate("() => window.app.getLayout && window.app.getLayout()")
+                    after_rm["op"] = {"removed": removed, "openersBefore": len(before_op), "openersAfter": len(after_op), "doorsBefore": len(before_g), "doorsAfter": len(after_g)}
+                    row["steps"].append(after_rm)
+                    if after_rm["issues"]:
+                        row["ok"] = False
+                        row["errors"].append({"step": after_rm["label"], "issues": after_rm["issues"], "op": after_rm["op"]})
+                    if not removed:
+                        row["ok"] = False
+                        row["errors"].append({"step": after_rm["label"], "op": "removeDoor returned false"})
+                    if len(after_op) != len(before_op) - 1 or len(after_g) != len(before_g) - 1:
+                        row["ok"] = False
+                        row["errors"].append({"step": after_rm["label"], "issue": "opener or door not removed with the leaf", "op": after_rm["op"]})
+                    restored = page.evaluate("(i) => window.app.restoreDoor(i)", door_i)
+                    after_rs = check(page, f"restore-{door_i}")
+                    after_rs_op = page.evaluate("() => (window.app.getGarageOpeners && window.app.getGarageOpeners()) || []")
+                    after_rs["op"] = {"restored": restored, "openers": len(after_rs_op)}
+                    row["steps"].append(after_rs)
+                    if after_rs["issues"] or not restored or len(after_rs_op) != len(before_op):
+                        row["ok"] = False
+                        row["errors"].append({"step": after_rs["label"], "issues": after_rs.get("issues") or [], "op": after_rs["op"]})
+                    # Reload the removed layout as a saved project would.
+                    if layout_removed and page.evaluate("() => typeof window.app.applyLayout === 'function'"):
+                        load_model(page, args.url, mid, bust + 450 + di)
+                        page.evaluate("(L) => window.app.applyLayout(L)", layout_removed)
+                        page.wait_for_timeout(250)
+                        after_ld = check(page, f"reload-removed-{door_i}")
+                        after_ld_op = page.evaluate("() => (window.app.getGarageOpeners && window.app.getGarageOpeners()) || []")
+                        after_ld["op"] = {"openers": len(after_ld_op), "expect": len(before_op) - 1}
+                        row["steps"].append(after_ld)
+                        if after_ld["issues"] or len(after_ld_op) != len(before_op) - 1:
+                            row["ok"] = False
+                            row["errors"].append({"step": after_ld["label"], "issues": after_ld.get("issues") or [], "op": after_ld["op"]})
+                    # Undo via applying the pre-remove layout should bring the opener back.
+                    if layout_before and page.evaluate("() => typeof window.app.applyLayout === 'function'"):
+                        page.evaluate("(L) => window.app.applyLayout(L)", layout_before)
+                        page.wait_for_timeout(250)
+                        after_un = check(page, f"undo-layout-{door_i}")
+                        after_un_op = page.evaluate("() => (window.app.getGarageOpeners && window.app.getGarageOpeners()) || []")
+                        after_un["op"] = {"openers": len(after_un_op)}
+                        row["steps"].append(after_un)
+                        if after_un["issues"] or len(after_un_op) != len(before_op):
+                            row["ok"] = False
+                            row["errors"].append({"step": after_un["label"], "issues": after_un.get("issues") or [], "op": after_un["op"]})
 
                 # Resize every existing garage door to single, then (fresh load) to double —
                 # one mutation per load so later doors are not tested on a dirty plan.
