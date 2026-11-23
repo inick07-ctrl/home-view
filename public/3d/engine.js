@@ -1065,6 +1065,86 @@ function removeRoomByName(name) {
 }
 // ---------- doors: remove / restore / colour; garage doors: add + resize ----------
 function wallPerp(w, horiz) { return horiz ? (w[1] + w[3]) / 2 : (w[0] + w[2]) / 2; }
+function collectHeaderTargets() {
+  const targets = [];
+  const skip = (o) => {
+    if (!o) return true;
+    if (o === ceilings || o === floorGroup || o === itemsGroup || o === labels || o === planOverlay || o === roof) return true;
+    const n = (o.name || '').toLowerCase();
+    if (n === 'floors' || n === 'items' || n === 'ceilings' || n === 'roof' || n === 'wallpicks' || n === 'highlight') return true;
+    const u = o.userData || {};
+    return !!(u.roofSurface || u.roofSpec || u.specU || u.roof);
+  };
+  if (root) root.traverse((o) => {
+    if (!o.isMesh) return;
+    if (o.userData?.garagePanel || o.userData?.winGlass || o.userData?.garageOpener || o.userData?.wallPick) return;
+    let p = o;
+    while (p) { if (skip(p)) return; p = p.parent; }
+    targets.push(o);
+  });
+  else if (wallsFull) wallsFull.traverse((o) => { if (o.isMesh) targets.push(o); });
+  return targets;
+}
+function shootBandAt(cx, cy, horiz, y, halfThick) {
+  // Start just outside the wall faces and shoot through them. A ray that begins
+  // inside the solid (a shorter "inset" test) will miss the header and a filled wall.
+  const half = Math.max(0.06, halfThick != null ? +halfThick : 0.35);
+  const pad = half < 0.2 ? 0.03 : 0.12;
+  const dd = half + pad;
+  const ox = horiz ? Wx(cx) : Wx(cx - dd);
+  const oz = horiz ? Wz(cy - dd) : Wz(cy);
+  const tx = horiz ? Wx(cx) : Wx(cx + dd);
+  const tz = horiz ? Wz(cy + dd) : Wz(cy);
+  const origin = new THREE.Vector3(ox, y, oz);
+  const dir = new THREE.Vector3(tx - ox, 0, tz - oz);
+  const span = dir.length();
+  if (span < 0.04) return { hit: false };
+  dir.normalize();
+  const rc = new THREE.Raycaster(origin, dir, 0, span);
+  const hits = rc.intersectObjects(collectHeaderTargets(), false);
+  const h0 = hits[0];
+  return { hit: hits.length > 0, dist: h0 ? h0.distance : null, name: h0 ? (h0.object.name || h0.object.userData?.finishKind || h0.object.userData?.kind || '') : '' };
+}
+function probeDoorHeader(i) {
+  const d = M?.walls?.door?.[i]; if (!d) return null;
+  const horiz = (d[2] - d[0]) >= (d[3] - d[1]);
+  const cx = (d[0] + d[2]) / 2, cy = (d[1] + d[3]) / 2;
+  const leafTop = d[4] ?? 7;
+  const H = d[5] || M.wallH || 9;
+  const plate = Math.min(H, ceilingHeightAt(cx, cy, H));
+  const openTop = doorOpeningTop(d, H);
+  // Always measure the strip between the door head and the plate / ceiling,
+  // whether or not the leaf is still there.
+  const band = plate - leafTop;
+  const midY = leafTop + Math.max(0.2, band * 0.5);
+  const half = (horiz ? Math.abs(d[3] - d[1]) : Math.abs(d[2] - d[0])) / 2;
+  const mid = band > 0.15 ? shootBandAt(cx, cy, horiz, midY, half) : { hit: false, skipped: true };
+  const leaf = shootBandAt(cx, cy, horiz, Math.max(1.2, leafTop * 0.45), half);
+  let ceilingHit = null;
+  if (ceilings) {
+    const dd = 1.5;
+    const inA = horiz ? insideAny(cx, cy - dd) : insideAny(cx - dd, cy);
+    const inB = horiz ? insideAny(cx, cy + dd) : insideAny(cx + dd, cy);
+    const inDir = inA && !inB ? -1 : (inB && !inA ? 1 : (inA ? -1 : 0));
+    const ox = horiz ? Wx(cx) : Wx(cx + inDir * 1.0);
+    const oz = horiz ? Wz(cy + inDir * 1.0) : Wz(cy);
+    const origin = new THREE.Vector3(ox, Math.max(2, plate - 0.6), oz);
+    const rc = new THREE.Raycaster(origin, new THREE.Vector3(0, 1, 0), 0.02, 4);
+    const up = [];
+    if (ceilings && typeof ceilings.traverse === 'function') ceilings.traverse((o) => { if (o.isMesh) up.push(o); });
+    if (roof && typeof roof.traverse === 'function') roof.traverse((o) => { if (o.isMesh) up.push(o); });
+    const hits = up.length ? rc.intersectObjects(up, false) : [];
+    ceilingHit = hits.length > 0;
+  }
+  // A mid-band hit that is also present at door-leaf height is a full-height
+  // post or T-wall, not a leftover header strip.
+  const headerClear = !!mid.skipped || !mid.hit || !!leaf.hit;
+  return { index: i, cx, cy, horiz, leafTop, openTop, plate, wallH: H, band, midY, half, removed: !!doorOpts(d).noLeaf, headerClear, midSkipped: !!mid.skipped, hit: mid.hit || false, leafHit: !!leaf.hit, hitName: mid.name || '', ceilingIntact: ceilingHit };
+}
+function probeBandAt(cx, cy, horiz, y, halfThick) {
+  const mid = shootBandAt(cx, cy, horiz, y, halfThick);
+  return { cx, cy, horiz, y, headerClear: !mid.hit, hit: !!mid.hit };
+}
 function removeDoorOp(i, as = 'opening') {
   const d = M.walls.door[i]; if (!d) return false;
   if (as === 'wall') {
@@ -1311,7 +1391,7 @@ function doorList() {
     const info = doorInfo(d);
     const near = roomAtPt(info.cx + (info.horiz ? 0 : 1.2), info.cy + (info.horiz ? 1.2 : 0)) || roomAtPt(info.cx - (info.horiz ? 0 : 1.2), info.cy - (info.horiz ? 1.2 : 0));
     const hinged = !info.garage && info.width >= 1.6 && info.top >= 6 && info.width <= (info.ext ? 7.2 : 6.2);
-    return { index: i, kind: info.kind, width: info.width, height: info.top, removed: info.noLeaf, color: info.color || null, room: near ? near[0] : '', hasLeaf: info.garage || hinged };
+    return { index: i, kind: info.kind, width: info.width, height: info.top, openingTop: doorOpeningTop(d), removed: info.noLeaf, color: info.color || null, room: near ? near[0] : '', hasLeaf: info.garage || hinged };
   });
 }
 // ---------- colours & finishes (live: re-tints materials / vertex colours; no model rebuild) ----------
@@ -1859,6 +1939,7 @@ function buildModel(model, opts = {}) {
       if (T > sill) out.glass.push(boxRect(...g, sill, Math.min(head, T)));
     }
     if (!cut) for (const r of WS.door) {
+      if (doorOpts(r).noLeaf) continue; // removed door: full-height opening, no header strip
       const tp = r[4] ?? 7, h = r[5] || H;
       if (h > tp + 0.05) { if (r[6]) skinSplit(r, tp, h, out); else out.int.push(boxRect(r[0], r[1], r[2], r[3], tp, h)); }
     }
@@ -2156,6 +2237,23 @@ function buildModel(model, opts = {}) {
         return;
       }
       if (inDeleted(cx, cy)) return new THREE.Group();
+      if (!(opts && opts.solid)) {
+        const parts = clipThinBlockToOpenings(a, b, c, d, z0, z1);
+        if (!parts.length) return new THREE.Group();
+        if (parts.length > 1 || parts[0][0] !== Math.min(a, c) || parts[0][1] !== Math.min(b, d) || parts[0][2] !== Math.max(a, c) || parts[0][3] !== Math.max(b, d) || parts[0][4] !== z0 || parts[0][5] !== z1) {
+          let last = new THREE.Group();
+          for (const p of parts) {
+            if (p[2] - p[0] < 0.01 || p[3] - p[1] < 0.01 || p[5] - p[4] < 0.01) continue;
+            last = _kitBlock(p[0], p[1], p[2], p[3], p[4], p[5], color, opts);
+            if (last && opts && Array.isArray(opts.chimney)) { last.userData.chimneyAt = opts.chimney; chimneyMeshes.push(last); }
+            if (last) {
+              const kind = classifyArch(p[0], p[1], p[2], p[3], p[4], p[5], color, opts || {});
+              if (kind) { last.userData.finishKind = kind; archFinishMeshes.push(last); }
+            }
+          }
+          return last;
+        }
+      }
       const m = _kitBlock(a, b, c, d, z0, z1, color, opts);
       if (m && opts && Array.isArray(opts.chimney)) { m.userData.chimneyAt = opts.chimney; chimneyMeshes.push(m); }
       if (m) {
@@ -2184,7 +2282,9 @@ function buildModel(model, opts = {}) {
       if (Math.abs(perp - pos) > tol) return;
       const s = horiz ? r[0] : r[1], e = horiz ? r[2] : r[3];
       const z0 = isDoor ? -1 : (r[4] ?? 3);
-      const z1 = isDoor ? (r[4] ?? 8) : (r[5] ?? 7);
+      const z1 = isDoor
+        ? (doorOpts(r).noLeaf ? Math.max(r[5] || 0, doorOpeningTop(r, M?.wallH || 9), M?.wallH || 9) + 0.6 : (r[4] ?? 8))
+        : (r[5] ?? 7);
       holes.push([s, e, z0, z1]);
     };
     for (const r of (WS.win || [])) add(r, false);
@@ -2786,6 +2886,61 @@ function roomAtPt(x, y, pred) { return (M?.rooms || []).find(r => (!pred || pred
 function insideAny(x, y) { return !!roomAtPt(x, y, r => !(r[7]?.outside)); }
 const isGarageRoom = (r) => GARAGE_RX.test(r[0] || '') && !/carport/i.test(r[0] || '');
 function doorOpts(r) { return (r && r[7] && typeof r[7] === 'object') ? r[7] : {}; }
+// Height of the opening: door head, or floor-to-ceiling when the leaf has been removed
+// (keep the plate / ceiling / roof — only the wall header strip is omitted).
+function openingBoxes() {
+  const out = [];
+  for (const r of (M?.walls?.door || [])) {
+    if (!doorOpts(r).noLeaf) continue;
+    const top = doorOpeningTop(r, M.wallH || 9);
+    const rx0 = Math.min(r[0], r[2]), rx1 = Math.max(r[0], r[2]);
+    const ry0 = Math.min(r[1], r[3]), ry1 = Math.max(r[1], r[3]);
+    const horiz = (rx1 - rx0) >= (ry1 - ry0);
+    const pad = 0.6; // catch cladding offset a few inches from the wall face
+    out.push({
+      x0: horiz ? rx0 : rx0 - pad, x1: horiz ? rx1 : rx1 + pad,
+      y0: horiz ? ry0 - pad : ry0, y1: horiz ? ry1 + pad : ry1,
+      z0: -1, z1: top + 0.04,
+    });
+  }
+  return out;
+}
+function subtractBox(p, hole) {
+  const ix0 = Math.max(p[0], hole.x0), ix1 = Math.min(p[2], hole.x1);
+  const iy0 = Math.max(p[1], hole.y0), iy1 = Math.min(p[3], hole.y1);
+  const iz0 = Math.max(p[4], hole.z0), iz1 = Math.min(p[5], hole.z1);
+  if (ix0 >= ix1 - 1e-4 || iy0 >= iy1 - 1e-4 || iz0 >= iz1 - 1e-4) return [p];
+  const out = [];
+  if (p[0] < ix0 - 1e-4) out.push([p[0], p[1], ix0, p[3], p[4], p[5]]);
+  if (p[2] > ix1 + 1e-4) out.push([ix1, p[1], p[2], p[3], p[4], p[5]]);
+  if (p[1] < iy0 - 1e-4) out.push([ix0, p[1], ix1, iy0, p[4], p[5]]);
+  if (p[3] > iy1 + 1e-4) out.push([ix0, iy1, ix1, p[3], p[4], p[5]]);
+  if (p[4] < iz0 - 1e-4) out.push([ix0, iy0, ix1, iy1, p[4], iz0]);
+  if (p[5] > iz1 + 1e-4) out.push([ix0, iy0, ix1, iy1, iz1, p[5]]);
+  return out;
+}
+function clipThinBlockToOpenings(a, b, c, d, z0, z1) {
+  const x0 = Math.min(a, c), x1 = Math.max(a, c), y0 = Math.min(b, d), y1 = Math.max(b, d);
+  if (Math.min(x1 - x0, y1 - y0) > 0.28) return [[a, b, c, d, z0, z1]];
+  const holes = openingBoxes();
+  if (!holes.length) return [[a, b, c, d, z0, z1]];
+  let pieces = [[x0, y0, x1, y1, z0, z1]];
+  for (const hole of holes) {
+    const next = [];
+    for (const p of pieces) next.push(...subtractBox(p, hole));
+    pieces = next;
+    if (!pieces.length) break;
+  }
+  return pieces;
+}
+function doorOpeningTop(r, fallbackH) {
+  const H = (r && r[5]) || fallbackH || (M && M.wallH) || 9;
+  if (r && doorOpts(r).noLeaf) {
+    const cx = (r[0] + r[2]) / 2, cy = (r[1] + r[3]) / 2;
+    return Math.max((r[4] ?? 7), Math.min(H, ceilingHeightAt(cx, cy, H)));
+  }
+  return (r && r[4]) ?? 7;
+}
 function doorInfo(r) {
   const [x0, y0, x1, y1] = r; const horiz = (x1 - x0) >= (y1 - y0);
   const width = horiz ? x1 - x0 : y1 - y0, thick = horiz ? y1 - y0 : x1 - x0;
@@ -2986,9 +3141,15 @@ function buildDoors(WS) {
     if (width < 1.6 || top < 6 || width > (ext ? 7.2 : 6.2)) return;
     const jt = 0.12, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     const list = ext ? casExt : cas;
-    if (horiz) list.push(boxRect(x0, y0 - 0.03, x0 + jt, y1 + 0.03, 0, top), boxRect(x1 - jt, y0 - 0.03, x1, y1 + 0.03, 0, top), boxRect(x0, y0 - 0.03, x1, y1 + 0.03, top - jt, top));
-    else list.push(boxRect(x0 - 0.03, y0, x1 + 0.03, y0 + jt, 0, top), boxRect(x0 - 0.03, y1 - jt, x1 + 0.03, y1, 0, top), boxRect(x0 - 0.03, y0, x1 + 0.03, y1, top - jt, top));
-    if (info.noLeaf) return; // door removed in Edit Plan: keep the cased opening
+    const casTop = info.noLeaf ? doorOpeningTop(r, M?.wallH || 9) : top;
+    if (horiz) {
+      list.push(boxRect(x0, y0 - 0.03, x0 + jt, y1 + 0.03, 0, casTop), boxRect(x1 - jt, y0 - 0.03, x1, y1 + 0.03, 0, casTop));
+      if (!info.noLeaf) list.push(boxRect(x0, y0 - 0.03, x1, y1 + 0.03, top - jt, top));
+    } else {
+      list.push(boxRect(x0 - 0.03, y0, x1 + 0.03, y0 + jt, 0, casTop), boxRect(x0 - 0.03, y1 - jt, x1 + 0.03, y1, 0, casTop));
+      if (!info.noLeaf) list.push(boxRect(x0 - 0.03, y0, x1 + 0.03, y1, top - jt, top));
+    }
+    if (info.noLeaf) return; // door removed: full-height opening, jamb casing only
     const clear = width - jt * 2;
     const n = clear > 4.0 ? 2 : 1;
     const lw = clear / n - 0.03, lh = top - jt - 0.06, lt = 0.15;
@@ -3592,7 +3753,7 @@ window.app = {
   },
   getItemDoors: () => itemDoors.map(d => +d.open.toFixed(2)),
   getWindows: () => wins.map(w => ({ type: w.type, open: +w.open.toFixed(2) })),
-  setWindowsMode, doorList, removeDoor: removeDoorOp, restoreDoor: restoreDoorOp, garageSize: garageSizeOp, addGarageDoor: addGarageDoorOp, garageWallInfo: (k, i) => !!garageWallInfo(k, i), pickDoor, pickWall,
+  setWindowsMode, doorList, removeDoor: removeDoorOp, restoreDoor: restoreDoorOp, garageSize: garageSizeOp, addGarageDoor: addGarageDoorOp, garageWallInfo: (k, i) => !!garageWallInfo(k, i), probeDoorHeader, probeBandAt, pickDoor, pickWall,
   removeRoomByName, getFinishes: () => finishes, setFinishes: setFinishesOp, getWalls: () => M?.walls,
   getWalkAudio: () => ({
     muted: !walkAudio.isEnabled(), unlocked: !!walkAudio.debug.unlocked(), inWalk: !!walkAudio.debug.inWalk(),

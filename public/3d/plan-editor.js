@@ -690,7 +690,7 @@ export function mountPlanEditor(ctrl) {
 
   function renderDoors(body) {
     const list0 = ctrl.doorList ? ctrl.doorList() : [];
-    body.appendChild(el('p', { id: 'editHint', class: doorNote ? 'warn' : '', text: doorNote || (canEdit() ? 'Pick a door to remove it (leaves an open cased opening, or fill it with wall), recolor it, or resize a garage door. Add a garage door from Walls → select an exterior garage wall. Click a door in the 3D view to select it.' : 'View only.') }));
+    body.appendChild(el('p', { id: 'editHint', class: doorNote ? 'warn' : '', text: doorNote || (canEdit() ? 'Pick a door to remove it (leaves a full-height opening from floor to ceiling, or fill it with wall), recolor it, or resize a garage door. Add a garage door from Walls → select an exterior garage wall. Click a door in the 3D view to select it.' : 'View only.') }));
     const list = el('div', { id: 'editList' });
     const groups = [['garage', 'Garage doors'], ['ext', 'Exterior doors'], ['int', 'Interior doors']];
     for (const [k, lab] of groups) {
@@ -700,7 +700,7 @@ export function mountPlanEditor(ctrl) {
       ds.forEach((d, n) => {
         const b = el('button', { class: 'item' + (selected?.kind === 'door' && selected.index === d.index ? ' on' : ''), type: 'button', 'data-door': String(d.index) });
         b.appendChild(document.createTextNode(`${lab.replace(/s$/, '')} ${n + 1}${d.room ? ' · ' + d.room : ''}`));
-        b.appendChild(el('small', { text: `${fmtFt(d.width)} wide${d.removed ? ' · removed (open)' : d.hasLeaf ? '' : ' · cased opening'}` }));
+        b.appendChild(el('small', { text: `${fmtFt(d.width)} wide${d.removed ? ' · removed (full-height opening)' : d.hasLeaf ? '' : ' · cased opening'}` }));
         b.onclick = () => { selected = { kind: 'door', index: d.index }; render(); ctrl.highlightDoor(d.index); };
         list.appendChild(b);
       });
@@ -717,7 +717,7 @@ export function mountPlanEditor(ctrl) {
       b.onclick = () => { pushUndo(); ctrl.restoreDoor(d.index); done(); ctrl.highlightDoor(d.index); };
       acts.appendChild(b);
     } else if (d.hasLeaf) {
-      const b = el('button', { type: 'button', class: 'danger', id: 'removeDoorBtn', text: 'Remove door (keep opening)' });
+      const b = el('button', { type: 'button', class: 'danger', id: 'removeDoorBtn', text: 'Remove door (full-height opening)' });
       b.onclick = () => { pushUndo(); ctrl.removeDoor(d.index, 'opening'); done(); ctrl.highlightDoor(d.index); };
       acts.appendChild(b);
     }

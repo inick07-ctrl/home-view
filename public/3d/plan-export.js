@@ -292,6 +292,18 @@ function drawFloorPlan(xf, snap, { labels = true, dims = true } = {}) {
     const cx = (a + c) / 2, cy = (b + d) / 2;
     bits.push(rect(xf.X(a), xf.Y(d), xf.S(c - a), xf.S(d - b), 0.003, '#fff', '#fff'));
     const meta = doorMeta.get(i) || {};
+    if (meta.removed) {
+      // Full-height opening: jamb ticks only, no swing or garage leaf / header mark.
+      if (horiz) {
+        bits.push(line(xf.X(a), xf.Y(b), xf.X(a), xf.Y(d), swOpen));
+        bits.push(line(xf.X(c), xf.Y(b), xf.X(c), xf.Y(d), swOpen));
+      } else {
+        bits.push(line(xf.X(a), xf.Y(b), xf.X(c), xf.Y(b), swOpen));
+        bits.push(line(xf.X(a), xf.Y(d), xf.X(c), xf.Y(d), swOpen));
+      }
+      bits.push(text(xf.X(cx), xf.Y(cy), 'OPEN', 0.08, { bold: true, rotate: horiz ? 0 : -90 }));
+      return;
+    }
     const garage = meta.kind === 'garage' || width >= 7.5;
     if (garage) {
       if (horiz) {
@@ -535,14 +547,16 @@ function elevationFaces(snap, face) {
   }
   (snap.walls?.door || []).forEach((w, i) => {
     const [a, b, c, d] = wallRect(w);
-    const head = w[4] ?? 7;
+    const meta = (snap.doorList || []).find((x) => x.index === i);
+    const wallTop = w[5] || wallH;
+    const head = meta?.removed ? (meta.openingTop || wallTop) : (w[4] ?? 7);
     const horiz = isHoriz(w);
     const midY = (b + d) / 2, midX = (a + c) / 2;
     const pts = horiz
       ? [[a, midY, 0], [c, midY, 0], [c, midY, head], [a, midY, head]]
       : [[midX, b, 0], [midX, d, 0], [midX, d, head], [midX, b, head]];
-    const meta = (snap.doorList || []).find((x) => x.index === i);
-    pushFace(pts, null, meta?.kind === 'garage' || (!horiz ? (d - b) : (c - a)) >= 7.5 ? 'garage' : 'door', { width: horiz ? c - a : d - b, head });
+    const kind = meta?.removed ? 'opening' : (meta?.kind === 'garage' || (!horiz ? (d - b) : (c - a)) >= 7.5 ? 'garage' : 'door');
+    pushFace(pts, null, kind, { width: horiz ? c - a : d - b, head });
   });
   for (const rf of (snap.roofs || [])) {
     for (const polyR of roofPolys(rf, wallH)) {
@@ -597,7 +611,7 @@ function drawElevation(box, snap, face, title) {
         bits.push(line(mx, pts[0][1], mx, pts[2][1], 0.005));
         bits.push(line(pts[0][0], mz, pts[2][0], mz, 0.005));
       }
-    } else if (f.kind === 'door' || f.kind === 'garage') {
+    } else if (f.kind === 'door' || f.kind === 'garage' || f.kind === 'opening') {
       bits.push(poly(pts, 0.01, '#fff'));
       if (f.kind === 'garage' && pts.length >= 4) {
         const mx = (pts[0][0] + pts[1][0]) / 2, top = Math.min(...pts.map((p) => p[1]));
@@ -969,10 +983,12 @@ function drawA4(W, H, snap, info) {
       const width = (snap.doorList || []).find((d) => d.index === i)?.width || (horiz ? wr[2] - wr[0] : wr[3] - wr[1]);
       const metaD = (snap.doorList || []).find((d) => d.index === i) || {};
       const kind = metaD.kind || (width >= 7.5 ? 'garage' : 'door');
-      const type = kind === 'garage' ? 'Overhead garage' : kind === 'ext' ? 'Exterior swing' : 'Interior swing';
+      const type = metaD.removed
+        ? 'Opening (full height)'
+        : kind === 'garage' ? 'Overhead garage' : kind === 'ext' ? 'Exterior swing' : 'Interior swing';
       const mark = kind === 'garage' ? 'GD' + (doors.filter((d) => d[0].startsWith('GD')).length + 1) : 'D' + (doors.length + 1);
-      const ht = fmtFtInTight(w[4] || 7);
-      const notes = [metaD.room, metaD.removed ? 'Opening only' : '', kind === 'garage' ? 'Incl. opener (typ.)' : ''].filter(Boolean).join('; ');
+      const ht = fmtFtInTight(metaD.removed ? (metaD.openingTop || w[5] || snap.wallH || 9) : (w[4] || 7));
+      const notes = [metaD.room, metaD.removed ? 'Opening only; no header' : '', (!metaD.removed && kind === 'garage') ? 'Incl. opener (typ.)' : ''].filter(Boolean).join('; ');
       doors.push([mark, type, fmtFtInTight(width) + ' wide', ht, notes || '—']);
     });
     table('DOOR SCHEDULE', doors.length ? doors : [['—', 'None', '—', '—', '—']]);

@@ -2,6 +2,11 @@
 """Load every catalog model, add/resize single and double garage doors,
 and assert the door geometry stays inside the garage wall opening.
 
+Also asserts that removing any door (keep opening) clears the wall header
+above it (full-height opening), that undo/restore brings the header back,
+that a saved-layout reload keeps the opening full-height, and that
+fill-with-wall still produces a solid wall.
+
 Usage:
   python3 scripts/check-garage-doors.py [--url http://127.0.0.1:3000] [--shots /workspace/shots]
 """
@@ -200,6 +205,195 @@ GARAGE_IDX_JS = r"""
 """
 
 
+
+def collect_door_headers(page):
+    return page.evaluate(
+        """() => {
+      const list = (window.app.doorList && window.app.doorList()) || [];
+      return list.map((d) => {
+        const p = window.app.probeDoorHeader ? window.app.probeDoorHeader(d.index) : null;
+        return Object.assign({
+          index: d.index, kind: d.kind, width: d.width, room: d.room,
+          removed: !!d.removed, openingTop: d.openingTop, missing: !p,
+        }, p || {});
+      });
+    }"""
+    )
+
+
+def header_fail(probes, expect_clear, label, stock_by=None):
+    """If expect_clear, the header band must be empty. Otherwise compare to stock
+    (some catalog doors are already full-height / have no header strip)."""
+    issues = []
+    stock_by = stock_by or {}
+    for p in probes or []:
+        tag = f"{label} {p.get('kind') or 'door'}[{p.get('index')}]"
+        if p.get("missing"):
+            issues.append(f"{tag}: probe missing")
+            continue
+        s = stock_by.get(p.get("index")) or {}
+        if p.get("midSkipped") or s.get("midSkipped"):
+            continue
+        clear = bool(p.get("headerClear"))
+        if expect_clear:
+            if not clear:
+                issues.append(f"{tag}: wall still occupies the header band at y={p.get('midY')}")
+            if p.get("ceilingIntact") is False and s.get("ceilingIntact") is True:
+                issues.append(f"{tag}: ceiling/roof missing above the full-height opening")
+            if p.get("removed") is False:
+                issues.append(f"{tag}: door record was not marked removed (noLeaf)")
+        else:
+            # Restored / stock: header occupancy should match the original plan.
+            if s and bool(s.get("headerClear")) != clear:
+                issues.append(f"{tag}: header state {clear} did not match stock {bool(s.get('headerClear'))}")
+            if p.get("removed"):
+                issues.append(f"{tag}: door still marked removed")
+    return issues
+
+
+def check_door_headers(page, url, mid, bust):
+    """Remove every door as a keep-opening, then undo, reload, and fill-with-wall."""
+    out = {"ok": True, "errors": [], "steps": [], "nDoors": 0}
+
+    def fail(step, issues, extra=None):
+        out["ok"] = False
+        rec = {"step": step, "issues": issues}
+        if extra:
+            rec["extra"] = extra
+        out["errors"].append(rec)
+
+    load_model(page, url, mid, bust + 700)
+    doors = page.evaluate("() => (window.app.doorList && window.app.doorList()) || []")
+    out["nDoors"] = len(doors)
+    if not doors:
+        out["steps"].append({"label": "headers", "nDoors": 0, "note": "no doors"})
+        return out
+
+    layout_before = page.evaluate("() => window.app.getLayout && window.app.getLayout()")
+    stock = collect_door_headers(page)
+    stock_by = {p.get("index"): p for p in (stock or [])}
+    stock_issues = header_fail(stock, False, "stock")
+    out["steps"].append({"label": "header-stock", "n": len(stock), "issues": stock_issues})
+    if stock_issues:
+        fail("header-stock", stock_issues)
+
+    indexes = [d["index"] for d in doors]
+    removed_ok = page.evaluate(
+        """(idxs) => idxs.map((i) => !!window.app.removeDoor(i, 'opening'))""",
+        indexes,
+    )
+    page.wait_for_timeout(200)
+    after_rm = collect_door_headers(page)
+    rm_issues = header_fail(after_rm, True, "remove", stock_by)
+    if not all(removed_ok):
+        rm_issues.append("removeDoor returned false for one or more doors: " + str(removed_ok))
+    layout_removed = page.evaluate("() => window.app.getLayout && window.app.getLayout()")
+    # 2D plan / snapshot should flag removed doors as full-height openings.
+    snap = page.evaluate(
+        """() => {
+      const list = (window.app.doorList && window.app.doorList()) || [];
+      return {
+        removed: list.filter((d) => d.removed).length,
+        total: list.length,
+        openingTops: list.filter((d) => d.removed).map((d) => ({ i: d.index, top: d.openingTop, h: d.height })),
+      };
+    }"""
+    )
+    if snap.get("removed") != snap.get("total"):
+        rm_issues.append(f"doorList removed count {snap.get('removed')} != {snap.get('total')}")
+    out["steps"].append({"label": "header-remove-all", "issues": rm_issues, "snap": snap})
+    if rm_issues:
+        fail("header-remove-all", rm_issues)
+
+    restored_ok = page.evaluate(
+        """(idxs) => idxs.map((i) => !!window.app.restoreDoor(i))""",
+        indexes,
+    )
+    page.wait_for_timeout(200)
+    after_rs = collect_door_headers(page)
+    rs_issues = header_fail(after_rs, False, "restore", stock_by)
+    if not all(restored_ok):
+        rs_issues.append("restoreDoor returned false for one or more doors: " + str(restored_ok))
+    out["steps"].append({"label": "header-restore-all", "issues": rs_issues})
+    if rs_issues:
+        fail("header-restore-all", rs_issues)
+
+    # Reload the removed layout as a saved project would.
+    if layout_removed and page.evaluate("() => typeof window.app.applyLayout === 'function'"):
+        load_model(page, url, mid, bust + 750)
+        page.evaluate("(L) => window.app.applyLayout(L)", layout_removed)
+        page.wait_for_timeout(250)
+        after_ld = collect_door_headers(page)
+        ld_issues = header_fail(after_ld, True, "reload", stock_by)
+        out["steps"].append({"label": "header-reload-removed", "issues": ld_issues})
+        if ld_issues:
+            fail("header-reload-removed", ld_issues)
+
+    # Undo via the pre-remove layout brings headers and leaves back.
+    if layout_before and page.evaluate("() => typeof window.app.applyLayout === 'function'"):
+        page.evaluate("(L) => window.app.applyLayout(L)", layout_before)
+        page.wait_for_timeout(250)
+        after_un = collect_door_headers(page)
+        un_issues = header_fail(after_un, False, "undo", stock_by)
+        out["steps"].append({"label": "header-undo-layout", "issues": un_issues})
+        if un_issues:
+            fail("header-undo-layout", un_issues)
+
+    # Fill-with-wall still produces a solid wall (header band and leaf height).
+    load_model(page, url, mid, bust + 780)
+    doors2 = page.evaluate("() => (window.app.doorList && window.app.doorList()) || []")
+    pick = next((d for d in doors2 if d.get("kind") in ("int", "ext") and d.get("hasLeaf") and 2.0 <= (d.get("width") or 0) <= 4.5), None)
+    if pick is None:
+        pick = next((d for d in doors2 if d.get("hasLeaf") and (d.get("width") or 0) < 7), None)
+    if pick is None:
+        pick = doors2[0] if doors2 else None
+    if pick and page.evaluate("() => typeof window.app.probeBandAt === 'function'"):
+        info = page.evaluate("(i) => window.app.probeDoorHeader(i)", pick["index"])
+        layout_fill_before = page.evaluate("() => window.app.getLayout && window.app.getLayout()")
+        filled = page.evaluate("(i) => window.app.removeDoor(i, 'wall')", pick["index"])
+        page.wait_for_timeout(200)
+        midY = (info or {}).get("midY") or (((info or {}).get("leafTop") or 7) + 0.6)
+        cx, cy, horiz = (info or {}).get("cx"), (info or {}).get("cy"), (info or {}).get("horiz")
+        half = (info or {}).get("half")
+        band = page.evaluate(
+            """({ cx, cy, horiz, y, half }) => window.app.probeBandAt(cx, cy, horiz, y, half)""",
+            {"cx": cx, "cy": cy, "horiz": horiz, "y": midY, "half": half},
+        )
+        leafY = ((info or {}).get("leafTop") or 7) * 0.5
+        leaf = page.evaluate(
+            """({ cx, cy, horiz, y, half }) => window.app.probeBandAt(cx, cy, horiz, y, half)""",
+            {"cx": cx, "cy": cy, "horiz": horiz, "y": leafY, "half": half},
+        )
+        fill_issues = []
+        if not filled:
+            fill_issues.append("removeDoor(..., 'wall') returned false")
+        if band and band.get("headerClear"):
+            fill_issues.append(f"fill-with-wall left the header band open at y={midY}")
+        if leaf and leaf.get("headerClear"):
+            fill_issues.append("fill-with-wall left the door-height span open")
+        # door should no longer be in the list at that index as a door
+        still = page.evaluate(
+            """({ cx, cy }) => ((window.app.doorList && window.app.doorList()) || []).some((d) => {
+                const walls = (window.app.getWalls && window.app.getWalls()) || {};
+                const rec = (walls.door || [])[d.index];
+                if (!rec) return false;
+                const mx = (rec[0] + rec[2]) / 2, my = (rec[1] + rec[3]) / 2;
+                return Math.hypot(mx - cx, my - cy) < 0.4;
+              })""",
+            {"cx": cx, "cy": cy},
+        )
+        if still:
+            fill_issues.append(f"door at ({cx}, {cy}) still listed after fill-with-wall")
+        out["steps"].append({"label": "header-fill-wall", "issues": fill_issues, "pick": pick, "band": band, "leaf": leaf})
+        if fill_issues:
+            fail("header-fill-wall", fill_issues)
+        if layout_fill_before:
+            page.evaluate("(L) => window.app.applyLayout(L)", layout_fill_before)
+            page.wait_for_timeout(200)
+
+    return out
+
+
 def wait_app(page, timeout=60000):
     page.wait_for_function("() => window.app && window.app.getGarageDoors && window.app.garageSize && window.app.getRooms", timeout=timeout)
     page.wait_for_timeout(400)
@@ -282,6 +476,16 @@ def main():
                 if stock["issues"]:
                     row["ok"] = False
                     row["errors"].append({"step": "stock", "issues": stock["issues"]})
+
+                # Removing any door (keep opening) must also clear the wall header
+                # above it. Undo/restore brings the header back; a saved-layout
+                # reload keeps the full-height opening; fill-with-wall stays solid.
+                header = check_door_headers(page, args.url, mid, bust)
+                row["nDoors"] = header.get("nDoors")
+                row["steps"].extend(header.get("steps") or [])
+                if not header["ok"]:
+                    row["ok"] = False
+                    row["errors"].extend(header["errors"])
 
                 # Remove each garage door: the opener (motor, rails, tracks, hangers)
                 # must disappear with it, come back on restore, and stay gone after a
@@ -401,7 +605,7 @@ def main():
             report.append(row)
             status = "PASS" if row["ok"] else "FAIL"
             nstock = len(row.get("stockDoors") or [])
-            print(f"{status}  {mid:16s}  stock={nstock}  errors={len(row['errors'])}", flush=True)
+            print(f"{status}  {mid:16s}  stock={nstock}  doors={row.get('nDoors')}  errors={len(row['errors'])}", flush=True)
             if row["errors"]:
                 print("   ", json.dumps(row["errors"], default=str)[:800], flush=True)
 
