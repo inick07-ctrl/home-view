@@ -64,8 +64,8 @@ if (!isExampleView || !wrap) {
 
   const orig = window.app?.loadExample;
   if (typeof orig === 'function') {
-    window.app.loadExample = async (id) => {
-      await orig(id);
+    window.app.loadExample = async (id, opts) => {
+      await orig(id, opts);
       await refresh();
     };
   }

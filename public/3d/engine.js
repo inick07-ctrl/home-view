@@ -1125,27 +1125,69 @@ function setOpeningSpans(tmpl, horiz, perp, A, B, spans, oldIdx) {
 }
 const GD_SIZES = { single: 9, double: 16 };
 const GD_TWO = { each: 9, gap: 1.5 };
+// Leave a short pier so a door cannot sit flush against a corner, a T-wall, or the next opening.
+const GD_PIER = 0.4;
 function fmtFtIn(w) {
   const n = Math.max(0, +w || 0), tot = Math.round(n * 12), ft = Math.floor(tot / 12), inch = tot % 12;
   return ft + '′' + (inch ? '-' + inch + '″' : '');
 }
-// clear run along the garage wall that this door can expand into (stops at other openings / wall end)
-function garageClearSpan(i) {
-  const d = M.walls.door[i]; if (!d) return null;
-  const info = doorInfo(d);
-  const horiz = info.horiz, perp = wallPerp(d, horiz), tol = 0.35;
-  const aOf = (w) => horiz ? w[0] : w[1], bOf = (w) => horiz ? w[2] : w[3];
-  const onLine = (w) => {
-    const h2 = (w[2] - w[0]) >= (w[3] - w[1]);
-    return h2 === horiz && Math.abs(wallPerp(w, horiz) - perp) < tol;
-  };
+function along0Of(w, horiz) { return horiz ? w[0] : w[1]; }
+function along1Of(w, horiz) { return horiz ? w[2] : w[3]; }
+function onFacadeLine(w, horiz, perp, tol = 0.35) {
+  const h2 = (w[2] - w[0]) >= (w[3] - w[1]);
+  return h2 === horiz && Math.abs(wallPerp(w, horiz) - perp) < tol;
+}
+// Perpendicular interior/exterior walls that tee or corner into this facade.
+function facadeTeeStops(horiz, perp, inward = 0, tol = 0.45) {
+  const stops = [];
+  for (const kind of ['int', 'ext']) {
+    for (const w of (M.walls[kind] || [])) {
+      const h2 = (w[2] - w[0]) >= (w[3] - w[1]);
+      if (h2 === horiz) continue;
+      // Facade along-axis is x when horiz, y when vertical; the tee's
+      // across-axis is the facade normal (perp), and its along position is the stop.
+      const across0 = horiz ? w[1] : w[0], across1 = horiz ? w[3] : w[2];
+      const a0 = horiz ? w[0] : w[1], a1 = horiz ? w[2] : w[3];
+      const acrossLo = Math.min(across0, across1), acrossHi = Math.max(across0, across1);
+      if (acrossLo - tol > perp || acrossHi + tol < perp) continue;
+      // Only walls that reach into the interior / garage count. A wing or
+      // porch wall that merely touches the outward face is not a stop.
+      if (inward) {
+        const inwardPt = perp + inward * 0.8;
+        const reachesInward = inward < 0 ? acrossLo <= inwardPt + 0.2 : acrossHi >= inwardPt - 0.2;
+        if (!reachesInward) continue;
+      }
+      stops.push({ a: Math.min(a0, a1), b: Math.max(a0, a1) });
+    }
+  }
+  return stops;
+}
+function garageInwardAt(horiz, perp, along, inward) {
+  const d = 1.15;
+  const r = horiz ? roomAtPt(along, perp + inward * d) : roomAtPt(perp + inward * d, along);
+  if (!r || (r[7] && r[7].outside)) return false;
+  if (isGarageRoom(r)) return true;
+  // Unlabeled interior bays are treated as part of the garage volume
+  // (some catalog plans leave a shop/alcove name blank).
+  return !String(r[0] || '').trim();
+}
+// Usable run along a garage facade around `origin` (a point on the door or wall).
+// Stops at other openings, T-junctions / corners (plus a pier), and where the
+// interior is no longer a garage — so a door cannot spill onto a neighboring room.
+function garageUsableSpan(horiz, perp, inward, origin, ignoreDoorIdx = null) {
+  const tol = 0.35, pier = GD_PIER;
   const segs = [];
-  for (const w of (M.walls.ext || [])) if (onLine(w)) segs.push({ a: aOf(w), b: bOf(w), kind: 'wall' });
-  (M.walls.door || []).forEach((w, j) => { if (onLine(w)) segs.push({ a: aOf(w), b: bOf(w), kind: 'door', j }); });
-  (M.walls.win || []).forEach((w) => { if (onLine(w)) segs.push({ a: aOf(w), b: bOf(w), kind: 'win' }); });
-  const me = segs.find((s) => s.kind === 'door' && s.j === i);
-  if (!me) return null;
-  let lo = me.a, hi = me.b, changed = true;
+  for (const w of (M.walls.ext || [])) if (onFacadeLine(w, horiz, perp, tol)) segs.push({ a: along0Of(w, horiz), b: along1Of(w, horiz), kind: 'wall' });
+  (M.walls.door || []).forEach((w, j) => { if (onFacadeLine(w, horiz, perp, tol)) segs.push({ a: along0Of(w, horiz), b: along1Of(w, horiz), kind: 'door', j }); });
+  (M.walls.win || []).forEach((w) => { if (onFacadeLine(w, horiz, perp, tol)) segs.push({ a: along0Of(w, horiz), b: along1Of(w, horiz), kind: 'win' }); });
+  const me = ignoreDoorIdx == null ? null : segs.find((s) => s.kind === 'door' && s.j === ignoreDoorIdx);
+  let lo = origin, hi = origin;
+  if (me) { lo = me.a; hi = me.b; }
+  else {
+    const host = segs.find((s) => s.kind === 'wall' && s.a <= origin + 0.05 && s.b >= origin - 0.05);
+    if (host) { lo = host.a; hi = host.b; }
+  }
+  let changed = true;
   while (changed) {
     changed = false;
     for (const s of segs) {
@@ -1154,12 +1196,31 @@ function garageClearSpan(i) {
       if (s.a < hi + 0.16 && s.b > hi - 0.16 && s.b > hi + 0.01) { hi = s.b; changed = true; }
     }
   }
+  const bodyA = me ? me.a : origin, bodyB = me ? me.b : origin;
   for (const s of segs) {
-    if (s.kind === 'wall' || (s.kind === 'door' && s.j === i)) continue;
-    if (s.b <= me.a + 0.05) lo = Math.max(lo, s.b);
-    if (s.a >= me.b - 0.05) hi = Math.min(hi, s.a);
+    if (s.kind === 'wall' || (s.kind === 'door' && s.j === ignoreDoorIdx)) continue;
+    if (s.b <= bodyA + 0.05) lo = Math.max(lo, s.b + pier);
+    if (s.a >= bodyB - 0.05) hi = Math.min(hi, s.a - pier);
   }
-  return { lo, hi, horiz, perp, info, a0: me.a, b0: me.b };
+  for (const s of facadeTeeStops(horiz, perp, inward)) {
+    // Ignore the facade's own thickness; only perpendicular walls that actually meet it.
+    if (s.b - s.a < 0.12) continue;
+    if (s.b <= bodyA + 0.08) lo = Math.max(lo, s.b + pier);
+    if (s.a >= bodyB - 0.08) hi = Math.min(hi, s.a - pier);
+  }
+  const step = 0.2;
+  while (lo < hi && !garageInwardAt(horiz, perp, lo + 0.25, inward)) lo += step;
+  while (hi > lo && !garageInwardAt(horiz, perp, hi - 0.25, inward)) hi -= step;
+  if (lo < hi) { lo += 0; hi -= 0; }
+  return { lo, hi, horiz, perp, inward, a0: me ? me.a : origin, b0: me ? me.b : origin, segs };
+}
+function garageClearSpan(i) {
+  const d = M.walls.door[i]; if (!d) return null;
+  const info = doorInfo(d); if (!info.garage) return null;
+  const horiz = info.horiz, perp = wallPerp(d, horiz);
+  const span = garageUsableSpan(horiz, perp, info.inward, (along0Of(d, horiz) + along1Of(d, horiz)) / 2, i);
+  if (!(span.hi - span.lo > 0.5)) return null;
+  return { ...span, info, a0: along0Of(d, horiz), b0: along1Of(d, horiz) };
 }
 function garageSizeOp(i, size) {
   const d = M.walls.door[i]; if (!d) return { ok: false, why: 'no door' };
@@ -1227,12 +1288,23 @@ function garageWallInfo(kind, index) {
 }
 function addGarageDoorOp(kind, index, size = 'single') {
   const g = garageWallInfo(kind, index); if (!g) return { ok: false, why: 'pick an exterior garage wall' };
-  const W = GD_SIZES[size] || 9; if (g.len < W + 0.6) return { ok: false, why: 'wall is shorter than the door' };
-  const span = [g.mid - W / 2, g.mid + W / 2];
+  const want = GD_SIZES[size] || 9;
+  const mx = (g.w[0] + g.w[2]) / 2, my = (g.w[1] + g.w[3]) / 2, t = g.horiz ? g.w[3] - g.w[1] : g.w[2] - g.w[0], dd = t / 2 + 1.2;
+  const gA = g.horiz ? roomAtPt(mx, my - dd, isGarageRoom) : roomAtPt(mx - dd, my, isGarageRoom);
+  const inward = gA ? -1 : 1;
+  const range = garageUsableSpan(g.horiz, g.perp, inward, g.mid, null);
+  const avail = range.hi - range.lo;
+  if (avail < 7.5) return { ok: false, why: 'not enough garage wall there (only ' + fmtFtIn(avail) + ' clear on this wall)' };
+  let W = want, clamped = false;
+  if (W > avail + 0.02) { W = Math.floor(avail * 4) / 4; clamped = true; }
+  if (W < 7.5) return { ok: false, why: 'not enough garage wall there (only ' + fmtFtIn(avail) + ' clear on this wall)' };
+  let c = Math.min(Math.max(g.mid, range.lo + W / 2), range.hi - W / 2);
+  const span = [c - W / 2, c + W / 2];
   const snap = cloneWalls(M.walls);
   const res = setOpeningSpans([0, 0, 0, 0, 8, g.w[4] || null, 1, { garage: true }], g.horiz, g.perp, span[0], span[1], [span], null);
   if (!res.ok) { M.walls = snap; return res; }
-  rebuildPlan(); return res;
+  rebuildPlan();
+  return { ...res, width: W, clamped, shifted: Math.abs(c - g.mid) > 0.15, size: W > 12 ? 'double' : 'single', why: clamped ? 'A ' + (size === 'double' ? '16′' : '9′') + ' door needs more clear wall; fitted ' + fmtFtIn(W) + ' (the most that fits on this garage wall).' : undefined };
 }
 function doorList() {
   return (M?.walls?.door || []).map((d, i) => {
@@ -3194,9 +3266,10 @@ if (typeof ResizeObserver === 'function' && $('topbar')) {
   new ResizeObserver(syncTopbar).observe($('topbar'));
 }
 let currentId = null;
-async function loadExample(id) {
+async function loadExample(id, opts = {}) {
   const entry = REGISTRY.find(r => r.id === id) || REGISTRY[0];
-  if (entry.id === currentId) return;
+  const fresh = !!(opts && opts.fresh);
+  if (entry.id === currentId && !fresh) return;
   currentId = entry.id;
   for (const b of tabs.children) b.classList.toggle('on', b.dataset.id === entry.id);
   const mod = await entry.load();
@@ -3207,7 +3280,7 @@ async function loadExample(id) {
   currentStyle = (mod.default && mod.default.defaultStyle) || 'default';
   syncStyleUi();
   snapshotOriginal(mod.default);
-  activeLayout = layoutFromStorage();
+  activeLayout = fresh ? null : layoutFromStorage();
   buildModel(mod.default, { layout: activeLayout });
   setMode('orbit', true);
   window.app.current = entry.id;
@@ -3461,7 +3534,7 @@ window.app = {
   holdGarage: (i, v) => { const g = gdoors[i]; if (g) { g.hold = v == null ? null : +v; poseGarage(g); } },
   getItemDoors: () => itemDoors.map(d => +d.open.toFixed(2)),
   getWindows: () => wins.map(w => ({ type: w.type, open: +w.open.toFixed(2) })),
-  setWindowsMode, doorList, removeDoor: removeDoorOp, restoreDoor: restoreDoorOp, garageSize: garageSizeOp, addGarageDoor: addGarageDoorOp, pickDoor, pickWall,
+  setWindowsMode, doorList, removeDoor: removeDoorOp, restoreDoor: restoreDoorOp, garageSize: garageSizeOp, addGarageDoor: addGarageDoorOp, garageWallInfo: (k, i) => !!garageWallInfo(k, i), pickDoor, pickWall,
   removeRoomByName, getFinishes: () => finishes, setFinishes: setFinishesOp, getWalls: () => M?.walls,
   getWalkAudio: () => ({
     muted: !walkAudio.isEnabled(), unlocked: !!walkAudio.debug.unlocked(), inWalk: !!walkAudio.debug.inWalk(),

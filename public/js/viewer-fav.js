@@ -83,8 +83,8 @@ if (!btn || params.get('embed') === '1' || document.body.classList.contains('emb
   function hookLoadExample() {
     const orig = window.app?.loadExample;
     if (typeof orig !== 'function' || orig._favHooked) return !!orig;
-    const wrapped = async (id) => {
-      const r = await orig(id);
+    const wrapped = async (id, opts) => {
+      const r = await orig(id, opts);
       refresh();
       return r;
     };
