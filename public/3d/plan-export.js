@@ -83,6 +83,9 @@ export function loadPlanInfo(snap) {
     revision: String(fromLayout.revision || stored.revision || '0').slice(0, 12),
     size: SIZES[fromLayout.size || stored.size] ? (fromLayout.size || stored.size) : 'tabloid',
     schedule: (fromLayout.schedule ?? stored.schedule ?? true) !== false,
+    price: String(fromLayout.price || stored.price || '').slice(0, 40),
+    contactName: String(fromLayout.contactName || stored.contactName || '').slice(0, 80),
+    contactPhone: String(fromLayout.contactPhone || stored.contactPhone || '').slice(0, 40),
   };
 }
 export function savePlanInfo(snap, info) {
@@ -93,6 +96,9 @@ export function savePlanInfo(snap, info) {
     revision: String(info.revision || '0').slice(0, 12),
     size: SIZES[info.size] ? info.size : 'tabloid',
     schedule: info.schedule !== false,
+    price: String(info.price || '').slice(0, 40),
+    contactName: String(info.contactName || '').slice(0, 80),
+    contactPhone: String(info.contactPhone || '').slice(0, 40),
   };
   try { localStorage.setItem(infoKey(snap), JSON.stringify(rec)); } catch {}
   if (snap && typeof snap.onPlanInfo === 'function') snap.onPlanInfo(rec);

@@ -1,3 +1,4 @@
+import { mountClientTour } from './client-tour.js';
 // Generic showcase UI: plan readout, dollhouse, touch joystick.
 // Works for every catalog model and saved project — no per-model data.
 
@@ -112,7 +113,9 @@ export function mountShowcase() {
   });
   bindJoystick();
   addEventListener('peakstead-plan-changed', refreshPlanReadout);
+  addEventListener('peakstead-toggle-readout', (e) => togglePlanReadout(!!(e.detail && e.detail.open)));
 }
 
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountShowcase);
-else mountShowcase();
+function bootShowcase() { mountShowcase(); mountClientTour(); }
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootShowcase);
+else bootShowcase();

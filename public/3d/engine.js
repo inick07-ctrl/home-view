@@ -8,7 +8,7 @@ import { parcelDefaults, lotStats, formatLotArea, worldRings, buildableRings, xf
 import { sanitizeWalls, clipCounters, autoFurnish, dressRooms, installFurniture, buildItemMesh, makeItem, itemRect, clearanceHit, isCoveredPorch, isPorchLike, CATALOG as ITEM_CATALOG } from './furniture.js';
 import { mountPlanEditor, cloneWalls, cloneRooms, cloneItems, cloneRoofs, loadLocalLayout, sanitizeLayout } from './plan-editor.js';
 import { createWalkAudio } from './walk-audio.js';
-import { mountPlanExport, setPlan2d, openExportDialog, exportPlansPdf, buildPlanSvgSet } from './plan-export.js';
+import { mountPlanExport, setPlan2d, openExportDialog, exportPlansPdf, buildPlanSvgSet, loadPlanInfo, savePlanInfo } from './plan-export.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('c');
@@ -2856,7 +2856,16 @@ function buildModel(model, opts = {}) {
   refreshItems();
   applyTimeOfDay();
   armQualityGrace();
+  auditAndFixPlan();
+  tourStopsCache = null;
+  const gen = ++tourPrefetchGen;
+  clearTimeout(tourPrefetchTimer);
+  tourPrefetchTimer = setTimeout(() => {
+    if (gen !== tourPrefetchGen || tourStopsCache || !M || tourActive) return;
+    try { tourStopsCache = buildTourStops(); } catch {}
+  }, 500);
   applyArchFinishes();
+  try { dispatchEvent(new CustomEvent('peakstead-plan-changed')); } catch {}
   stripOpeningTrim();
   ensureEditor();
   syncAreaUi(M);
@@ -3153,6 +3162,8 @@ function buildModel(model, opts = {}) {
     const obj = new CSS2DObject(div);
     const [lx, ly] = o.labelAt || [(a + c) / 2, (b + d) / 2];
     obj.position.set(Wx(lx), o.labelZ || (minor ? 3 : 4.5), Wz(ly));
+    obj.userData.roomName = name;
+    obj.userData.level = (typeof roomLevelId === 'function') ? roomLevelId(r) : 'main';
     labels.add(obj);
   }
   setLabels(labelsOn);
@@ -3797,7 +3808,7 @@ addEventListener('keyup', e => { keys[e.code] = false; });
 $('walkmsg').onclick = () => renderer.domElement.requestPointerLock?.();
 renderer.domElement.addEventListener('click', (ev) => {
   if (mode === 'walk' && !editMode && clickWindow(ev)) return;
-  if (mode === 'walk' && !isTouch && !document.pointerLockElement) renderer.domElement.requestPointerLock?.();
+  if (mode === 'walk' && !tourActive && !isTouch && !document.pointerLockElement) renderer.domElement.requestPointerLock?.();
 });
 // click / tap a window in walk-through to open or close just that window
 function clickWindow(ev) {
@@ -3844,6 +3855,7 @@ for (const b of document.querySelectorAll('#pad button[data-k]')) {
   for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => pad[k] = false);
 }
 function walkStep(dt) {
+  if (tourActive) { tourAdvance(dt); return; }
   let f = 0, s = 0;
   if (keys.KeyW || keys.ArrowUp || pad.f) f += 1;
   if (keys.KeyS || keys.ArrowDown || pad.b) f -= 1;
@@ -3863,7 +3875,7 @@ function walkStep(dt) {
   const dx = walkVel.x * dt, dz = walkVel.z * dt;
   if (dx && !blocked(player.x + dx, player.y)) player.x += dx; else if (dx) walkVel.x = 0;
   if (dz && !blocked(player.x, player.y + dz)) player.y += dz; else if (dz) walkVel.z = 0;
-  camera.position.set(player.x, EYE, player.y);
+  camera.position.set(player.x, EYE + walkFloorZ, player.y);
   camera.rotation.set(pitch, yaw, 0, 'YXZ');
 }
 
@@ -4246,6 +4258,23 @@ if (SRC.kind === 'embed' && window.parent && window.parent !== window) {
 }
 
 window.__walkAudio = walkAudio.debug;
+
+let walkFloorZ = 0;
+let currentLevel = 'main';
+let tourActive = false;
+let tourState = null;
+let tourLastT = 0;
+let tourStopsCache = null;
+let tourPrefetchTimer = 0;
+let tourPrefetchGen = 0;
+
+function setWalkPlan(fx, fy) {
+  const hp = housePose();
+  const w = xfHouse(Wx(fx), Wz(fy), hp.x, hp.z, hp.yaw);
+  player.x = w[0]; player.y = w[1]; walkVel.x = 0; walkVel.z = 0;
+  if (mode === 'walk') camera.position.set(w[0], EYE + walkFloorZ, w[1]);
+  return { x: w[0], y: w[1] };
+}
 window.app = {
   loadExample, loadJsonModel, scene, setMode, setRoof, setLabels, setCut, setPlan, setStyle, camera, orbit, player,
   setLook: (y, p) => { yaw = y; pitch = p; }, setPlayer: (fx, fy) => player.set(Wx(fx), Wz(fy)), current: null,
@@ -4307,14 +4336,9 @@ window.app = {
   }),
   setWalkSound: (v) => walkAudio.setEnabled(!!v),
   getWalkPos: () => ({ x: player.x, y: player.y }),
-  setWalkPos: (x, z) => { player.x = +x; player.y = +z; walkVel.x = 0; walkVel.z = 0; if (mode === 'walk') camera.position.set(+x, EYE, +z); },
-  setWalkPlan: (fx, fy) => {
-    const hp = housePose();
-    const w = xfHouse(Wx(fx), Wz(fy), hp.x, hp.z, hp.yaw);
-    player.x = w[0]; player.y = w[1]; walkVel.x = 0; walkVel.z = 0;
-    if (mode === 'walk') camera.position.set(w[0], EYE, w[1]);
-    return { x: w[0], y: w[1] };
-  },
+  setWalkPos: (x, z) => { player.x = +x; player.y = +z; walkVel.x = 0; walkVel.z = 0; if (mode === 'walk') camera.position.set(+x, EYE + walkFloorZ, +z); },
+  setWalkPlan,
+
   getLayout: () => captureLayout(),
   planReadout,
   setDollhouse,
@@ -4322,6 +4346,12 @@ window.app = {
   setTimeOfDay,
   getTimeOfDay: () => timeOfDay,
   getQualityLevel: () => qualityLevel,
+  startTour, stopTour, finishTour: finishTourRise, isTourActive: () => !!tourActive,
+  listLevels, setLevel, getLevel: () => currentLevel,
+  getClientInfo, setClientInfo,
+  auditAndFixPlan, buildTourStops,
+  sellingPoint,
+
   dbg: () => ({ roof, root, ceilings, wallsFull, M, itemsGroup }),
 };
 
@@ -4487,6 +4517,543 @@ function planReadout() {
     flagged: out.filter((r) => r.flags && r.flags.length),
   };
 }
+
+
+// ---------- client info, levels, guided tour, plan audit (generic) ----------
+let clientSaveTimer = 0;
+
+function roomLevelId(room) {
+  const o = (room && room[7] && typeof room[7] === 'object') ? room[7] : {};
+  const n = (room && room[0]) || '';
+  if (o.loft || o.noFloor || (o.deckZ != null && o.deckZ >= 6) || /loft|bonus room|upstairs|second (floor|story)|2nd floor/i.test(n)) return 'upper';
+  if ((o.level != null && +o.level < 0) || (o.floorLevel != null && +o.floorLevel < 0) || (o.z != null && +o.z < -1) || (o.deckZ != null && +o.deckZ < 0) || /basement|cellar|lower level|downstairs/i.test(n)) return 'lower';
+  if ((o.level != null && +o.level > 0) || (o.floorLevel != null && +o.floorLevel > 0)) return 'upper';
+  return 'main';
+}
+function roomFloorZ(room) {
+  const o = (room && room[7] && typeof room[7] === 'object') ? room[7] : {};
+  if (o.deckZ != null && Number.isFinite(+o.deckZ)) return +o.deckZ;
+  if (o.loftZ != null && Number.isFinite(+o.loftZ)) return +o.loftZ;
+  if (o.z != null && Number.isFinite(+o.z) && Math.abs(+o.z) >= 0.5) return +o.z;
+  return 0;
+}
+function listLevels() {
+  const rooms = M?.rooms || [];
+  const seen = new Set(rooms.map(roomLevelId));
+  const order = ['lower', 'main', 'upper'];
+  const labels = { lower: 'Lower', main: 'Main', upper: 'Upper / Loft' };
+  return order.filter((id) => seen.has(id)).map((id) => ({ id, label: labels[id] }));
+}
+function setLevel(id) {
+  const levels = listLevels();
+  if (!levels.some((l) => l.id === id)) id = (levels[0] && levels[0].id) || 'main';
+  currentLevel = id;
+  if (labels) {
+    for (const o of labels.children) {
+      const lv = o.userData && o.userData.level;
+      o.visible = !!labelsOn && (!lv || lv === currentLevel);
+    }
+  }
+  const rooms = (M?.rooms || []).filter((r) => roomLevelId(r) === currentLevel);
+  if (!rooms.length) return currentLevel;
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const r of rooms) { x0 = Math.min(x0, r[3]); y0 = Math.min(y0, r[4]); x1 = Math.max(x1, r[5]); y1 = Math.max(y1, r[6]); }
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  walkFloorZ = roomFloorZ(rooms[0]);
+  if (mode === 'walk') {
+    const spot = nearestWalkable(cx, cy, 8) || [cx, cy];
+    if (typeof setWalkPlan === 'function') setWalkPlan(spot[0], spot[1]);
+    if (camera) camera.position.y = EYE + walkFloorZ;
+  } else if (window.app && typeof window.app.lookAtPlan === 'function') {
+    window.app.lookAtPlan(cx, cy, Math.max(18, Math.max(x1 - x0, y1 - y0) * 0.9), 8 + walkFloorZ);
+  }
+  try { dispatchEvent(new CustomEvent('peakstead-levels-changed')); } catch {}
+  return currentLevel;
+}
+
+function getClientInfo() {
+  const snap = (typeof getPlanSnapshot === 'function') ? getPlanSnapshot() : { title: (M && (M.title || M.name)) || '', planInfo: activeLayout && activeLayout.planInfo, src: SRC, exampleId: currentId };
+  const rec = (typeof loadPlanInfo === 'function') ? loadPlanInfo(snap) : {};
+  return {
+    project: rec.project || (M && (M.title || M.name)) || '',
+    address: rec.address || '',
+    price: rec.price || '',
+    contactName: rec.contactName || '',
+    contactPhone: rec.contactPhone || '',
+  };
+}
+function setClientInfo(partial) {
+  const cur = getClientInfo();
+  const rec = {
+    ...((activeLayout && activeLayout.planInfo) || {}),
+    project: String(partial.project != null ? partial.project : cur.project || '').slice(0, 80),
+    address: String(partial.address != null ? partial.address : cur.address || '').slice(0, 120),
+    price: String(partial.price != null ? partial.price : cur.price || '').slice(0, 40),
+    contactName: String(partial.contactName != null ? partial.contactName : cur.contactName || '').slice(0, 80),
+    contactPhone: String(partial.contactPhone != null ? partial.contactPhone : cur.contactPhone || '').slice(0, 40),
+  };
+  if (!activeLayout) captureLayout();
+  if (activeLayout) activeLayout.planInfo = { ...(activeLayout.planInfo || {}), ...rec };
+  const snap = (typeof getPlanSnapshot === 'function') ? getPlanSnapshot() : null;
+  if (snap && typeof savePlanInfo === 'function') savePlanInfo(snap, { ...(snap.planInfo || {}), ...rec });
+  else if (activeLayout) activeLayout.planInfo = { ...(activeLayout.planInfo || {}), ...rec };
+  if (SRC && SRC.kind === 'project') {
+    clearTimeout(clientSaveTimer);
+    clientSaveTimer = setTimeout(() => { saveLayoutRemote(captureLayout()).catch(() => {}); }, 800);
+  }
+  return getClientInfo();
+}
+
+function sellingPoint(pr) {
+  const n = pr.name || 'Room';
+  const sf = Math.round(pr.area || 0);
+  const vault = (pr.notes || []).some((t) => /vault/i.test(t));
+  if (/kitchen/i.test(n)) return vault ? `A ${sf} sf vaulted kitchen made for gathering.` : `A ${sf} sf kitchen sized for everyday cooking and gathering.`;
+  if (/living|great|family|hearth|lounge/i.test(n)) return vault ? `The ${sf} sf vaulted heart of the home.` : `${sf} sf of living space for conversation and daily life.`;
+  if (/dining/i.test(n)) return `A ${sf} sf dining room ready to host.`;
+  if (/primary|master|m\.\s*bed/i.test(n)) return `A ${sf} sf primary suite with room to unwind.`;
+  if (/bed/i.test(n)) return `A ${sf} sf bedroom.`;
+  if (/bath|powder/i.test(n)) return pr.windows ? `A ${sf} sf bath with natural light.` : `A ${sf} sf bath.`;
+  if (/office|study|library/i.test(n)) return `A ${sf} sf office or study.`;
+  if (/laundry|mud/i.test(n)) return `A ${sf} sf laundry and everyday utility space.`;
+  if (/garage|\bbay\b/i.test(n)) return `${sf} sf of garage space.`;
+  if (/porch|patio|terrace/i.test(n)) return `A ${sf} sf ${vault ? 'vaulted ' : ''}porch.`;
+  if (/foyer|entry/i.test(n)) return vault ? `A ${sf} sf vaulted entry.` : `A ${sf} sf entry.`;
+  if (/loft/i.test(n)) return `A ${sf} sf loft above the main living area.`;
+  if ((pr.windows || 0) >= 3) return `${sf} sf with ${pr.windows} windows and abundant light.`;
+  if (vault) return `A ${sf} sf vaulted space.`;
+  return `${pr.sizeLabel || ''} · ${sf} sf.`.replace(/^\s·\s/, '');
+}
+
+function inDoorClear(fx, fy) {
+  for (const d of (M?.walls?.door || [])) {
+    const info = doorInfo(d);
+    const along = info.horiz ? Math.abs(fx - info.cx) : Math.abs(fy - info.cy);
+    const perp = info.horiz ? Math.abs(fy - info.cy) : Math.abs(fx - info.cx);
+    if (along < info.width / 2 + 0.2 && perp < 1.5) return true;
+  }
+  return false;
+}
+function planBlocked(fx, fy) {
+  if (inDoorClear(fx, fy)) return false;
+  const lx = Wx(fx), lz = Wz(fy);
+  const rad = 0.55;
+  for (const [a, b, c, d] of (solids || [])) {
+    const nx = Math.max(a, Math.min(lx, c)), nz = Math.max(b, Math.min(lz, d));
+    if ((lx - nx) ** 2 + (lz - nz) ** 2 < rad * rad) return true;
+  }
+  for (const [a, b, c, d] of (itemSolids || [])) {
+    if (lx > a - 0.32 && lx < c + 0.32 && lz > b - 0.32 && lz < d + 0.32) return true;
+  }
+  return false;
+}
+function nearestWalkable(fx, fy, radius = 6) {
+  if (!planBlocked(fx, fy)) return [fx, fy];
+  for (let r = 0.5; r <= radius; r += 0.5) {
+    const n = Math.max(8, Math.round(r * 8));
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const x = fx + Math.cos(a) * r, y = fy + Math.sin(a) * r;
+      if (!planBlocked(x, y)) return [x, y];
+    }
+  }
+  return null;
+}
+function makeWalkGrid() {
+  const rooms = M?.rooms || [];
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const r of rooms) { x0 = Math.min(x0, r[3] - 4); y0 = Math.min(y0, r[4] - 4); x1 = Math.max(x1, r[5] + 4); y1 = Math.max(y1, r[6] + 4); }
+  if (!Number.isFinite(x0)) { x0 = 0; y0 = 0; x1 = 40; y1 = 40; }
+  const step = 0.85;
+  const gw = Math.ceil((x1 - x0) / step) + 1, gh = Math.ceil((y1 - y0) / step) + 1;
+  const cells = new Uint8Array(gw * gh);
+  for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) {
+    cells[j * gw + i] = planBlocked(x0 + i * step, y0 + j * step) ? 0 : 1;
+  }
+  return { cells, x0, y0, gw, gh, step };
+}
+function astarPlan(x0, y0, x1, y1, grid) {
+  const G = grid || makeWalkGrid();
+  const { cells, x0: ox, y0: oy, gw, gh, step } = G;
+  const ix = (x, y) => {
+    const i = Math.round((x - ox) / step), j = Math.round((y - oy) / step);
+    return { i, j, k: j * gw + i, ok: i >= 0 && j >= 0 && i < gw && j < gh };
+  };
+  const start = nearestWalkable(x0, y0, 8) || [x0, y0];
+  const goal = nearestWalkable(x1, y1, 8) || [x1, y1];
+  const s = ix(start[0], start[1]), g = ix(goal[0], goal[1]);
+  if (!s.ok || !g.ok) return [goal];
+  if (s.k === g.k) return [goal];
+  const open = [[Math.abs(g.i - s.i) + Math.abs(g.j - s.j), 0, s.i, s.j, -1]];
+  const came = new Int32Array(gw * gh).fill(-2);
+  const best = new Float32Array(gw * gh).fill(1e9);
+  best[s.k] = 0;
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+  let found = -1, guard = 0;
+  while (open.length && guard++ < 8000) {
+    let p = 0;
+    for (let n = 1; n < open.length; n++) if (open[n][0] < open[p][0]) p = n;
+    const cur = open.splice(p, 1)[0];
+    const ck = cur[3] * gw + cur[2];
+    if (came[ck] >= -1 && came[ck] !== -2 && cur[1] > best[ck]) continue;
+    came[ck] = cur[4];
+    if (ck === g.k) { found = ck; break; }
+    for (const [di, dj] of dirs) {
+      const ni = cur[2] + di, nj = cur[3] + dj;
+      if (ni < 0 || nj < 0 || ni >= gw || nj >= gh) continue;
+      const nk = nj * gw + ni;
+      if (!cells[nk]) continue;
+      const stepCost = (di && dj) ? 1.414 : 1;
+      const ng = cur[1] + stepCost;
+      if (ng >= best[nk]) continue;
+      best[nk] = ng;
+      open.push([ng + Math.abs(g.i - ni) + Math.abs(g.j - nj), ng, ni, nj, ck]);
+    }
+  }
+  const path = [];
+  if (found < 0) return [goal];
+  let k = found, hops = 0;
+  while (k >= 0 && hops++ < 4000) {
+    const i = k % gw, j = (k - i) / gw;
+    path.push([ox + i * step, oy + j * step]);
+    const prev = came[k];
+    if (prev < 0) break;
+    k = prev;
+  }
+  path.reverse();
+  path.push(goal);
+  const out = [];
+  for (const pt of path) {
+    const last = out[out.length - 1];
+    if (!last || Math.hypot(pt[0] - last[0], pt[1] - last[1]) > 0.55) out.push(pt);
+  }
+  return out.length ? out : [goal];
+}
+
+function tourRank(name) {
+  const n = name || '';
+  if (/foyer|entry/i.test(n)) return 0;
+  if (/front porch/i.test(n)) return 1;
+  if (/living|great|family|hearth|lounge/i.test(n)) return 2;
+  if (/dining/i.test(n)) return 3;
+  if (/kitchen/i.test(n)) return 4;
+  if (/office|study|library/i.test(n)) return 5;
+  if (/primary|master|m\.\s*bed/i.test(n)) return 6;
+  if (/bed/i.test(n)) return 7;
+  if (/bath|powder/i.test(n)) return 8;
+  if (/laundry|mud|utility/i.test(n)) return 9;
+  if (/loft/i.test(n)) return 14;
+  if (/porch|patio|terrace/i.test(n)) return 16;
+  if (/garage|\bbay\b/i.test(n)) return 18;
+  if (/basement/i.test(n)) return 15;
+  return 11;
+}
+function isTourRoom(room) {
+  const o = room[7] || {}, n = (room[0] || '').trim();
+  const area = Math.max(0, (room[5] - room[3]) * (room[6] - room[4]));
+  if (o.outside && !/porch|patio|terrace/i.test(n)) return false;
+  if (/future porch|apron/i.test(n)) return false;
+  if (!n) return false;
+  if (/closet|wic|w\.i\.c|pantry|mech|safe|attic|unfinished|storage|linen|tile shwr|shower|\bwc\b|stair/i.test(n)) return false;
+  if (/hall|corridor/i.test(n) && area < 60) return false;
+  if (area < 20) return false;
+  return true;
+}
+function roomsConnectedByDoor(d) {
+  const info = doorInfo(d);
+  const off = info.horiz ? 1.0 : 0, o2 = info.horiz ? 0 : 1.0;
+  const a = roomAtPt(info.cx, info.cy + (info.horiz ? off : 0) + (info.horiz ? 0 : o2));
+  const b = roomAtPt(info.cx, info.cy - (info.horiz ? off : 0) - (info.horiz ? 0 : o2));
+  // fix: horiz door: vary y; vert door: vary x
+  const rA = info.horiz ? roomAtPt(info.cx, info.cy + 1.0) : roomAtPt(info.cx + 1.0, info.cy);
+  const rB = info.horiz ? roomAtPt(info.cx, info.cy - 1.0) : roomAtPt(info.cx - 1.0, info.cy);
+  return { info, a: rA, b: rB };
+}
+function entryRoom() {
+  const foyer = (M?.rooms || []).find((r) => /foyer|entry/i.test(r[0] || '') && !(r[7] && r[7].outside));
+  if (foyer) return foyer;
+  const start = M?.walkStart || [CX, CZ + (BH || 0) / 2 + 5, 0];
+  let best = null, bestD = 1e9, bestDoor = null;
+  for (const d of (M?.walls?.door || [])) {
+    const info = doorInfo(d);
+    if (info.garage) continue;
+    if (!info.ext && !/porch/i.test((roomAtPt(info.cx, info.cy) || [])[0] || '')) continue;
+    const dist = Math.hypot(info.cx - start[0], info.cy - start[1]);
+    if (dist < bestD) { bestD = dist; bestDoor = info; }
+  }
+  if (bestDoor) {
+    const rA = bestDoor.horiz ? roomAtPt(bestDoor.cx, bestDoor.cy + 1.1) : roomAtPt(bestDoor.cx + 1.1, bestDoor.cy);
+    const rB = bestDoor.horiz ? roomAtPt(bestDoor.cx, bestDoor.cy - 1.1) : roomAtPt(bestDoor.cx - 1.1, bestDoor.cy);
+    const interior = [rA, rB].find((r) => r && !(r[7] && r[7].outside) && !isPorchLike(r));
+    if (interior) return interior;
+    const any = [rA, rB].find(Boolean);
+    if (any) return any;
+  }
+  return (M?.rooms || []).find((r) => !(r[7] && r[7].outside)) || (M?.rooms || [])[0];
+}
+function roomCenter(room) {
+  return [(room[3] + room[5]) / 2, (room[4] + room[6]) / 2];
+}
+function compressWalkPath(pts) {
+  if (!pts || pts.length <= 2) return pts || [];
+  const out = [pts[0]];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const a = out[out.length - 1], b = pts[i], c = pts[i + 1];
+    const abx = b[0] - a[0], aby = b[1] - a[1];
+    const bcx = c[0] - b[0], bcy = c[1] - b[1];
+    const cross = abx * bcy - aby * bcx;
+    const dot = abx * bcx + aby * bcy;
+    const lab = Math.hypot(abx, aby), lbc = Math.hypot(bcx, bcy);
+    if (lab < 0.4) continue;
+    // keep corners and reversals; drop nearly-collinear points
+    if (Math.abs(cross) > 0.35 || dot < 0 || lab + lbc > 14) out.push(b);
+  }
+  out.push(pts[pts.length - 1]);
+  return out;
+}
+function buildTourStops() {
+
+  const readout = planReadout();
+  const byIndex = new Map((readout.rooms || []).map((r) => [r.index, r]));
+  const rooms = (M?.rooms || []).map((r, i) => ({ room: r, i, pr: byIndex.get(i), include: isTourRoom(r) })).filter((x) => x.include);
+  const startR = entryRoom();
+  const startI = startR ? M.rooms.indexOf(startR) : (rooms[0] && rooms[0].i);
+  // adjacency
+  const adj = new Map();
+  const doorLink = [];
+  const addAdj = (ia, ib, info) => {
+    if (ia == null || ib == null || ia === ib) return;
+    if (!adj.has(ia)) adj.set(ia, []);
+    adj.get(ia).push({ j: ib, info });
+  };
+  for (const d of (M?.walls?.door || [])) {
+    const { info, a, b } = roomsConnectedByDoor(d);
+    const ia = a ? M.rooms.indexOf(a) : -1, ib = b ? M.rooms.indexOf(b) : -1;
+    if (ia >= 0 && ib >= 0) { addAdj(ia, ib, info); addAdj(ib, ia, info); doorLink.push({ ia, ib, info }); }
+  }
+  const incSet = new Set(rooms.map((r) => r.i));
+  const order = [];
+  const seen = new Set();
+  const q = [];
+  if (startI != null && incSet.has(startI)) { q.push(startI); seen.add(startI); }
+  else if (rooms[0]) { q.push(rooms[0].i); seen.add(rooms[0].i); }
+  while (q.length) {
+    const i = q.shift();
+    order.push(i);
+    const nbrs = (adj.get(i) || []).filter((n) => incSet.has(n.j) && !seen.has(n.j));
+    nbrs.sort((a, b) => tourRank(M.rooms[a.j][0]) - tourRank(M.rooms[b.j][0]) || (byIndex.get(a.j)?.area || 0) - (byIndex.get(b.j)?.area || 0));
+    // visit neighbors in rank order, but BFS layer: enqueue all
+    for (const n of nbrs) { seen.add(n.j); q.push(n.j); }
+  }
+  const leftover = rooms.map((r) => r.i).filter((i) => !seen.has(i)).sort((a, b) => tourRank(M.rooms[a][0]) - tourRank(M.rooms[b][0]));
+  order.push(...leftover);
+  // build path of waypoints + room pauses
+  const start = M.walkStart || [CX, CZ + (BH || 0) / 2 + 5, 0];
+  let cur = nearestWalkable(start[0], start[1], 10) || [start[0], start[1]];
+  const waypoints = [];
+  const grid = makeWalkGrid();
+  const pushPath = (dest, stop) => {
+    const path = compressWalkPath(astarPlan(cur[0], cur[1], dest[0], dest[1], grid));
+    for (const p of path) {
+      const last = waypoints[waypoints.length - 1];
+      if (last && Math.hypot(last.x - p[0], last.y - p[1]) < 0.45) continue;
+      waypoints.push({ x: p[0], y: p[1], stop: null });
+    }
+    if (stop) {
+      const last = waypoints[waypoints.length - 1];
+      if (last && !last.stop && Math.hypot(last.x - dest[0], last.y - dest[1]) < 0.45) waypoints.pop();
+      waypoints.push({ x: dest[0], y: dest[1], stop });
+    }
+    cur = dest;
+  };
+  for (const i of order) {
+    const room = M.rooms[i];
+    const pr = byIndex.get(i);
+    const c = roomCenter(room);
+    const dest = nearestWalkable(c[0], c[1], Math.max(4, Math.min(room[5] - room[3], room[6] - room[4]) / 2 - 0.6)) || c;
+    const stop = {
+      name: (pr && pr.name) || room[0] || 'Room',
+      size: pr ? `${pr.sizeLabel} · ${Math.round(pr.area)} sf` : '',
+      point: pr ? sellingPoint(pr) : '',
+      level: roomLevelId(room),
+      floorZ: roomFloorZ(room),
+      index: i,
+    };
+    pushPath(dest, stop);
+  }
+  return waypoints;
+}
+
+function startTour(opts = {}) {
+  if (!M) return { ok: false };
+  stopTour({ silent: true });
+  const waypoints = tourStopsCache || buildTourStops();
+  tourStopsCache = waypoints;
+  if (!waypoints.length) return { ok: false, reason: 'no-rooms' };
+  tourState = {
+    waypoints,
+    i: 0,
+    pause: 0,
+    labeled: false,
+    onStop: opts.onStop,
+    onLabel: opts.onLabel,
+    rising: false,
+  };
+  const firstZ = (waypoints.find((w) => w.stop) || {}).floorZ || 0;
+  walkFloorZ = firstZ;
+  currentLevel = (waypoints.find((w) => w.stop) || {}).level || 'main';
+  setMode('walk', true);
+  try { if (document.pointerLockElement) document.exitPointerLock(); } catch {}
+  const padEl = $('pad'), msg = $('walkmsg'), cross = $('cross');
+  if (padEl) padEl.style.display = 'none';
+  if (msg) msg.style.display = 'none';
+  if (cross) cross.style.display = 'none';
+  const w0 = waypoints[0];
+  if (typeof setWalkPlan === 'function') setWalkPlan(w0.x, w0.y);
+  if (camera) camera.position.y = EYE + walkFloorZ;
+  tourActive = true;
+  tourLastT = performance.now();
+  try { dispatchEvent(new CustomEvent('peakstead-levels-changed')); } catch {}
+  return { ok: true, stops: waypoints.filter((w) => w.stop).length, itinerary: waypoints.filter((w) => w.stop).map((w) => w.stop) };
+}
+function stopTour(opts = {}) {
+  const cb = tourState && tourState.onStop;
+  tourActive = false;
+  tourState = null;
+  if ($('cross') && mode === 'walk') $('cross').style.display = 'block';
+  if (!opts.silent) {
+    try { dispatchEvent(new CustomEvent('peakstead-tour-stop')); } catch {}
+    if (typeof cb === 'function') cb();
+  }
+}
+function finishTourRise() {
+  const cb = tourState && tourState.onStop;
+  const onLabel = tourState && tourState.onLabel;
+  tourActive = false;
+  tourState = { rising: true, onStop: cb };
+  if (typeof onLabel === 'function') onLabel(null);
+  try { dispatchEvent(new CustomEvent('peakstead-tour-label', { detail: null })); } catch {}
+  if (mode === 'walk') {
+    if (walkSaved) {
+      const w = walkSaved; walkSaved = null;
+      amb.intensity = w.amb; camera.near = 0.2; camera.far = 1000; camera.updateProjectionMatrix();
+    }
+    exitWalk(); walkAudio.exitWalk();
+  }
+  setDollhouse(false);
+  setTimeout(() => {
+    tourState = null;
+    try { dispatchEvent(new CustomEvent('peakstead-tour-stop')); } catch {}
+    if (typeof cb === 'function') cb();
+  }, 2200);
+}
+function tourFaceInRoom(wp) {
+  const room = M && wp && wp.stop && M.rooms && M.rooms[wp.stop.index];
+  if (!room) return null;
+  const hp = housePose();
+  const cx = (room[3] + room[5]) / 2, cy = (room[4] + room[6]) / 2;
+  const worldOf = (fx, fy) => xfHouse(Wx(fx), Wz(fy), hp.x, hp.z, hp.yaw);
+  const aim = (fx, fy) => {
+    const w = worldOf(fx, fy);
+    const dx = w[0] - player.x, dz = w[1] - player.y;
+    if (Math.hypot(dx, dz) < 0.5) return null;
+    return Math.atan2(-dx, -dz);
+  };
+  const toCenter = aim(cx, cy);
+  if (toCenter != null) return toCenter;
+  const wide = (room[5] - room[3]) >= (room[6] - room[4]);
+  return aim(wide ? room[5] - 1.2 : cx, wide ? cy : room[6] - 1.2);
+}
+function tourWaypointWorld(wp) {
+
+  const hp = housePose();
+  return xfHouse(Wx(wp.x), Wz(wp.y), hp.x, hp.z, hp.yaw);
+}
+function tourAdvance(dt) {
+  if (!tourActive || !tourState || tourState.rising) return;
+  const { waypoints } = tourState;
+  if (tourState.i >= waypoints.length) { finishTourRise(); return; }
+  if (tourState.pause > 0) {
+    tourState.pause -= dt;
+    camera.position.set(player.x, EYE + walkFloorZ, player.y);
+    camera.rotation.set(pitch, yaw, 0, 'YXZ');
+    if (tourState.pause <= 0) { tourState.i += 1; tourState.labeled = false; }
+    return;
+  }
+  // Use wall-clock time so a slow laptop or SwiftShader still covers ground
+  // (the render loop caps dt at 0.05, which would crawl at 2–3 fps).
+  const now = performance.now();
+  const real = tourLastT ? Math.min((now - tourLastT) / 1000, 0.25) : Math.min(Math.max(dt, 0), 0.25);
+  tourLastT = now;
+  let budget = 8 * real;
+  let lookDx = 0, lookDz = -1;
+  while (budget > 0 && tourState.i < waypoints.length && tourState.pause <= 0) {
+    const wp = waypoints[tourState.i];
+    const wpos = tourWaypointWorld(wp);
+    const tx = wpos[0], tz = wpos[1];
+    const dx = tx - player.x, dz = tz - player.y;
+    const dist = Math.hypot(dx, dz);
+    lookDx = dx; lookDz = dz;
+    if (dist < 0.4) {
+      if (wp.stop && !tourState.labeled) {
+        walkFloorZ = wp.floorZ || 0;
+        currentLevel = wp.level || currentLevel;
+        tourState.labeled = true;
+        tourState.pause = 2.4;
+        const face = tourFaceInRoom(wp);
+        if (face) yaw = face;
+        if (typeof tourState.onLabel === 'function') tourState.onLabel(wp.stop);
+        try { dispatchEvent(new CustomEvent('peakstead-tour-label', { detail: wp.stop })); } catch {}
+        budget = 0;
+        break;
+      }
+      tourState.i += 1;
+      continue;
+    }
+    const step = Math.min(dist, budget);
+    player.x += (dx / dist) * step;
+    player.y += (dz / dist) * step;
+    budget -= step;
+  }
+  const look = Math.atan2(-lookDx, -lookDz);
+  let dyaw = look - yaw;
+  while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+  while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+  yaw += dyaw * Math.min(1, Math.max(dt, 0.05) * 4);
+  pitch += (-0.05 - pitch) * Math.min(1, Math.max(dt, 0.05) * 3);
+  camera.position.set(player.x, EYE + walkFloorZ, player.y);
+  camera.rotation.set(pitch, yaw, 0, 'YXZ');
+  if (tourState.i >= waypoints.length && tourState.pause <= 0) finishTourRise();
+}
+
+function auditAndFixPlan() {
+  const issues = [], fixes = [];
+  const readout = (typeof planReadout === 'function') ? planReadout() : { rooms: [] };
+  if (Array.isArray(dressItems) && dressItems.length && M) {
+    const keep = [];
+    for (const it of dressItems) {
+      const room = (M.rooms || []).find((r) => it.x > r[3] && it.x < r[5] && it.y > r[4] && it.y < r[6]);
+      let drop = null;
+      if (!room && !/outdoor|porch|patio/i.test(it.type || '')) drop = 'outside-room';
+      else if (typeof clearanceHit === 'function' && clearanceHit(itemRect(it), M.rooms, M.walls, 0.05)?.kind === 'doorway' && it.type !== 'rug') drop = 'doorway';
+      if (drop) { issues.push({ kind: drop, type: it.type, name: it.type }); fixes.push(`Removed ${it.type} (${drop})`); continue; }
+      keep.push(it);
+    }
+    if (keep.length !== dressItems.length) {
+      dressItems = keep;
+      if (typeof refreshItems === 'function' && itemsGroup) refreshItems();
+    }
+  }
+  for (const r of (readout.rooms || [])) {
+    for (const f of (r.flags || [])) issues.push({ kind: 'readout', room: r.name, flag: f });
+  }
+  return {
+    rooms: (readout.rooms || []).length,
+    issues,
+    fixes,
+  };
+}
+
 
 function getPlanSnapshot() {
   const info = (activeLayout && activeLayout.planInfo) ? { ...activeLayout.planInfo } : undefined;

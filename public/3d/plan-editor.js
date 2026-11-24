@@ -112,6 +112,9 @@ export function sanitizeLayout(raw) {
       revision: String(raw.planInfo.revision || '0').slice(0, 12),
       size: ['arch-d', 'tabloid', 'letter'].includes(raw.planInfo.size) ? raw.planInfo.size : 'tabloid',
       schedule: raw.planInfo.schedule !== false,
+      price: String(raw.planInfo.price || '').slice(0, 40),
+      contactName: String(raw.planInfo.contactName || '').slice(0, 80),
+      contactPhone: String(raw.planInfo.contactPhone || '').slice(0, 40),
     };
   }
   if (!items && !rooms && !walls && !roofs && !finishes && !planInfo) return null;
