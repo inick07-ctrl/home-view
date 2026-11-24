@@ -90,11 +90,8 @@ export default {
     // Loft bedroom partition with a clear opening at the south-east corner
     k.block(15.85, 0.25, 16.05, 9.3, 9.22, 11.8, 'wood');
     k.block(8.15, 11.0, 13.2, 11.2, 9.22, 11.8, 'wood');
-    for (let i = 0; i < 12; i++) {
-      const z = i * (9.0 / 12);
-      const y = 15.8 + i * 0.75;
-      k.block(8.3, y, 11.3, y + 0.8, z, z + 0.18, 'wood');
-    }
+    // Stair up to the loft (placeable, removable item: Edit Plan → Stairs)
+    k.place && k.place('stairStraight', { x: (8.3 + 11.3) / 2, y: (15.8 + 24.85) / 2, rot: 0, w: 3.0, d: 24.85 - 15.8, dir: 'up', level: true, levelH: 9.22, variant: 'oak', rail: 'wood' });
     for (const x of [-3.4, 16, 35.4]) k.block(x - 0.22, YD - 0.35, x + 0.22, YD, 0, 3.5, TIM, { solid: true });
     k.block(-3.5, YD - 0.25, 35.5, YD, 3.5, 3.85, TIM);
   },

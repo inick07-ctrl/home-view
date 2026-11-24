@@ -61,15 +61,8 @@ export default {
     k.block(13.5, 5.35, 13.68, 8.42, 7.12, 9.1, WOOD);
     k.block(13.5, 0.08, 23.92, 0.26, 7.12, 8.7, WOOD);
     k.block(13.5, 8.24, 23.92, 8.42, 7.12, 8.7, WOOD);
-    // Ladder at the west edge of the loft, mid-width
-    for (let i = 0; i < 7; i++) {
-      const z = 0.4 + i * 0.95;
-      k.block(11.7, 3.35, 13.45, 5.15, z, z + 0.1, STEEL2);
-    }
-    k.block(11.7, 3.3, 11.85, 3.45, 0, 7.0, STEEL2);
-    k.block(11.7, 5.05, 11.85, 5.2, 0, 7.0, STEEL2);
-    k.block(13.3, 3.3, 13.48, 3.45, 0, 7.1, STEEL2);
-    k.block(13.3, 5.05, 13.48, 5.2, 0, 7.1, STEEL2);
+    // Ladder at the west edge of the loft (placeable, removable item: Edit Plan → Stairs)
+    k.place && k.place('stairLadder', { x: (11.7 + 13.45) / 2, y: (3.3 + 5.2) / 2, rot: 0, w: 13.45 - 11.7, d: 5.2 - 3.3, dir: 'up', level: true, levelH: 7.12, rail: 'black', open: [11.5, 0.08, 13.5, 8.42, 7.12] });
     // Trailer frame, tongue, and wheels (architecture, not vehicles)
     k.block(0, 1.7, 24, 2.15, -1.15, -0.55, STEEL);
     k.block(0, 6.35, 24, 6.8, -1.15, -0.55, STEEL);

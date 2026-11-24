@@ -66,10 +66,8 @@ export default {
     k.block(0.12, 0.1, XK - 0.15, Wd - 0.1, 7.00, 7.22, 'wood');
     k.block(XK - 0.28, 0.1, XK - 0.12, 3.4, 7.22, 9.3, 'wood');
     k.block(XK - 0.28, 8.6, XK - 0.12, Wd - 0.1, 7.22, 9.3, 'wood');
-    for (let i = 0; i < 8; i++) {
-      const z = 0.3 + i * 0.95;
-      k.block(XK - 0.05, 4.4, XK + 1.7, 6.4, z, z + 0.1, TIM);
-    }
+    // Ladder at the loft's east edge (placeable, removable item: Edit Plan → Stairs)
+    k.place && k.place('stairLadder', { x: (XK - 0.05 + XK + 1.7) / 2, y: (4.4 + 6.4) / 2, rot: 0, w: 1.75, d: 2.0, dir: 'up', level: true, levelH: 7.22, rail: 'wood' });
     // Porch posts and beam
     for (const x of [2.3, 10, 17.5]) k.block(x - 0.18, YP - 0.35, x + 0.18, YP, 0, 7.6, TIM, { solid: true });
     k.block(2.1, YP - 0.3, 17.7, YP, 7.6, 8.0, TIM);

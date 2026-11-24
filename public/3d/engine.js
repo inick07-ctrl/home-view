@@ -892,6 +892,7 @@ let wallPickGroup = null;
 let wallPickMat = null;
 let itemsOn = true;
 let wallDecorOn = false;
+let stairsOn = true;
 let itemFire = { flames: [], lights: [], glows: [] }; // animated flames inside placed fireplace items
 let chimneyMeshes = []; // model chimney/flue blocks tagged { chimney: [x, y] }: shown only while a wood-burning fireplace item sits near (x, y)
 let editMode = false;
@@ -934,7 +935,7 @@ function wallsOnRoom(WS, room, slack = 0.6) {
 }
 function translateSeg(w, dx, dy) { w[0] += dx; w[1] += dy; w[2] += dx; w[3] += dy; }
 function captureLayout() {
-  activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])), planInfo: (activeLayout && activeLayout.planInfo) ? { ...activeLayout.planInfo } : undefined, wallDecor: !!wallDecorOn };
+  activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])), planInfo: (activeLayout && activeLayout.planInfo) ? { ...activeLayout.planInfo } : undefined, wallDecor: !!wallDecorOn, stairs: stairsOn !== false };
   return activeLayout;
 }
 function rebuildPlan() {
@@ -946,8 +947,58 @@ function rebuildPlan() {
   try { dispatchEvent(new CustomEvent('peakstead-plan-changed')); } catch {}
 }
 let floorCtx = null, floorGroup = null, floorSig = '';
+function isStairItem(it) {
+  return !!(it && ITEM_CATALOG[it.type] && ITEM_CATALOG[it.type].stair);
+}
+function visibleStairItems() {
+  if (!stairsOn) return [];
+  return (currentItems || []).filter(isStairItem);
+}
+function stairOpenRect(it) {
+  if (!it || !it.open) return null;
+  const o = it.open;
+  if (Array.isArray(o) && o.length >= 4) return [Math.min(o[0], o[2]), Math.min(o[1], o[3]), Math.max(o[0], o[2]), Math.max(o[1], o[3]), o.z];
+  return null;
+}
+function loftDeckZAt(rect) {
+  const cx = (rect[0] + rect[2]) / 2, cy = (rect[1] + rect[3]) / 2;
+  for (const r of (M?.rooms || [])) {
+    const o = r[7] || {};
+    if (!(o.loft || o.noFloor)) continue;
+    if (cx >= r[3] - 0.4 && cx <= r[5] + 0.4 && cy >= r[4] - 0.4 && cy <= r[6] + 0.4) {
+      const z = o.deckZ ?? o.loftZ ?? o.z;
+      if (z != null && Number.isFinite(+z)) return +z;
+    }
+  }
+  return 8;
+}
 function stairHoles() {
-  return currentItems.filter(it => ITEM_CATALOG[it.type]?.stair && it.dir === 'down').map(it => itemRect(it));
+  return visibleStairItems().filter((it) => it.dir === 'down').map((it) => itemRect(it));
+}
+function loftFills() {
+  const fills = [];
+  const shown = visibleStairItems();
+  const served = (st) => shown.some((it) => {
+    if (it.id && st.id && it.id === st.id) return true;
+    return Math.hypot((it.x || 0) - (st.x || 0), (it.y || 0) - (st.y || 0)) < 5;
+  });
+  for (const st of (defaultItems || [])) {
+    const rect = stairOpenRect(st);
+    if (!rect) continue;
+    if (served(st)) continue;
+    const z = (rect[4] != null && Number.isFinite(rect[4])) ? +rect[4] : (st.levelH != null ? +st.levelH : loftDeckZAt(rect));
+    fills.push([rect[0], rect[1], rect[2], rect[3], z]);
+  }
+  if (!stairsOn) {
+    for (const st of (currentItems || [])) {
+      const rect = stairOpenRect(st);
+      if (!rect) continue;
+      if (fills.some((f) => Math.abs(f[0] - rect[0]) < 0.05 && Math.abs(f[1] - rect[1]) < 0.05 && Math.abs(f[2] - rect[2]) < 0.05 && Math.abs(f[3] - rect[3]) < 0.05)) continue;
+      const z = (rect[4] != null && Number.isFinite(rect[4])) ? +rect[4] : (st.levelH != null ? +st.levelH : loftDeckZAt(rect));
+      fills.push([rect[0], rect[1], rect[2], rect[3], z]);
+    }
+  }
+  return fills;
 }
 function rectMinus(r, holes) {
   let parts = [r];
@@ -969,8 +1020,8 @@ function buildFloors() {
   if (!M || !root || !floorCtx) return;
   if (floorGroup && floorGroup.parent) floorGroup.parent.remove(floorGroup);
   floorGroup = new THREE.Group(); floorGroup.name = 'floors'; root.add(floorGroup);
-  const st = floorCtx.st, holes = stairHoles();
-  floorSig = JSON.stringify(holes.map(h => h.map(v => +v.toFixed(2))));
+  const st = floorCtx.st, holes = stairHoles(), fills = loftFills();
+  floorSig = JSON.stringify({ holes: holes.map(h => h.map(v => +v.toFixed(2))), fills: fills.map(h => h.map(v => +v.toFixed(2))) });
   const slabs = [];
   for (const r of (M.slabs || [])) for (const p of rectMinus([r[0], r[1], r[2], r[3]], holes)) slabs.push(boxRect(...p, -0.6, -0.01));
   const sm = mesh(slabs, MAT.slab, false); if (sm) floorGroup.add(sm);
@@ -988,6 +1039,16 @@ function buildFloors() {
     const base = MAT[ft] || MAT.wood;
     const mat = tint ? tintedMat(base, finishHex(tint)) : base;
     const m = mesh(geos, mat, false); if (m) floorGroup.add(m);
+  }
+  const fillGeos = [];
+  for (const f of fills) {
+    const z = f[4] != null ? +f[4] : 8;
+    fillGeos.push(boxRect(f[0], f[1], f[2], f[3], z - 0.22, z + 0.02, 4));
+    fillGeos.push(planeRect(f[0], f[1], f[2], f[3], z + 0.03, 4));
+  }
+  if (fillGeos.length) {
+    const fm = mesh(fillGeos, MAT.wood || MAT.slab, false);
+    if (fm) floorGroup.add(fm);
   }
 }
 // walk-through collision for furniture & stairs (rugs, lights, roof/yard items excluded)
@@ -1007,6 +1068,7 @@ function collectItemSolids() {
       }
       continue;
     }
+    if (t.stair && !stairsOn) continue;
     if (t.mount === 'roof' || NO_COLLIDE.test(it.type) || (t.h != null && t.h < 1.3 && !t.stair)) continue;
     if (it.onCounter || it.upper || (it.z || 0) > 2) continue;
     const r = itemRect(it), sh = t.stair ? 0 : 0.15; // stairs: blocked at the edge (no walkable upper/lower level modelled)
@@ -1016,7 +1078,7 @@ function collectItemSolids() {
 }
 function refreshItems() {
   if (!itemsGroup) return;
-  if (floorCtx && JSON.stringify(stairHoles().map(h => h.map(v => +v.toFixed(2)))) !== floorSig) buildFloors();
+  if (floorCtx && JSON.stringify({ holes: stairHoles().map(h => h.map(v => +v.toFixed(2))), fills: loftFills().map(h => h.map(v => +v.toFixed(2))) }) !== floorSig) buildFloors();
   while (itemsGroup.children.length) itemsGroup.remove(itemsGroup.children[0]);
   const mt = M?.materials || {};
   const roofCol = mt.roof || ({ metal: '#2b2c2e', darkShingle: '#2e2f31', shingle: '#5d5952' }[mt.roofTex] || '#3a3b3d');
@@ -1024,6 +1086,7 @@ function refreshItems() {
   for (const rec of [...currentItems, ...(dressItems || [])]) {
     if (isWallHungType(rec.type) && !wallDecorOn) continue;
     if (isWallHungType(rec.type) && rec.wallRef && M && !wallStillExists(rec.wallRef, M.walls)) continue;
+    if (isStairItem(rec) && !stairsOn) continue;
     const painted = recWithFinishes(rec);
     const mesh = buildItemMesh(painted, ctx);
     if (!mesh) continue;
@@ -1132,7 +1195,7 @@ function highlightSel(sel) {
     if (!room) return;
     addBox(room[3], room[4], room[5], room[6], 0.02, 0.12);
     addBox(room[3] - 0.08, room[4] - 0.08, room[5] + 0.08, room[6] + 0.08, 0.12, 0.2, hlEdge);
-    if (isPorchLike(room)) {
+    {
       const midX = (room[3] + room[5]) / 2, midY = (room[4] + room[6]) / 2;
       const handles = [
         ['w', room[3], midY], ['e', room[5], midY], ['n', midX, room[4]], ['s', midX, room[6]],
@@ -1151,41 +1214,288 @@ function highlightSel(sel) {
     addBox(w[0] - t, w[1] - t, w[2] + t, w[3] + t, 0, h, sel.hover ? hlEdge : hlMat);
   }
 }
+function roomIsShellOut(r) {
+  return !!(r && ((r[7] && r[7].outside) || isPorchLike(r)));
+}
+function roomStretchKey(r) {
+  const o = (r && r[7] && typeof r[7] === 'object') ? r[7] : {};
+  const z = (o.deckZ != null && Number.isFinite(+o.deckZ)) ? +o.deckZ : (o.loftZ != null && Number.isFinite(+o.loftZ)) ? +o.loftZ : (o.z != null && Number.isFinite(+o.z) && Math.abs(+o.z) >= 0.5 ? +o.z : 0);
+  return (typeof roomLevelId === 'function' ? roomLevelId(r) : 'main') + ':' + Math.round(z * 10);
+}
+function setRoomSizeLabel(room) {
+  room[1] = `${Math.round((room[5] - room[3]) * 10) / 10}' x ${Math.round((room[6] - room[4]) * 10) / 10}'`;
+}
+function pointInRect(x, y, r, pad = 0) {
+  return x >= r[0] - pad && x <= r[2] + pad && y >= r[1] - pad && y <= r[3] + pad;
+}
+function roomRect4(r) {
+  if (!r) return r;
+  if (r.length >= 7 && typeof r[3] === 'number') return [r[3], r[4], r[5], r[6]];
+  return r;
+}
+function clampRoomToShell(index, before, next) {
+  const room = M.rooms[index];
+  if (!room || roomIsShellOut(room)) return next;
+  const min = 3;
+  let [x0, y0, x1, y1] = next;
+  before = roomRect4(before);
+  const originals = M.rooms.map((r, i) => (i === index ? before.slice() : [r[3], r[4], r[5], r[6]]));
+  const inside = (x, y) => originals.some((r, i) => {
+    if (i !== index && roomIsShellOut(M.rooms[i])) return false;
+    return pointInRect(x, y, r, 0.08);
+  });
+  const stripOk = (sx0, sy0, sx1, sy1) => {
+    if (sx1 - sx0 < 0.01 || sy1 - sy0 < 0.01) return true;
+    const nx = Math.max(2, Math.ceil((sx1 - sx0) / 0.45));
+    const ny = Math.max(2, Math.ceil((sy1 - sy0) / 0.45));
+    for (let i = 0; i <= nx; i++) {
+      for (let j = 0; j <= ny; j++) {
+        const x = sx0 + (i / nx) * (sx1 - sx0);
+        const y = sy0 + (j / ny) * (sy1 - sy0);
+        if (!inside(x, y)) return false;
+      }
+    }
+    return true;
+  };
+  const pullToward = (good, want, ok) => {
+    if (ok(want)) return want;
+    let a = good, b = want;
+    for (let k = 0; k < 18; k++) {
+      const mid = (a + b) / 2;
+      if (ok(mid)) a = mid; else b = mid;
+    }
+    return a;
+  };
+  if (x1 > before[2] + 0.01) x1 = pullToward(before[2], x1, (v) => stripOk(before[2], Math.max(y0, before[1]), v, Math.min(y1, before[3])));
+  if (x0 < before[0] - 0.01) x0 = pullToward(before[0], x0, (v) => stripOk(v, Math.max(y0, before[1]), before[0], Math.min(y1, before[3])));
+  if (y1 > before[3] + 0.01) y1 = pullToward(before[3], y1, (v) => stripOk(Math.max(x0, before[0]), before[3], Math.min(x1, before[2]), v));
+  if (y0 < before[1] - 0.01) y0 = pullToward(before[1], y0, (v) => stripOk(Math.max(x0, before[0]), v, Math.min(x1, before[2]), before[1]));
+  if (x1 - x0 < min) {
+    if (Math.abs(x0 - before[0]) < 0.01) x1 = x0 + min;
+    else if (Math.abs(x1 - before[2]) < 0.01) x0 = x1 - min;
+  }
+  if (y1 - y0 < min) {
+    if (Math.abs(y0 - before[1]) < 0.01) y1 = y0 + min;
+    else if (Math.abs(y1 - before[3]) < 0.01) y0 = y1 - min;
+  }
+  return [x0, y0, x1, y1];
+}
+function clipRoomsForStretch(index, newRect) {
+  const src = M.rooms[index];
+  if (!src) return;
+  const key = roomStretchKey(src);
+  const added = [];
+  const remove = [];
+  for (let i = 0; i < M.rooms.length; i++) {
+    if (i === index) continue;
+    const r = M.rooms[i];
+    if (roomStretchKey(r) !== key) continue;
+    const cur = [r[3], r[4], r[5], r[6]];
+    const remain = rectMinus(cur, [newRect]);
+    if (remain.length === 1 && Math.abs(remain[0][0] - cur[0]) < 0.02 && Math.abs(remain[0][1] - cur[1]) < 0.02 && Math.abs(remain[0][2] - cur[2]) < 0.02 && Math.abs(remain[0][3] - cur[3]) < 0.02) continue;
+    if (!remain.length) { remove.push(i); continue; }
+    remain.sort((a, b) => ((b[2] - b[0]) * (b[3] - b[1])) - ((a[2] - a[0]) * (a[3] - a[1])));
+    r[3] = remain[0][0]; r[4] = remain[0][1]; r[5] = remain[0][2]; r[6] = remain[0][3];
+    setRoomSizeLabel(r);
+    for (let k = 1; k < remain.length; k++) {
+      const p = remain[k];
+      if (p[2] - p[0] < 1.5 || p[3] - p[1] < 1.5) continue;
+      const copy = r.slice();
+      copy[3] = p[0]; copy[4] = p[1]; copy[5] = p[2]; copy[6] = p[3];
+      if (copy[7] && typeof copy[7] === 'object') copy[7] = { ...copy[7] };
+      setRoomSizeLabel(copy);
+      added.push(copy);
+    }
+  }
+  for (const i of remove.sort((a, b) => b - a)) {
+    if (i === index) continue;
+    M.rooms.splice(i, 1);
+  }
+  if (added.length) M.rooms.push(...added);
+}
+function fillVacatedByNeighbors(index, before, after) {
+  const vacated = rectMinus(before, [after]);
+  if (!vacated.length) return;
+  const src = M.rooms[index];
+  const key = roomStretchKey(src);
+  for (const strip of vacated) {
+    for (const r of M.rooms) {
+      if (r === src) continue;
+      if (roomStretchKey(r) !== key) continue;
+      let x0 = r[3], y0 = r[4], x1 = r[5], y1 = r[6];
+      let changed = false;
+      // west of vacated (neighbor's east edge was flush with before west? or east of room)
+      if (Math.abs(x1 - strip[0]) < 0.15 && Math.min(y1, strip[3]) - Math.max(y0, strip[1]) > 0.5 && Math.abs(y0 - strip[1]) < 0.15 && Math.abs(y1 - strip[3]) < 0.15) {
+        x1 = Math.max(x1, strip[2]); changed = true;
+      } else if (Math.abs(x0 - strip[2]) < 0.15 && Math.min(y1, strip[3]) - Math.max(y0, strip[1]) > 0.5 && Math.abs(y0 - strip[1]) < 0.15 && Math.abs(y1 - strip[3]) < 0.15) {
+        x0 = Math.min(x0, strip[0]); changed = true;
+      } else if (Math.abs(y1 - strip[1]) < 0.15 && Math.min(x1, strip[2]) - Math.max(x0, strip[0]) > 0.5 && Math.abs(x0 - strip[0]) < 0.15 && Math.abs(x1 - strip[2]) < 0.15) {
+        y1 = Math.max(y1, strip[3]); changed = true;
+      } else if (Math.abs(y0 - strip[3]) < 0.15 && Math.min(x1, strip[2]) - Math.max(x0, strip[0]) > 0.5 && Math.abs(x0 - strip[0]) < 0.15 && Math.abs(x1 - strip[2]) < 0.15) {
+        y0 = Math.min(y0, strip[1]); changed = true;
+      }
+      if (changed && x1 - x0 >= 3 && y1 - y0 >= 3) {
+        r[3] = x0; r[4] = y0; r[5] = x1; r[6] = y1;
+        setRoomSizeLabel(r);
+      }
+    }
+  }
+}
+function wallOnRoomEdge(w, room, slack = 0.7) {
+  if (!w || !room) return false;
+  const mx = (w[0] + w[2]) / 2, my = (w[1] + w[3]) / 2;
+  const horiz = Math.abs(w[2] - w[0]) >= Math.abs(w[3] - w[1]);
+  if (horiz) {
+    if (mx < room[3] - slack || mx > room[5] + slack) return false;
+    return Math.abs(my - room[4]) < slack || Math.abs(my - room[6]) < slack;
+  }
+  if (my < room[4] - slack || my > room[6] + slack) return false;
+  return Math.abs(mx - room[3]) < slack || Math.abs(mx - room[5]) < slack;
+}
+function updateWallsAfterStretch(before, after, porchLike) {
+  const dx0 = after[3] - before[3], dy0 = after[4] - before[4];
+  const dx1 = after[5] - before[5], dy1 = after[6] - before[6];
+  if (!(dx0 || dy0 || dx1 || dy1)) return;
+  const moved = [];
+  for (const kind of ['int', 'ext', 'win', 'door', 'counter']) {
+    for (const w of (M.walls[kind] || [])) {
+      if (!wallOnRoomEdge(w, before, 0.75)) continue;
+      const isExt = kind === 'ext' || (kind === 'win') || (kind === 'door' && (w[6] === 1 || w[6] === true));
+      if (!porchLike && (kind === 'ext' || (kind === 'win' && isExt))) {
+        // Interior stretch never moves the house shell. Exterior doors/windows stay put.
+        if (kind === 'ext') continue;
+      }
+      const mx = (w[0] + w[2]) / 2, my = (w[1] + w[3]) / 2;
+      const horiz = Math.abs(w[2] - w[0]) >= Math.abs(w[3] - w[1]);
+      const was = w.slice();
+      if (horiz) {
+        if (Math.abs(my - before[4]) < 0.75) { w[1] += dy0; w[3] += dy0; }
+        else if (Math.abs(my - before[6]) < 0.75) { w[1] += dy1; w[3] += dy1; }
+        if (Math.abs(w[0] - before[3]) < 0.9) w[0] += dx0;
+        if (Math.abs(w[2] - before[5]) < 0.9) w[2] += dx1;
+      } else {
+        if (Math.abs(mx - before[3]) < 0.75) { w[0] += dx0; w[2] += dx0; }
+        else if (Math.abs(mx - before[5]) < 0.75) { w[0] += dx1; w[2] += dx1; }
+        if (Math.abs(w[1] - before[4]) < 0.9) w[1] += dy0;
+        if (Math.abs(w[3] - before[6]) < 0.9) w[3] += dy1;
+      }
+      if (kind === 'ext' && !porchLike && (w[0] !== was[0] || w[1] !== was[1] || w[2] !== was[2] || w[3] !== was[3])) {
+        w[0] = was[0]; w[1] = was[1]; w[2] = was[2]; w[3] = was[3];
+        continue;
+      }
+      moved.push({ kind, was, now: w });
+    }
+  }
+  // Drop interior walls (and their openings) that no longer sit on any room edge — they would float mid-room.
+  const stillOnEdge = (w) => (M.rooms || []).some((r) => wallOnRoomEdge(w, r, 0.8));
+  for (const kind of ['int', 'win', 'door', 'counter']) {
+    const keep = [];
+    const dropped = [];
+    for (const w of (M.walls[kind] || [])) {
+      if (kind === 'int' || kind === 'counter') {
+        if (stillOnEdge(w)) keep.push(w); else dropped.push(w);
+      } else if (!openingHasHost || openingHasHost(w, M.walls, 0.4)) {
+        // opening must still fit on a host wall
+        const host = (M.walls.int || []).concat(M.walls.ext || []).find((wall) => openingHostedByWall(w, wall, 0.35));
+        if (!host) { dropped.push(w); continue; }
+        const hx0 = Math.min(host[0], host[2]), hx1 = Math.max(host[0], host[2]);
+        const hy0 = Math.min(host[1], host[3]), hy1 = Math.max(host[1], host[3]);
+        const ox0 = Math.min(w[0], w[2]), ox1 = Math.max(w[0], w[2]);
+        const oy0 = Math.min(w[1], w[3]), oy1 = Math.max(w[1], w[3]);
+        const horiz = (ox1 - ox0) >= (oy1 - oy0);
+        const fits = horiz ? (ox0 >= hx0 - 0.2 && ox1 <= hx1 + 0.2) : (oy0 >= hy0 - 0.2 && oy1 <= hy1 + 0.2);
+        if (fits) keep.push(w); else dropped.push(w);
+      } else {
+        dropped.push(w);
+      }
+    }
+    M.walls[kind] = keep;
+    if (dropped.length && typeof stripWallHungOnWalls === 'function') stripWallHungOnWalls(dropped);
+  }
+  // Wall-linked TVs/pictures follow moved walls; drop if the wall is gone.
+  for (const it of (currentItems || [])) {
+    if (!isWallHungType(it.type) || !it.wallRef) continue;
+    const hit = moved.find((m) => wallRefMatches(it.wallRef, m.was));
+    if (hit) {
+      const dwx = ((hit.now[0] + hit.now[2]) / 2) - ((hit.was[0] + hit.was[2]) / 2);
+      const dwy = ((hit.now[1] + hit.now[3]) / 2) - ((hit.was[1] + hit.was[3]) / 2);
+      it.x += dwx; it.y += dwy;
+      it.wallRef = { ...it.wallRef, x0: hit.now[0], y0: hit.now[1], x1: hit.now[2], y1: hit.now[3] };
+    } else if (!wallStillExists(it.wallRef, M.walls)) {
+      it._drop = true;
+    }
+  }
+  currentItems = (currentItems || []).filter((it) => !it._drop);
+}
+
 function patchRoomOp(index, patch) {
   const room = M.rooms[index];
   if (!room) return;
   const before = room.slice();
   if (patch.name != null) room[0] = String(patch.name).slice(0, 60);
   if (patch.floor != null) room[2] = patch.floor;
-  if (patch.w != null) room[5] = room[3] + Math.max(3, +patch.w);
-  if (patch.d != null) room[6] = room[4] + Math.max(3, +patch.d);
+  let target = null;
   if (Array.isArray(patch.resizeTo) && patch.resizeTo.length === 4 && patch.resizeTo.every(Number.isFinite)) {
     const [a, b, c, d] = patch.resizeTo;
-    const x0 = Math.min(a, c), y0 = Math.min(b, d), x1 = Math.max(a, c), y1 = Math.max(b, d);
-    if (x1 - x0 >= 3 && y1 - y0 >= 3) {
-      room[3] = x0; room[4] = y0; room[5] = x1; room[6] = y1;
+    target = [Math.min(a, c), Math.min(b, d), Math.max(a, c), Math.max(b, d)];
+  } else if (patch.w != null || patch.d != null) {
+    let x0 = before[3], y0 = before[4], x1 = before[5], y1 = before[6];
+    if (patch.w != null) x1 = x0 + Math.max(3, +patch.w);
+    if (patch.d != null) y1 = y0 + Math.max(3, +patch.d);
+    target = [x0, y0, x1, y1];
+    // If growing east/south hits the shell, also try west/north so the typed size can still be met.
+    target = clampRoomToShell(index, before, target);
+    if (patch.w != null && (target[2] - target[0]) < Math.max(3, +patch.w) - 0.05) {
+      const want = Math.max(3, +patch.w);
+      target = clampRoomToShell(index, before, [target[2] - want, target[1], target[2], target[3]]);
+    }
+    if (patch.d != null && (target[3] - target[1]) < Math.max(3, +patch.d) - 0.05) {
+      const want = Math.max(3, +patch.d);
+      target = clampRoomToShell(index, before, [target[0], target[3] - want, target[2], target[3]]);
     }
   }
-  if (patch.w != null || patch.d != null || patch.resizeTo) {
-    room[1] = `${Math.round((room[5] - room[3]) * 10) / 10}' x ${Math.round((room[6] - room[4]) * 10) / 10}'`;
+  if (target) {
+    target = clampRoomToShell(index, before, target);
+    if (target[2] - target[0] >= 3 && target[3] - target[1] >= 3) {
+      if (patch.soft) {
+        room[3] = target[0]; room[4] = target[1]; room[5] = target[2]; room[6] = target[3];
+        setRoomSizeLabel(room);
+      } else {
+        applyRoomStretch(index, before, target);
+      }
+    }
   }
   let dx = patch.dx || 0, dy = patch.dy || 0;
-  if (patch.x0 != null && patch.move) dx = +patch.x0 - before[3];
-  if (patch.y0 != null && patch.move) dy = +patch.y0 - before[4];
-  if (patch.x0 != null && patch.move) { /* applied via dx */ }
+  if (patch.x0 != null && patch.move) dx = +patch.x0 - M.rooms[index][3];
+  if (patch.y0 != null && patch.move) dy = +patch.y0 - M.rooms[index][4];
   if (dx || dy) {
-    room[3] += dx; room[4] += dy; room[5] += dx; room[6] += dy;
-    const oldR = [before[3], before[4], before[5], before[6]];
+    const cur = M.rooms[index];
+    const oldR = [cur[3], cur[4], cur[5], cur[6]];
+    cur[3] += dx; cur[4] += dy; cur[5] += dx; cur[6] += dy;
     for (const it of currentItems) {
       if (it.x >= oldR[0] && it.x <= oldR[2] && it.y >= oldR[1] && it.y <= oldR[3]) { it.x += dx; it.y += dy; }
     }
-    for (const { w } of wallsOnRoom(M.walls, before)) translateSeg(w, dx, dy);
+    for (const { w } of wallsOnRoom(M.walls, [cur[0], cur[1], cur[2], oldR[0], oldR[1], oldR[2], oldR[3]])) translateSeg(w, dx, dy);
   }
-  if (room[5] !== before[5] || room[6] !== before[6] || room[3] !== before[3] || room[4] !== before[4]) {
-    syncPorchGeometry(before, room);
+  const after = M.rooms[index];
+  if (after && (after[5] !== before[5] || after[6] !== before[6] || after[3] !== before[3] || after[4] !== before[4])) {
+    if (isPorchLike(after) || (after[7] && after[7].outside)) syncPorchGeometry(before, after);
   }
   if (!patch.soft) rebuildPlan();
   else { captureLayout(); refreshItems(); syncAreaUi(M); }
+}
+function applyRoomStretch(index, before, target) {
+  const room = M.rooms[index];
+  if (!room) return;
+  room[3] = target[0]; room[4] = target[1]; room[5] = target[2]; room[6] = target[3];
+  setRoomSizeLabel(room);
+  const grew = (target[2] - target[0]) * (target[3] - target[1]) >= (before[5] - before[3]) * (before[6] - before[4]) - 0.05;
+  if (grew) clipRoomsForStretch(index, [room[3], room[4], room[5], room[6]]);
+  else fillVacatedByNeighbors(index, [before[3], before[4], before[5], before[6]], [room[3], room[4], room[5], room[6]]);
+  // index may have shifted if a fully-consumed room before this one was removed
+  let idx = M.rooms.indexOf(room);
+  if (idx < 0) idx = index;
+  updateWallsAfterStretch(before, room, isPorchLike(room) || !!(room[7] && room[7].outside));
 }
 
 function roofOverlapsRoom(rf, room, slack = 1.25) {
@@ -2296,6 +2606,8 @@ function ensureEditor() {
     setItems: setItemsList,
     getWallDecor: () => !!wallDecorOn,
     setWallDecor,
+    getStairs: () => stairsOn !== false,
+    setStairs,
     snapWallDecor: (type, x, y) => snapWallDecor(type, x, y, M?.rooms || [], M?.walls),
     getRooms: () => M?.rooms || [],
     getWalls: () => M?.walls || { ext: [], int: [], win: [], door: [], counter: [] },
@@ -2305,8 +2617,9 @@ function ensureEditor() {
     },
     resetLayout: () => {
       activeLayout = null;
+      stairsOn = true;
       currentItems = cloneItems(defaultItems);
-      if (planOriginal) buildModel(planOriginal.source, { layout: { items: currentItems } });
+      if (planOriginal) buildModel(planOriginal.source, { layout: { items: currentItems, stairs: true } });
     },
     highlight: highlightSel,
     setEditMode: (on) => {
@@ -2858,11 +3171,13 @@ function buildModel(model, opts = {}) {
     }
   } else currentItems = cloneItems(defaultItems);
   if (layout && Object.prototype.hasOwnProperty.call(layout, 'wallDecor')) wallDecorOn = !!layout.wallDecor;
+  if (layout && Object.prototype.hasOwnProperty.call(layout, 'stairs')) stairsOn = layout.stairs !== false;
+  else if (!layout) stairsOn = true;
   currentItems = filterBlockingPlants(currentItems, M.rooms, WS);
   defaultItems = filterBlockingPlants(defaultItems, M.rooms, WS);
   if (wallDecorOn) currentItems = pruneOrphanWallDecor(currentItems, WS);
   dressItems = dressRooms(M, WS, currentItems, currentStyle, { wallDecor: wallDecorOn }) || [];
-  activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])), planInfo: (activeLayout && activeLayout.planInfo) ? { ...activeLayout.planInfo } : undefined, wallDecor: !!wallDecorOn };
+  activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])), planInfo: (activeLayout && activeLayout.planInfo) ? { ...activeLayout.planInfo } : undefined, wallDecor: !!wallDecorOn, stairs: stairsOn !== false };
   buildFloors();
   refreshItems();
   applyTimeOfDay();
@@ -3371,6 +3686,7 @@ function setItemsVisible(v) {
 }
 if ($('bItems')) { setItemsVisible(true); $('bItems').onclick = () => setItemsVisible(!itemsOn); }
 if ($('bWallDecor')) { setWallDecor(wallDecorOn, { silent: true }); $('bWallDecor').onclick = () => setWallDecor(!wallDecorOn); }
+if ($('bStairs')) { setStairs(stairsOn, { silent: true }); $('bStairs').onclick = () => setStairs(!stairsOn); }
 
 function filterBlockingPlants(list, rooms, WS) {
   return (list || []).filter((it) => {
@@ -3416,6 +3732,22 @@ function setWallDecor(v, opts = {}) {
     clientSaveTimer = setTimeout(() => { saveLayoutRemote(captureLayout()).catch(() => {}); }, 800);
   }
   return wallDecorOn;
+}
+function setStairs(v, opts = {}) {
+  stairsOn = v !== false;
+  if ($('bStairs')) {
+    $('bStairs').classList.toggle('on', stairsOn);
+    $('bStairs').setAttribute('aria-pressed', stairsOn ? 'true' : 'false');
+    $('bStairs').textContent = stairsOn ? 'Stairs: On' : 'Stairs: Off';
+  }
+  if (!opts.silent && M) refreshItems();
+  if (activeLayout) activeLayout.stairs = stairsOn !== false;
+  try { dispatchEvent(new CustomEvent('peakstead-stairs', { detail: { on: stairsOn } })); } catch {}
+  if (!opts.silent && SRC && SRC.kind === 'project') {
+    clearTimeout(clientSaveTimer);
+    clientSaveTimer = setTimeout(() => { saveLayoutRemote(captureLayout()).catch(() => {}); }, 800);
+  }
+  return stairsOn;
 }
 
 
@@ -4019,7 +4351,7 @@ function resolveAsset(src) {
   return src;
 }
 function setModelUi(engine, hasRoof = true) {
-  for (const id of ['bLabels', 'bCut', 'bPlan', 'bEdit', 'bItems', 'bDoors', 'bWindows', 'bSound', 'bPlan2d', 'bExportPlans']) if ($(id)) $(id).style.display = engine ? '' : 'none';
+  for (const id of ['bLabels', 'bCut', 'bPlan', 'bEdit', 'bItems', 'bWallDecor', 'bStairs', 'bDoors', 'bWindows', 'bSound', 'bPlan2d', 'bExportPlans']) if ($(id)) $(id).style.display = engine ? '' : 'none';
   if ($('editPlanBtn')) $('editPlanBtn').style.display = engine ? 'inline-flex' : 'none';
   if ($('bRoof')) $('bRoof').style.display = engine || hasRoof ? '' : 'none';
   if (engine && $('bPlan')) $('bPlan').style.display = M.planImage ? '' : 'none';
@@ -4343,6 +4675,7 @@ window.app = {
   getAllItems: () => [...currentItems, ...(dressItems || [])],
   addItem: addItemOp,
   setItems: (list) => setItemsList(list),
+  patchRoom: patchRoomOp,
   lookAtPlan: (fx, fy, dist = 22, height = 9) => {
     const wx = Wx(fx), wz = Wz(fy);
     orbit.target.set(wx, 1.4, wz);
@@ -4404,6 +4737,7 @@ window.app = {
   setDollhouse,
   setWalkStick,
   setWallDecor, getWallDecor: () => !!wallDecorOn,
+  setStairs, getStairs: () => stairsOn !== false,
   snapWallDecor,
   setTimeOfDay,
   getTimeOfDay: () => timeOfDay,

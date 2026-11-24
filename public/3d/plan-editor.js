@@ -119,8 +119,9 @@ export function sanitizeLayout(raw) {
     };
   }
   const wallDecor = raw.wallDecor === true;
-  if (!items && !rooms && !walls && !roofs && !finishes && !planInfo && !raw.wallDecor) return null;
-  return { version: Math.max(1, Math.min(3, Math.floor(+raw.version) || 1)), items, rooms, walls, roofs, finishes, deleted, planInfo, wallDecor };
+  const stairs = raw.stairs !== false;
+  if (!items && !rooms && !walls && !roofs && !finishes && !planInfo && !raw.wallDecor && raw.stairs == null) return null;
+  return { version: Math.max(1, Math.min(3, Math.floor(+raw.version) || 1)), items, rooms, walls, roofs, finishes, deleted, planInfo, wallDecor, stairs };
 }
 const COLOR_RX = /^(wood:)?#[0-9a-f]{6}$/i;
 function sanitizeFinishes(f) {
@@ -183,6 +184,10 @@ export function mountPlanEditor(ctrl) {
     const box = $('wallDecorToggle');
     if (box) box.checked = !!(e.detail && e.detail.on);
   });
+  addEventListener('peakstead-stairs', (e) => {
+    const box = $('stairsToggle');
+    if (box) box.checked = !(e.detail && e.detail.on === false);
+  });
   let drawingWall = null; // { x0, y0 } while adding a wall
   let undo = [];
   let dragging = null;
@@ -210,6 +215,8 @@ export function mountPlanEditor(ctrl) {
       finishes: JSON.parse(JSON.stringify(ctrl.getFinishes ? ctrl.getFinishes() : {})),
       deleted: JSON.parse(JSON.stringify(ctrl.getDeleted ? ctrl.getDeleted() : [])),
       planInfo: (ctrl.getLayout && ctrl.getLayout()?.planInfo) || (typeof window !== 'undefined' && window.app?.getPlanSnapshot?.()?.planInfo) || undefined,
+      wallDecor: !!(ctrl.getWallDecor && ctrl.getWallDecor()),
+      stairs: !(ctrl.getStairs && ctrl.getStairs() === false),
     };
   }
   function pushUndo() {
@@ -554,6 +561,15 @@ export function mountPlanEditor(ctrl) {
     lab.style.flex = '1';
     opt.append(box, lab);
     wrap.appendChild(opt);
+    const stairRow = el('div', { class: 'row', id: 'stairsRow' });
+    const stairBox = el('input', { type: 'checkbox', id: 'stairsToggle' });
+    stairBox.checked = !(ctrl.getStairs && ctrl.getStairs() === false);
+    stairBox.onchange = () => { if (ctrl.setStairs) ctrl.setStairs(stairBox.checked); };
+    const stairLab = el('label', { text: 'Stairs (on by default — turn off to remove staircases, railings, and floor openings)' });
+    stairLab.setAttribute('for', 'stairsToggle');
+    stairLab.style.flex = '1';
+    stairRow.append(stairBox, stairLab);
+    wrap.appendChild(stairRow);
     let cat = 'living';
     const cats = el('div', { class: 'cats' });
     const types = el('div', { class: 'types' });
@@ -603,7 +619,7 @@ export function mountPlanEditor(ctrl) {
 
   function renderRooms(body) {
     const rooms = ctrl.getRooms();
-    body.appendChild(el('p', { id: 'editHint', text: canEdit() ? 'Click any room in 3D and drag to move it. Porches, patios, and decks also have edge handles so you can shorten or extend them. Resize, rename, or nudge here — furniture, walls, and porch roofs come along.' : 'View only.' }));
+    body.appendChild(el('p', { id: 'editHint', text: canEdit() ? 'Click any room in 3D and drag to move it. Drag a highlighted edge handle to stretch length or width, or type a dimension here. The stretched room keeps the space if it overlaps a neighbor (only the overlapping part of that room is clipped). Stretch stays inside the existing house — the exterior shell does not move. Furniture, walls, floors, and ceilings update; doors and windows on a moved wall go with it or come out if they no longer fit. You can also turn stairs off, or select a staircase and delete it (Undo brings it back).' : 'View only.' }));
     const list = el('div', { id: 'editList' });
     rooms.forEach((r, i) => {
       if (r[7]?.noLabel && !r[0]) return;
@@ -1195,6 +1211,12 @@ export function mountPlanEditor(ctrl) {
   const endDrag = () => {
     if (!dragging) return;
     const moved = dragging.start;
+    const resizeIdx = dragging.resize;
+    let finalRect = null;
+    if (resizeIdx != null) {
+      const r = ctrl.getRooms()[resizeIdx];
+      if (r) finalRect = [r[3], r[4], r[5], r[6]];
+    }
     if (moved) {
       undo.push(moved);
       if (undo.length > 40) undo.shift();
@@ -1202,7 +1224,10 @@ export function mountPlanEditor(ctrl) {
     const wasRoom = dragging.room != null || dragging.resize != null;
     dragging = null;
     ctrl.setOrbitEnabled?.(true);
-    if (wasRoom) ctrl.rebuildPlan?.();
+    if (resizeIdx != null && finalRect && moved && ctrl.applyLayout) {
+      ctrl.applyLayout(moved);
+      ctrl.patchRoom(resizeIdx, { resizeTo: finalRect });
+    } else if (wasRoom) ctrl.rebuildPlan?.();
     persist();
     render();
     showClearance(false);

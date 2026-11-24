@@ -1571,7 +1571,26 @@ export function makeItem(type, opts = {}) {
       x0: +opts.wallRef.x0, y0: +opts.wallRef.y0,
       x1: +opts.wallRef.x1, y1: +opts.wallRef.y1,
     } : undefined,
+    open: sanitizeStairOpen(opts.open),
   };
+}
+function sanitizeStairOpen(open) {
+  if (!open) return undefined;
+  if (Array.isArray(open) && open.length >= 4 && open.slice(0, 4).every(Number.isFinite)) {
+    const x0 = Math.min(+open[0], +open[2]), y0 = Math.min(+open[1], +open[3]);
+    const x1 = Math.max(+open[0], +open[2]), y1 = Math.max(+open[1], +open[3]);
+    const out = [x0, y0, x1, y1];
+    if (open[4] != null && Number.isFinite(+open[4])) out.z = +open[4];
+    return out;
+  }
+  if (typeof open === 'object') {
+    const x0 = +open.x0, y0 = +open.y0, x1 = +open.x1, y1 = +open.y1;
+    if (![x0, y0, x1, y1].every(Number.isFinite)) return undefined;
+    const out = [Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1)];
+    if (open.z != null && Number.isFinite(+open.z)) out.z = +open.z;
+    return out;
+  }
+  return undefined;
 }
 
 export function buildItemMesh(rec, ctx) {

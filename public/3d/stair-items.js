@@ -201,6 +201,23 @@ const S = (name, build, w, d, extra = {}) => ({
   name, category: 'stairs', w, d, h: 10, stair: true, variants: ['oak', 'walnut', 'white-risers'], rails: ['black', 'wood', 'glass'], noAuto: true, ...extra,
   build: (g, rec, ctx) => build(g, { ...rec, w: rec.w || w, d: rec.d || d, stairFinish: rec.stairFinish || rec.variant || 'oak' }, ctx),
 });
+function buildLadder(g, rec, ctx) {
+  const M = mats(rec);
+  const w = rec.w || 1.8, d = rec.d || 1.85;
+  const T = Math.max(4, rec.levelH || ((ctx?.ceiling || 9) * 0.8));
+  const rail = rec.rail === 'wood' ? M.railWood : M.metal;
+  const rw = 0.12;
+  const xL = -w / 2 + rw, xR = w / 2 - rw, zF = -d / 2 + rw, zB = d / 2 - rw;
+  add(g, B(rw, T, rw), rail, xL, T / 2, zF);
+  add(g, B(rw, T, rw), rail, xL, T / 2, zB);
+  add(g, B(rw, T, rw), rail, xR, T / 2, zF);
+  add(g, B(rw, T, rw), rail, xR, T / 2, zB);
+  const n = Math.max(5, Math.round(T / 0.95));
+  for (let i = 0; i < n; i++) {
+    const y = (i + 0.4) * (T / n);
+    add(g, B(w - 0.2, 0.1, d - 0.28), rail, 0, y, 0);
+  }
+}
 export const STAIR_CATEGORIES = [{ id: 'stairs', name: 'Stairs' }];
 export const STAIR_CATALOG = {
   stairStraight: S('Straight stair', buildStraight, 3.55, 14.0),
@@ -209,5 +226,6 @@ export const STAIR_CATALOG = {
   stairSpiral: S('Spiral (centre pole) 5′', buildSpiral, 5.2, 5.2, { rails: ['black', 'wood'] }),
   stairCurved: S('Curved / helical (open, floating)', buildCurved, 10.5, 9.0),
   stairBifurcated: S('Bifurcated grand stair', buildBifurcated, 12.4, 12.6),
+  stairLadder: S('Loft ladder', buildLadder, 1.8, 1.85, { h: 8, rails: ['black', 'wood'] }),
 };
 export const isStairType = (t) => !!STAIR_CATALOG[t];

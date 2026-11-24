@@ -68,13 +68,8 @@ export default {
     k.block(XK + 2.0, 0.08, L - 0.08, Wd - 0.08, 6.95, 7.16, WOOD);
     k.block(XK + 2.0, 0.08, XK + 2.16, 3.2, 7.16, 9.2, WOOD);
     k.block(XK + 2.0, 6.8, XK + 2.16, Wd - 0.08, 7.16, 9.2, WOOD);
-    // Ladder at the living/kitchen opening
-    for (let i = 0; i < 7; i++) {
-      const z = 0.35 + i * 0.95;
-      k.block(XK - 0.05, 3.6, XK + 1.95, 5.5, z, z + 0.1, CHAR);
-    }
-    k.block(XK - 0.05, 3.55, XK + 0.08, 3.7, 0, 7.05, CHAR);
-    k.block(XK - 0.05, 5.4, XK + 0.08, 5.55, 0, 7.05, CHAR);
+    // Ladder at the living/kitchen opening (placeable, removable item: Edit Plan → Stairs)
+    k.place && k.place('stairLadder', { x: (XK - 0.05 + XK + 1.95) / 2, y: (3.55 + 5.55) / 2, rot: 0, w: 2.0, d: 2.0, dir: 'up', level: true, levelH: 7.16, rail: 'black', open: [XK, 0.08, XK + 2.0, 5.0, 7.16] });
     // Dark vertical battens on the long south wall, between openings
     for (const x of [0.4, 1.6, 7.0, 13.7, 14.6, 21.3, 22.2, 27.4, 28.3, 33.5]) {
       k.block(x - 0.04, Wd - 0.02, x + 0.04, Wd + 0.06, 0, HS, CHAR);
