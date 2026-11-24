@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import {
   CATALOG, CATEGORIES, FINISHES, makeItem, itemRect, clearanceHit, isHallName,
   newItemId, roomOfPoint, isOutdoorItem, isPorchLike, isCoveredPorch,
+  isWallHungType, snapWallDecor,
 } from './furniture.js';
 
 const STORE_PREFIX = 'peakstead-plan-v1:';
@@ -117,8 +118,9 @@ export function sanitizeLayout(raw) {
       contactPhone: String(raw.planInfo.contactPhone || '').slice(0, 40),
     };
   }
-  if (!items && !rooms && !walls && !roofs && !finishes && !planInfo) return null;
-  return { version: Math.max(1, Math.min(3, Math.floor(+raw.version) || 1)), items, rooms, walls, roofs, finishes, deleted, planInfo };
+  const wallDecor = raw.wallDecor === true;
+  if (!items && !rooms && !walls && !roofs && !finishes && !planInfo && !raw.wallDecor) return null;
+  return { version: Math.max(1, Math.min(3, Math.floor(+raw.version) || 1)), items, rooms, walls, roofs, finishes, deleted, planInfo, wallDecor };
 }
 const COLOR_RX = /^(wood:)?#[0-9a-f]{6}$/i;
 function sanitizeFinishes(f) {
@@ -177,6 +179,10 @@ export function mountPlanEditor(ctrl) {
   let selected = null; // { kind: 'item'|'room'|'wall'|'door', id, index, ... }
   let doorNote = '';
   let placing = null; // catalog type to place
+  addEventListener('peakstead-wall-decor', (e) => {
+    const box = $('wallDecorToggle');
+    if (box) box.checked = !!(e.detail && e.detail.on);
+  });
   let drawingWall = null; // { x0, y0 } while adding a wall
   let undo = [];
   let dragging = null;
@@ -539,6 +545,15 @@ export function mountPlanEditor(ctrl) {
   function addPalette() {
     const wrap = el('div', { id: 'editPalette' });
     wrap.appendChild(el('h3', { text: 'Add item' }));
+    const opt = el('div', { class: 'row', id: 'wallDecorRow' });
+    const box = el('input', { type: 'checkbox', id: 'wallDecorToggle' });
+    box.checked = !!(ctrl.getWallDecor && ctrl.getWallDecor());
+    box.onchange = () => { if (ctrl.setWallDecor) ctrl.setWallDecor(box.checked); };
+    const lab = el('label', { text: 'TVs & pictures (off by default — hang flush on interior walls only)' });
+    lab.setAttribute('for', 'wallDecorToggle');
+    lab.style.flex = '1';
+    opt.append(box, lab);
+    wrap.appendChild(opt);
     let cat = 'living';
     const cats = el('div', { class: 'cats' });
     const types = el('div', { class: 'types' });
@@ -1011,6 +1026,24 @@ export function mountPlanEditor(ctrl) {
         const x = at.x, y = at.y;
         if (x == null) return;
         ev.preventDefault(); ev.stopPropagation();
+        if (isWallHungType(placing)) {
+          if (ctrl.getWallDecor && !ctrl.getWallDecor()) {
+            if ($('editHint')) $('editHint').textContent = 'Turn on TVs & pictures (in this panel or the options bar) before placing one.';
+            return;
+          }
+          const snap = (ctrl.snapWallDecor ? ctrl.snapWallDecor(placing, x, y) : snapWallDecor(placing, x, y, ctrl.getRooms(), ctrl.getWalls()));
+          if (!snap) {
+            if ($('editHint')) $('editHint').textContent = 'Click near a real interior wall. TVs and pictures only hang flush on a wall, never on a porch or in midair.';
+            return;
+          }
+          pushUndo();
+          const rec = makeItem(placing, { x: snap.x, y: snap.y, rot: snap.rot, wallRef: snap.wallRef });
+          ctrl.setItems([...ctrl.getItems(), rec]);
+          placing = null;
+          select({ kind: 'item', id: rec.id });
+          persist();
+          return;
+        }
         const rec = makeItem(placing, { x, y, rot: 0 });
         const hitC = isOutdoorItem(placing) ? null : clearanceHit(itemRect(rec), ctrl.getRooms(), ctrl.getWalls(), 0.05);
         showClearance(!!hitC, hitC?.kind);

@@ -1165,6 +1165,182 @@ export function isHallName(name) {
   return /^(entry\s+)?hall(way)?$|^mud\s+hall$|hall$/i.test(n) && !/limewash/i.test(n);
 }
 
+/** Halls, foyers, entries, and other circulation paths — not living rooms or porches. */
+export function isCirculationName(name) {
+  const n = String(name || '').trim();
+  if (isHallName(n)) return true;
+  if (/limewash/i.test(n)) return false;
+  return /^(foyer|entry|entryway|vestibule|corridor|passage|passageway)$/i.test(n)
+    || /\b(foyer|entryway|vestibule|corridor|passageway)\b/i.test(n)
+    || /^entry(\s+hall)?$/i.test(n);
+}
+
+export function isWallHungType(type) {
+  return type === 'art' || type === 'tv';
+}
+
+function wallFace(w) {
+  const x0 = Math.min(w[0], w[2]), x1 = Math.max(w[0], w[2]);
+  const y0 = Math.min(w[1], w[3]), y1 = Math.max(w[1], w[3]);
+  const horiz = (x1 - x0) >= (y1 - y0);
+  const thick = Math.max(0.2, horiz ? (y1 - y0) : (x1 - x0));
+  const mid = horiz ? (y0 + y1) / 2 : (x0 + x1) / 2;
+  const a = horiz ? x0 : y0, b = horiz ? x1 : y1;
+  return { horiz, thick, mid, a, b, x0, y0, x1, y1 };
+}
+
+/** True when two wall rectangles share a centerline and overlap along it. */
+export function wallRefMatches(ref, w, pad = 0.45) {
+  if (!ref || !w) return false;
+  const a = [ref.x0, ref.y0, ref.x1, ref.y1];
+  const ax0 = Math.min(a[0], a[2]), ax1 = Math.max(a[0], a[2]);
+  const ay0 = Math.min(a[1], a[3]), ay1 = Math.max(a[1], a[3]);
+  const bx0 = Math.min(w[0], w[2]), bx1 = Math.max(w[0], w[2]);
+  const by0 = Math.min(w[1], w[3]), by1 = Math.max(w[1], w[3]);
+  const overlapX = Math.min(ax1, bx1) + pad >= Math.max(ax0, bx0);
+  const overlapY = Math.min(ay1, by1) + pad >= Math.max(ay0, by0);
+  const midY = Math.abs(((ay0 + ay1) / 2) - ((by0 + by1) / 2));
+  const midX = Math.abs(((ax0 + ax1) / 2) - ((bx0 + bx1) / 2));
+  return (midY <= 0.2 && overlapX) || (midX <= 0.2 && overlapY);
+}
+
+export function wallStillExists(ref, WS) {
+  if (!ref || !WS) return false;
+  for (const kind of ['int', 'ext']) {
+    for (const w of (WS[kind] || [])) if (wallRefMatches(ref, w)) return true;
+  }
+  return false;
+}
+
+function openingOnWall(opening, w) {
+  return wallRefMatches({ x0: opening[0], y0: opening[1], x1: opening[2], y1: opening[3] }, w, 0.4);
+}
+
+function hangSpanClear(w, WS, along0, along1) {
+  const f = wallFace(w);
+  const lo = Math.min(along0, along1), hi = Math.max(along0, along1);
+  for (const k of ['door', 'win']) {
+    for (const o of (WS?.[k] || [])) {
+      if (!openingOnWall(o, w)) continue;
+      const oa = f.horiz ? Math.min(o[0], o[2]) : Math.min(o[1], o[3]);
+      const ob = f.horiz ? Math.max(o[0], o[2]) : Math.max(o[1], o[3]);
+      if (Math.min(hi, ob) - Math.max(lo, oa) > 0.25) return false;
+    }
+  }
+  return true;
+}
+
+function wallRefOf(w, kind) {
+  return { kind, x0: +w[0], y0: +w[1], x1: +w[2], y1: +w[3] };
+}
+
+/**
+ * Hang a thin wall item flush on the interior face of a real wall segment
+ * of an interior room. Never returns a pose for porches, exterior space, or
+ * an edge that has no wall (those used to leave art floating by porch posts).
+ */
+export function hangOnInteriorWall(room, WS, itemW, itemD, opts = {}) {
+  if (!room || !WS) return null;
+  const o = room[7] || {};
+  const n = room[0] || '';
+  if (o.outside || isPorchLike(room) || isCirculationName(n)) return null;
+  const rx0 = room[3], ry0 = room[4], rx1 = room[5], ry1 = room[6];
+  const rcx = (rx0 + rx1) / 2, rcy = (ry0 + ry1) / 2;
+  const prefer = opts.preferKind;
+  const nearX = opts.x, nearY = opts.y;
+  const candidates = [];
+  for (const kind of ['int', 'ext']) {
+    (WS[kind] || []).forEach((w, index) => {
+      const f = wallFace(w);
+      const len = f.b - f.a;
+      if (len < itemW + 0.6) return;
+      const alongRoom = f.horiz
+        ? (f.mid >= ry0 - 0.5 && f.mid <= ry1 + 0.5 && Math.min(f.b, rx1) - Math.max(f.a, rx0) >= itemW + 0.5)
+        : (f.mid >= rx0 - 0.5 && f.mid <= rx1 + 0.5 && Math.min(f.b, ry1) - Math.max(f.a, ry0) >= itemW + 0.5);
+      if (!alongRoom) return;
+      const sign = f.horiz ? (Math.sign(rcy - f.mid) || 1) : (Math.sign(rcx - f.mid) || 1);
+      // Item must sit inside this room, not on the far (outside / neighbor) face.
+      const inside = f.horiz
+        ? (sign > 0 ? rcy > f.mid - 0.05 : rcy < f.mid + 0.05)
+        : (sign > 0 ? rcx > f.mid - 0.05 : rcx < f.mid + 0.05);
+      if (!inside) return;
+      const overlapA = f.horiz ? Math.max(f.a, rx0) : Math.max(f.a, ry0);
+      const overlapB = f.horiz ? Math.min(f.b, rx1) : Math.min(f.b, ry1);
+      let along = (overlapA + overlapB) / 2;
+      if (nearX != null && nearY != null) {
+        along = f.horiz ? nearX : nearY;
+      }
+      const half = itemW / 2 + 0.3;
+      along = Math.max(overlapA + half, Math.min(overlapB - half, along));
+      if (!hangSpanClear(w, WS, along - itemW / 2, along + itemW / 2)) return;
+      const innerFace = f.mid + sign * (f.thick / 2);
+      const centerOff = innerFace + sign * (itemD / 2 + 0.02);
+      const x = f.horiz ? along : centerOff;
+      const y = f.horiz ? centerOff : along;
+      // Face into the room (same convention as againstWall).
+      const rot = f.horiz ? (sign > 0 ? 0 : 180) : (sign > 0 ? 270 : 90);
+      let score = (kind === 'int' ? 20 : 0) + Math.min(20, overlapB - overlapA);
+      if (prefer && prefer === kind) score += 8;
+      if (nearX != null && nearY != null) score -= Math.hypot(x - nearX, y - nearY);
+      candidates.push({ x, y, rot, kind, index, wallRef: wallRefOf(w, kind), score });
+    });
+  }
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates[0] || null;
+}
+
+export function snapWallDecor(type, x, y, rooms, WS) {
+  if (!isWallHungType(type)) return null;
+  const t = CATALOG[type] || {};
+  const itemW = t.w || 3.2, itemD = t.d || 0.12;
+  let room = (rooms || []).find((r) => !r[7]?.outside && !isPorchLike(r) && !isCirculationName(r[0])
+    && x > r[3] && x < r[5] && y > r[4] && y < r[6]);
+  if (!room) {
+    // click may land in the wall thickness; pick the nearest interior room
+    let best = null, bestD = 3;
+    for (const r of (rooms || [])) {
+      if (r[7]?.outside || isPorchLike(r) || isCirculationName(r[0])) continue;
+      const cx = Math.max(r[3], Math.min(r[5], x)), cy = Math.max(r[4], Math.min(r[6], y));
+      const d = Math.hypot(x - cx, y - cy);
+      if (d < bestD) { bestD = d; room = r; }
+    }
+  }
+  if (!room) return null;
+  return hangOnInteriorWall(room, WS, itemW, itemD, { x, y });
+}
+
+/** Place a plant in a room corner, inset from walls and away from door swings and walk paths. */
+export function plantCornerAwayFromDoors(room, WS, w = 2.0, d = 2.0) {
+  if (!room) return null;
+  if (isCirculationName(room[0]) || isPorchLike(room) || room[7]?.outside) return null;
+  const x0 = room[3], y0 = room[4], x1 = room[5], y1 = room[6];
+  const insetX = 0.55 + w / 2, insetY = 0.55 + d / 2;
+  if (x1 - x0 < insetX * 2 + 0.4 || y1 - y0 < insetY * 2 + 0.4) return null;
+  const corners = [
+    { x: x0 + insetX, y: y0 + insetY, rot: 0 },
+    { x: x1 - insetX, y: y0 + insetY, rot: 0 },
+    { x: x0 + insetX, y: y1 - insetY, rot: 0 },
+    { x: x1 - insetX, y: y1 - insetY, rot: 0 },
+  ];
+  const zones = typeof doorwayZones === 'function' ? doorwayZones(WS, 2.2, 0.2) : [];
+  const doors = typeof doorsOnRoom === 'function' ? doorsOnRoom(room, WS) : [];
+  const doorPts = doors.map((h) => {
+    const r = h.rect || [0, 0, 0, 0];
+    return [(r[0] + r[2]) / 2, (r[1] + r[3]) / 2];
+  });
+  let best = null, bestScore = -1e9;
+  for (const c of corners) {
+    const rec = { x: c.x, y: c.y, w, d, rot: c.rot };
+    const rect = itemRect(rec);
+    if (zones.some((z) => rect[0] < z[2] && rect[2] > z[0] && rect[1] < z[3] && rect[3] > z[1])) continue;
+    if (typeof clearanceHit === 'function' && clearanceHit(rect, [room], WS, 0.05)) continue;
+    const minDoor = doorPts.reduce((m, p) => Math.min(m, Math.hypot(c.x - p[0], c.y - p[1])), 99);
+    if (minDoor < 2.4) continue;
+    if (minDoor > bestScore) { bestScore = minDoor; best = c; }
+  }
+  return best;
+}
+
 export function hallwayRects(rooms, inset = 0.2) {
   const out = [];
   for (const r of rooms || []) {
@@ -1390,6 +1566,11 @@ export function makeItem(type, opts = {}) {
     frame: opts.frame,
     dress: opts.dress,
     setTable: opts.setTable,
+    wallRef: opts.wallRef && typeof opts.wallRef === 'object' ? {
+      kind: opts.wallRef.kind === 'ext' ? 'ext' : 'int',
+      x0: +opts.wallRef.x0, y0: +opts.wallRef.y0,
+      x1: +opts.wallRef.x1, y1: +opts.wallRef.y1,
+    } : undefined,
   };
 }
 
@@ -1399,6 +1580,7 @@ export function buildItemMesh(rec, ctx) {
   const g = new THREE.Group();
   g.userData.itemId = rec.id;
   g.userData.item = rec;
+  if (rec.wallRef) g.userData.wallRef = rec.wallRef;
   t.build(g, rec, ctx);
   // hang pendants from a typical ceiling
   if (rec.type === 'pendant') g.position.y = 0; // builder already uses local y; we'll lift the group below
@@ -1601,8 +1783,7 @@ export function autoFurnish(M, WS) {
       const wall = longestWallWithoutDoor(room, doors);
       const b = againstWall(room, wall, Math.min(4.8, (wall === 'n' || wall === 's' ? rw : rd) - 1), 1.6, 0.35);
       put('mudBench', { ...b, w: Math.min(4.8, (wall === 'n' || wall === 's' ? rw : rd) - 1.2) });
-      const corner = againstWall(room, wall === 'n' || wall === 's' ? 'e' : 's', 2.0, 2.0, 0.5);
-      put('plant', { ...corner, variant: 'fiddle' });
+      // Plants stay out of foyers and other circulation paths.
       continue;
     }
 
@@ -1682,9 +1863,8 @@ export function autoFurnish(M, WS) {
       const mediaWall = (wall === 'n' || wall === 's') ? 'e' : 's';
       const media = againstWall(room, mediaWall, Math.min(6.5, (mediaWall === 'n' || mediaWall === 's' ? rw : rd) - 2), 1.6, 0.4);
       put('mediaConsole', { ...media });
-      const plantWall = mediaWall === 's' ? 'n' : mediaWall === 'n' ? 'w' : 'n';
-      const corner = againstWall(room, plantWall, 2.2, 2.2, 0.6);
-      put('plant', { ...corner, variant: 'fiddle' });
+      const corner = plantCornerAwayFromDoors(room, WS, 2.2, 2.2);
+      if (corner) put('plant', { ...corner, variant: 'fiddle' });
       continue;
     }
 
@@ -1852,8 +2032,9 @@ function dressOverlaps(a, b, pad = 0.12) {
 }
 
 /** Add missing designer decor to every room, including ones the model furnished itself. Does not replace existing items. */
-export function dressRooms(M, WS, existing, styleId) {
+export function dressRooms(M, WS, existing, styleId, opts = {}) {
   const pal = DRESS_PALETTES[styleId] || DRESS_PALETTES.default;
+  const wallDecor = !!opts.wallDecor;
   const rooms = M.rooms || [];
   const items = (existing || []).slice();
   const extra = [];
@@ -1895,19 +2076,25 @@ export function dressRooms(M, WS, existing, styleId) {
     if ((living || sleeping) && !has('rug') && Math.min(rw, rd) >= 6) {
       add('rug', { x: cx, y: cy, w: Math.min(rw - 2, living ? 10 : 8), d: Math.min(rd - 2, living ? 8 : 6), color: pal.rug, field: pal.field, variant: styleId === 'scandinavian' ? 'jute' : 'plain' }, room);
     }
-    if (!has('plant') && Math.min(rw, rd) >= 7 && !/bath|powder|laundry|toilet/i.test(n)) {
-      const doors = doorsOnRoom(room, WS);
-      const wall = longestWallWithoutDoor(room, doors);
-      const cornerWall = wall === 'n' || wall === 's' ? 'e' : 's';
-      const spot = againstWall(room, cornerWall, 2.0, 2.0, 0.55);
-      add('plant', { ...spot, variant: pal.plant, pot: pal.pot }, room);
+    const circulation = isCirculationName(n) || isPorchLike(room) || !!o.outside;
+    if (!has('plant') && !circulation && Math.min(rw, rd) >= 7 && !/bath|powder|laundry|toilet/i.test(n)) {
+      const spot = plantCornerAwayFromDoors(room, WS, 2.0, 2.0);
+      if (spot) add('plant', { ...spot, variant: pal.plant, pot: pal.pot }, room);
     }
-    if (!has('art') && !/bath|powder|laundry|toilet|kitchen/i.test(n) && Math.min(rw, rd) >= 6) {
-      const doors = doorsOnRoom(room, WS);
-      const wall = longestWallWithoutDoor(room, doors);
-      const spot = againstWall(room, wall, 3.2, 0.12, 0.08);
-      if (!here.some((it) => it.type === 'tv' && Math.hypot(it.x - spot.x, it.y - spot.y) < 4)) {
-        add('art', { ...spot, w: Math.min(3.6, (wall === 'n' || wall === 's' ? rw : rd) * 0.35), color: pal.art, accent: pal.accent, accent2: pal.accent2, frame: pal.frame }, room);
+    if (wallDecor && !circulation && !/bath|powder|laundry|toilet|kitchen|garage|\bbay\b/i.test(n) && Math.min(rw, rd) >= 6) {
+      const living = /living|family|great|hearth|lounge|\bden\b/i.test(n);
+      if (living && !has('tv')) {
+        const tvHang = hangOnInteriorWall(room, WS, 5.3, 0.3);
+        if (tvHang) add('tv', { x: tvHang.x, y: tvHang.y, rot: tvHang.rot, wallRef: tvHang.wallRef }, room);
+      }
+      if (!has('art')) {
+        const artW = Math.min(3.6, Math.min(rw, rd) * 0.35);
+        const artHang = hangOnInteriorWall(room, WS, artW, 0.12);
+        // Don't cover a TV on the same stretch of wall.
+        if (artHang && !here.some((it) => it.type === 'tv' && Math.hypot(it.x - artHang.x, it.y - artHang.y) < 4)
+            && !extra.some((it) => it.type === 'tv' && Math.hypot(it.x - artHang.x, it.y - artHang.y) < 4)) {
+          add('art', { x: artHang.x, y: artHang.y, rot: artHang.rot, w: artW, color: pal.art, accent: pal.accent, accent2: pal.accent2, frame: pal.frame, wallRef: artHang.wallRef }, room);
+        }
       }
     }
     if (sleeping) {

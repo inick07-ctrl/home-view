@@ -5,7 +5,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import REGISTRY from './models/registry.js';
 import { parcelDefaults, lotStats, formatLotArea, worldRings, buildableRings, xfHouse, houseFromWorld } from '../js/parcel.js';
-import { sanitizeWalls, clipCounters, autoFurnish, dressRooms, installFurniture, buildItemMesh, makeItem, itemRect, clearanceHit, isCoveredPorch, isPorchLike, CATALOG as ITEM_CATALOG } from './furniture.js';
+import { sanitizeWalls, clipCounters, autoFurnish, dressRooms, installFurniture, buildItemMesh, makeItem, itemRect, clearanceHit, isCoveredPorch, isPorchLike, isCirculationName, isWallHungType, wallRefMatches, wallStillExists, snapWallDecor, hangOnInteriorWall, CATALOG as ITEM_CATALOG } from './furniture.js';
 import { mountPlanEditor, cloneWalls, cloneRooms, cloneItems, cloneRoofs, loadLocalLayout, sanitizeLayout } from './plan-editor.js';
 import { createWalkAudio } from './walk-audio.js';
 import { mountPlanExport, setPlan2d, openExportDialog, exportPlansPdf, buildPlanSvgSet, loadPlanInfo, savePlanInfo } from './plan-export.js';
@@ -891,6 +891,7 @@ let highlightGroup = null;
 let wallPickGroup = null;
 let wallPickMat = null;
 let itemsOn = true;
+let wallDecorOn = false;
 let itemFire = { flames: [], lights: [], glows: [] }; // animated flames inside placed fireplace items
 let chimneyMeshes = []; // model chimney/flue blocks tagged { chimney: [x, y] }: shown only while a wood-burning fireplace item sits near (x, y)
 let editMode = false;
@@ -933,7 +934,7 @@ function wallsOnRoom(WS, room, slack = 0.6) {
 }
 function translateSeg(w, dx, dy) { w[0] += dx; w[1] += dy; w[2] += dx; w[3] += dy; }
 function captureLayout() {
-  activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])), planInfo: (activeLayout && activeLayout.planInfo) ? { ...activeLayout.planInfo } : undefined };
+  activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])), planInfo: (activeLayout && activeLayout.planInfo) ? { ...activeLayout.planInfo } : undefined, wallDecor: !!wallDecorOn };
   return activeLayout;
 }
 function rebuildPlan() {
@@ -1021,6 +1022,8 @@ function refreshItems() {
   const roofCol = mt.roof || ({ metal: '#2b2c2e', darkShingle: '#2e2f31', shingle: '#5d5952' }[mt.roofTex] || '#3a3b3d');
   const ctx = { Wx, Wz, ceiling: (M?.wallH || 9), house: { ext: mt.ext || '#e9e5dc', trim: mt.trim || (new THREE.Color(mt.ext || '#ffffff').getHSL({}).l < 0.35 ? '#1d1e20' : '#f4f2ec'), roof: roofCol, metal: mt.roofTex === 'metal' } };
   for (const rec of [...currentItems, ...(dressItems || [])]) {
+    if (isWallHungType(rec.type) && !wallDecorOn) continue;
+    if (isWallHungType(rec.type) && rec.wallRef && M && !wallStillExists(rec.wallRef, M.walls)) continue;
     const painted = recWithFinishes(rec);
     const mesh = buildItemMesh(painted, ctx);
     if (!mesh) continue;
@@ -2187,6 +2190,7 @@ function probeFootprintClear(rects, opts = {}) {
 function removeWallOp(kind, index) {
   const w = (M.walls[kind] || [])[index];
   if (!w) return false;
+  stripWallHungOnWalls([w]);
   // Take every opening this wall hosts (door, window, garage) with it.
   const hosted = [];
   if (kind === 'ext' || kind === 'int') {
@@ -2290,6 +2294,9 @@ function ensureEditor() {
     set exampleId(_) {},
     getItems: () => currentItems,
     setItems: setItemsList,
+    getWallDecor: () => !!wallDecorOn,
+    setWallDecor,
+    snapWallDecor: (type, x, y) => snapWallDecor(type, x, y, M?.rooms || [], M?.walls),
     getRooms: () => M?.rooms || [],
     getWalls: () => M?.walls || { ext: [], int: [], win: [], door: [], counter: [] },
     applyLayout: (layout) => {
@@ -2850,8 +2857,12 @@ function buildModel(model, opts = {}) {
       }
     }
   } else currentItems = cloneItems(defaultItems);
-  dressItems = dressRooms(M, WS, currentItems, currentStyle) || [];
-  activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])), planInfo: (activeLayout && activeLayout.planInfo) ? { ...activeLayout.planInfo } : undefined };
+  if (layout && Object.prototype.hasOwnProperty.call(layout, 'wallDecor')) wallDecorOn = !!layout.wallDecor;
+  currentItems = filterBlockingPlants(currentItems, M.rooms, WS);
+  defaultItems = filterBlockingPlants(defaultItems, M.rooms, WS);
+  if (wallDecorOn) currentItems = pruneOrphanWallDecor(currentItems, WS);
+  dressItems = dressRooms(M, WS, currentItems, currentStyle, { wallDecor: wallDecorOn }) || [];
+  activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])), planInfo: (activeLayout && activeLayout.planInfo) ? { ...activeLayout.planInfo } : undefined, wallDecor: !!wallDecorOn };
   buildFloors();
   refreshItems();
   applyTimeOfDay();
@@ -3359,6 +3370,54 @@ function setItemsVisible(v) {
   if ($('bItems')) { $('bItems').classList.toggle('on', v); $('bItems').textContent = v ? 'Items' : 'Items off'; }
 }
 if ($('bItems')) { setItemsVisible(true); $('bItems').onclick = () => setItemsVisible(!itemsOn); }
+if ($('bWallDecor')) { setWallDecor(wallDecorOn, { silent: true }); $('bWallDecor').onclick = () => setWallDecor(!wallDecorOn); }
+
+function filterBlockingPlants(list, rooms, WS) {
+  return (list || []).filter((it) => {
+    if (it.type !== 'plant') return true;
+    const room = (rooms || []).find((r) => it.x > r[3] && it.x < r[5] && it.y > r[4] && it.y < r[6]);
+    if (room && (isCirculationName(room[0]) || isPorchLike(room) || room[7]?.outside)) return false;
+    if (typeof clearanceHit === 'function' && clearanceHit(itemRect(it), rooms, WS, 0.05)?.kind === 'doorway') return false;
+    if (typeof clearanceHit === 'function' && clearanceHit(itemRect(it), rooms, WS, 0.05)?.kind === 'hallway') return false;
+    return true;
+  });
+}
+function pruneOrphanWallDecor(list, WS) {
+  return (list || []).filter((it) => {
+    if (!isWallHungType(it.type)) return true;
+    if (!it.wallRef || !wallStillExists(it.wallRef, WS)) return false;
+    return true;
+  });
+}
+function stripWallHungOnWalls(walls) {
+  const hit = (it) => isWallHungType(it.type) && (it.wallRef ? walls.some((w) => wallRefMatches(it.wallRef, w)) : false);
+  const before = currentItems.length;
+  currentItems = (currentItems || []).filter((it) => !hit(it));
+  dressItems = (dressItems || []).filter((it) => !hit(it));
+  if (activeLayout) activeLayout.items = cloneItems(currentItems);
+  return before !== currentItems.length;
+}
+function setWallDecor(v, opts = {}) {
+  wallDecorOn = !!v;
+  if ($('bWallDecor')) {
+    $('bWallDecor').classList.toggle('on', wallDecorOn);
+    $('bWallDecor').setAttribute('aria-pressed', wallDecorOn ? 'true' : 'false');
+    $('bWallDecor').textContent = wallDecorOn ? 'TVs & pictures: On' : 'TVs & pictures: Off';
+  }
+  if (!opts.silent && M) {
+    if (wallDecorOn) currentItems = pruneOrphanWallDecor(currentItems, M.walls);
+    dressItems = dressRooms(M, M.walls, currentItems, currentStyle, { wallDecor: wallDecorOn }) || [];
+    refreshItems();
+  }
+  if (activeLayout) activeLayout.wallDecor = wallDecorOn;
+  try { dispatchEvent(new CustomEvent('peakstead-wall-decor', { detail: { on: wallDecorOn } })); } catch {}
+  if (!opts.silent && SRC && SRC.kind === 'project') {
+    clearTimeout(clientSaveTimer);
+    clientSaveTimer = setTimeout(() => { saveLayoutRemote(captureLayout()).catch(() => {}); }, 800);
+  }
+  return wallDecorOn;
+}
+
 
 $('bOrbit').onclick = () => setMode('orbit');
 $('bTop').onclick = () => setMode('top');
@@ -4281,6 +4340,7 @@ window.app = {
   planToWorld: (fx, fy) => [Wx(fx), Wz(fy)],
   getRooms: () => M?.rooms || [],
   getItems: () => currentItems,
+  getAllItems: () => [...currentItems, ...(dressItems || [])],
   addItem: addItemOp,
   setItems: (list) => setItemsList(list),
   lookAtPlan: (fx, fy, dist = 22, height = 9) => {
@@ -4343,6 +4403,8 @@ window.app = {
   planReadout,
   setDollhouse,
   setWalkStick,
+  setWallDecor, getWallDecor: () => !!wallDecorOn,
+  snapWallDecor,
   setTimeOfDay,
   getTimeOfDay: () => timeOfDay,
   getQualityLevel: () => qualityLevel,
@@ -5041,6 +5103,30 @@ function auditAndFixPlan() {
     }
     if (keep.length !== dressItems.length) {
       dressItems = keep;
+      if (typeof refreshItems === 'function' && itemsGroup) refreshItems();
+    }
+  }
+  if (Array.isArray(currentItems) && M) {
+    const keep = [];
+    for (const it of currentItems) {
+      if (it.type === 'plant') {
+        const room = (M.rooms || []).find((r) => it.x > r[3] && it.x < r[5] && it.y > r[4] && it.y < r[6]);
+        if (room && (isCirculationName(room[0]) || isPorchLike(room) || room[7]?.outside)) {
+          issues.push({ kind: 'plant-path', type: it.type, name: (room[0] || 'circulation') });
+          fixes.push('Removed a plant from a hallway, foyer, porch, or walk path');
+          continue;
+        }
+      }
+      if (isWallHungType(it.type) && (!it.wallRef || !wallStillExists(it.wallRef, M.walls))) {
+        issues.push({ kind: 'loose-wall-decor', type: it.type, name: it.type });
+        fixes.push(`Removed loose ${it.type} (not attached to a wall)`);
+        continue;
+      }
+      keep.push(it);
+    }
+    if (keep.length !== currentItems.length) {
+      currentItems = keep;
+      if (activeLayout) activeLayout.items = cloneItems(currentItems);
       if (typeof refreshItems === 'function' && itemsGroup) refreshItems();
     }
   }
