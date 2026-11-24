@@ -2983,7 +2983,7 @@ const HELP = {
   top: 'Top-down plan view. Drag to pan/rotate, scroll or pinch to zoom.',
   walk: isTouch ? 'Drag to look around · use the arrow pad to walk. Doors open as you walk up (turn off with Auto-open doors).' : 'Click the view to look with the mouse · W A S D / arrows to walk · Shift to run · Esc to release the mouse. Doors swing open as you walk up — use Auto-open doors to keep them shut. Turn the Roof on to see vaulted ceilings.',
 };
-const setBtn = (id, on) => $(id).classList.toggle('on', !!on);
+const setBtn = (id, on) => { const el = $(id); if (el) el.classList.toggle('on', !!on); };
 function animateCam(pos, target, ms = 700) {
   const p0 = camera.position.clone(), t0 = orbit.target.clone(), start = performance.now();
   (function step(now) {
@@ -3006,7 +3006,8 @@ function setMode(m, instant = false) {
   if (mode === 'walk' && m !== 'walk') { exitWalk(); walkAudio.exitWalk(); }
   mode = m;
   document.body.classList.toggle('walk-pad', m === 'walk' && typeof isTouch !== 'undefined' && isTouch);
-  setBtn('bOrbit', m === 'orbit'); setBtn('bTop', m === 'top'); setBtn('bWalk', m === 'walk');
+  document.body.classList.toggle('walk-mode', m === 'walk');
+  setBtn('bOrbit', m === 'orbit'); setBtn('bTop', m === 'top'); setBtn('bWalk', m === 'walk'); setBtn('bDollhouse', false);
   $('help').textContent = HELP[m];
   const size = Math.max(BW, BH, 48) / 91; // keep tiny homes and short trailers in frame
   const hp = housePose();
@@ -3028,9 +3029,30 @@ function setMode(m, instant = false) {
     const w = xfHouse(Wx(s[0]), Wz(s[1]), hp.x, hp.z, hp.yaw);
     player.set(w[0], w[1]); yaw = (s[2] || 0) - THREE.MathUtils.degToRad(hp.yaw); pitch = -0.05;
     $('cross').style.display = 'block';
-    if (isTouch) $('pad').style.display = 'grid'; else $('walkmsg').style.display = 'block';
+    if (isTouch) { const padEl = $('pad'); if (padEl) padEl.style.display = $('joystick') ? 'none' : 'grid'; } else if ($('walkmsg')) $('walkmsg').style.display = 'block';
     walkAudio.enterWalk();
   }
+}
+function setDollhouse(instant = false) {
+  if (mode === 'walk') {
+    if (walkSaved) {
+      const w = walkSaved; walkSaved = null;
+      amb.intensity = w.amb; camera.near = 0.2; camera.far = 1000; camera.updateProjectionMatrix();
+    }
+    exitWalk(); walkAudio.exitWalk();
+  }
+  mode = 'orbit';
+  document.body.classList.remove('walk-mode', 'walk-pad');
+  setBtn('bOrbit', false); setBtn('bTop', false); setBtn('bWalk', false); setBtn('bDollhouse', true);
+  setRoof(false); setCut(false); setLabels(true);
+  const size = Math.max(BW, BH, 48) / 91;
+  const hp = housePose();
+  const k = Math.max(0.85, 0.95 / camera.aspect) * size;
+  const pos = new THREE.Vector3(hp.x + 48 * k, 72 * k, hp.z + 58 * k);
+  const tgt = new THREE.Vector3(hp.x, 0, hp.z);
+  if (instant) { camera.position.copy(pos); orbit.target.copy(tgt); camera.lookAt(tgt); }
+  else animateCam(pos, tgt);
+  if ($('help')) $('help').textContent = 'Dollhouse view — roof off, high 3/4 angle.';
 }
 function setRoof(v) {
   roofOn = v;
@@ -3609,6 +3631,12 @@ addEventListener('pointermove', e => {
 });
 addEventListener('pointerup', () => drag = null); addEventListener('pointercancel', () => drag = null);
 const pad = {};
+const walkStick = { x: 0, y: 0 };
+function setWalkStick(ax, ay) {
+  walkStick.x = Math.max(-1, Math.min(1, +ax || 0));
+  walkStick.y = Math.max(-1, Math.min(1, +ay || 0));
+  if (Math.hypot(walkStick.x, walkStick.y) < 0.08) { walkStick.x = 0; walkStick.y = 0; }
+}
 for (const b of document.querySelectorAll('#pad button[data-k]')) {
   const k = b.dataset.k;
   b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); pad[k] = true; });
@@ -3620,6 +3648,7 @@ function walkStep(dt) {
   if (keys.KeyS || keys.ArrowDown || pad.b) f -= 1;
   if (keys.KeyD || keys.ArrowRight || pad.r) s += 1;
   if (keys.KeyA || keys.ArrowLeft || pad.l) s -= 1;
+  if (walkStick.x || walkStick.y) { f += -walkStick.y; s += walkStick.x; }
   const vmax = keys.ShiftLeft || keys.ShiftRight ? 12 : 6;
   let tx = 0, tz = 0;
   if (f || s) {
@@ -4071,13 +4100,174 @@ window.app = {
     return { x: w[0], y: w[1] };
   },
   getLayout: () => captureLayout(),
+  planReadout,
+  setDollhouse,
+  setWalkStick,
   dbg: () => ({ roof, root, ceilings, wallsFull, M, itemsGroup }),
 };
+
 if (SRC.kind === 'example') await loadExample(params.get('ex') || REGISTRY[0].id);
 else if (SRC.kind === 'draft') loadBuilderDraft();
 else if (SRC.kind !== 'embed') await loadProjectModel();
 loop();
 
+
+
+function fmtPlanFt(n) {
+  if (!Number.isFinite(n)) return '—';
+  const ft = Math.floor(n + 1e-6), inch = Math.round((n - ft) * 12);
+  if (inch === 12) return `${ft + 1}'-0"`;
+  return inch ? `${ft}'-${inch}"` : `${ft}'-0"`;
+}
+function readoutEdgeCoverage(room, edge, WS, slack = 1.25) {
+  const x0 = room[3], y0 = room[4], x1 = room[5], y1 = room[6];
+  const len = (edge === 'n' || edge === 's') ? (x1 - x0) : (y1 - y0);
+  if (len < 0.2) return 1;
+  let cov = 0;
+  for (const kind of ['ext', 'int', 'win', 'door']) {
+    for (const w of (WS[kind] || [])) {
+      if (!w) continue;
+      const mx = (w[0] + w[2]) / 2, my = (w[1] + w[3]) / 2;
+      let along = 0, on = false;
+      if (edge === 'n' || edge === 's') {
+        const y = edge === 'n' ? y0 : y1;
+        on = Math.abs(my - y) < slack && mx >= x0 - slack && mx <= x1 + slack;
+        along = Math.min(x1, Math.max(w[0], w[2])) - Math.max(x0, Math.min(w[0], w[2]));
+      } else {
+        const x = edge === 'w' ? x0 : x1;
+        on = Math.abs(mx - x) < slack && my >= y0 - slack && my <= y1 + slack;
+        along = Math.min(y1, Math.max(w[1], w[3])) - Math.max(y0, Math.min(w[1], w[3]));
+      }
+      if (on && along > 0) cov += along;
+    }
+  }
+  return Math.min(1, cov / len);
+}
+function readoutAdjacent(rooms, room, ri, edge, slack = 0.55) {
+  const x0 = room[3], y0 = room[4], x1 = room[5], y1 = room[6];
+  return rooms.some((o, i) => {
+    if (i === ri) return false;
+    if (edge === 'n') return Math.abs(o[6] - y0) < slack && o[3] < x1 - 0.5 && o[5] > x0 + 0.5;
+    if (edge === 's') return Math.abs(o[4] - y1) < slack && o[3] < x1 - 0.5 && o[5] > x0 + 0.5;
+    if (edge === 'w') return Math.abs(o[5] - x0) < slack && o[4] < y1 - 0.5 && o[6] > y0 + 0.5;
+    if (edge === 'e') return Math.abs(o[3] - x1) < slack && o[4] < y1 - 0.5 && o[6] > y0 + 0.5;
+    return false;
+  });
+}
+
+function openingsOnRoomEdge(room, WS, kinds, slack = 1.25) {
+  const x0 = room[3], y0 = room[4], x1 = room[5], y1 = room[6];
+  const hit = [];
+  for (const kind of kinds) {
+    (WS[kind] || []).forEach((w, i) => {
+      if (!w) return;
+      const mx = (w[0] + w[2]) / 2, my = (w[1] + w[3]) / 2;
+      const on = (
+        (Math.abs(my - y0) < slack || Math.abs(my - y1) < slack) && mx >= x0 - slack && mx <= x1 + slack
+      ) || (
+        (Math.abs(mx - x0) < slack || Math.abs(mx - x1) < slack) && my >= y0 - slack && my <= y1 + slack
+      );
+      if (on) hit.push({ kind, i, w });
+    });
+  }
+  return hit;
+}
+function planReadout() {
+  if (!M) return { title: 'Untitled', wallH: 9, rooms: [], flagged: [] };
+  const WS = M.walls || {};
+  const defaultH = M.wallH || 9;
+  const rooms = M.rooms || [];
+  const items = currentItems || [];
+  const stairTypes = new Set(Object.entries(ITEM_CATALOG).filter(([, v]) => v && v.stair).map(([k]) => k));
+  const out = [];
+  rooms.forEach((room, ri) => {
+    const name = (room[0] || '').trim();
+    const floor = room[2] || '';
+    const x0 = room[3], y0 = room[4], x1 = room[5], y1 = room[6];
+    const w = Math.max(0, x1 - x0), d = Math.max(0, y1 - y0);
+    const o = (room[7] && typeof room[7] === 'object') ? room[7] : {};
+    const hits = openingsOnRoomEdge(room, WS, ['ext', 'int', 'win', 'door']);
+    const heights = [];
+    for (const h of hits) {
+      if (h.kind === 'ext' || h.kind === 'int') {
+        const hh = h.w[4] || defaultH;
+        if (Number.isFinite(hh)) heights.push(+hh.toFixed(2));
+      }
+    }
+    const uniqH = [...new Set(heights)].sort((a, b) => a - b);
+    const doors = hits.filter((h) => h.kind === 'door').map((h) => {
+      const info = typeof doorInfo === 'function' ? doorInfo(h.w) : {};
+      return { index: h.i, kind: info.kind || 'door', width: info.width, height: info.top, removed: !!info.noLeaf };
+    });
+    const windows = hits.filter((h) => h.kind === 'win').length;
+    const stairs = items.filter((it) => stairTypes.has(it.type) && it.x > x0 && it.x < x1 && it.y > y0 && it.y < y1)
+      .map((it) => ({ name: it.type, dir: it.dir || '' }));
+    const flags = [];
+    const notes = [];
+    if (!name && o.noLabel) notes.push('Unlabeled space (no room name on the plan)');
+    else if (!name) flags.push('Unnamed room');
+    const interior = !o.outside && !isPorchLike(room);
+    const openEdges = [];
+    const interiorOpen = [];
+    if (interior) {
+      for (const edge of ['n', 's', 'w', 'e']) {
+        const cov = readoutEdgeCoverage(room, edge, WS);
+        if (cov >= 0.35) continue;
+        const mid = {
+          n: [(x0 + x1) / 2, y0 - 0.9], s: [(x0 + x1) / 2, y1 + 0.9],
+          w: [x0 - 0.9, (y0 + y1) / 2], e: [x1 + 0.9, (y0 + y1) / 2],
+        }[edge];
+        const intoRoom = rooms.some((o2, i2) => i2 !== ri && mid[0] >= o2[3] - 0.2 && mid[0] <= o2[5] + 0.2 && mid[1] >= o2[4] - 0.2 && mid[1] <= o2[6] + 0.2);
+        if (intoRoom || readoutAdjacent(rooms, room, ri, edge)) interiorOpen.push(edge);
+        else openEdges.push(edge);
+      }
+    }
+    if (interior && doors.length === 0 && interiorOpen.length === 0 && !stairs.length && !/closet|wic|w\.i\.c|pantry|hall|stair|open to|loft|dormer/i.test(name)) {
+      flags.push('No door found on this interior room');
+    }
+    const wallHeights = [];
+    for (const h of hits) {
+      if (h.kind !== 'ext' && h.kind !== 'int') continue;
+      const along = Math.max(Math.hypot(h.w[2] - h.w[0], h.w[3] - h.w[1]), 0);
+      if (along < 2) continue;
+      const hh = h.w[4] || defaultH;
+      if (Number.isFinite(hh)) wallHeights.push(+hh.toFixed(2));
+    }
+    const uniqH2 = [...new Set(wallHeights)].sort((a, b) => a - b);
+    if (uniqH2.length > 1 && (Math.max(...uniqH2) - Math.min(...uniqH2)) >= 0.9) {
+      notes.push('Mixed wall heights in this room: ' + uniqH2.map((h) => h.toFixed(1) + "'").join(', '));
+    }
+    if (openEdges.length) {
+      const dir = { n: 'north', s: 'south', w: 'west', e: 'east' };
+      flags.push('Unclear: ' + openEdges.map((e) => dir[e]).join(' and ') + ' side is mostly open to the outside (little or no wall, door, or window along that edge)');
+    }
+    if (interior && !floor && !/hall|closet|wic|stair/i.test(name)) flags.push('Floor finish type is not set');
+    if (o.noFloor) notes.push('Marked noFloor');
+    if (o.noAuto) notes.push('Custom furnished (auto-furnish skipped)');
+    if (o.vaulted) notes.push('Vaulted ceiling');
+    if (interiorOpen.length) notes.push('Open to an adjoining room on the ' + interiorOpen.map((e) => ({ n: 'north', s: 'south', w: 'west', e: 'east' }[e])).join(' and ') + ' side');
+    out.push({
+      index: ri,
+      name: name || '(unnamed)',
+      floor: floor || (o.outside ? 'exterior' : ''),
+      outside: !!o.outside,
+      noAuto: !!o.noAuto,
+      size: [w, d],
+      sizeLabel: `${fmtPlanFt(w)} × ${fmtPlanFt(d)}`,
+      area: w * d,
+      wallHeights: (typeof uniqH2 !== 'undefined' && uniqH2.length) ? uniqH2 : (uniqH.length ? uniqH : [o.wallH || defaultH]),
+      doors, windows, stairs, flags, notes,
+      level: o.level != null ? o.level : (o.floorLevel != null ? o.floorLevel : 0),
+    });
+  });
+  return {
+    title: (M && (M.title || M.name)) || currentId || 'Untitled',
+    id: (M && M.id) || currentId,
+    wallH: defaultH,
+    rooms: out,
+    flagged: out.filter((r) => r.flags && r.flags.length),
+  };
+}
 
 function getPlanSnapshot() {
   const info = (activeLayout && activeLayout.planInfo) ? { ...activeLayout.planInfo } : undefined;
