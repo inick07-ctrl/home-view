@@ -491,7 +491,7 @@ def wait_app(page, timeout=60000):
 
 def load_model(page, url, mid, bust, first=False):
     if first or not page.evaluate("() => !!(window.app && window.app.loadExample)"):
-        page.goto(f"{url}/viewer?ex={mid}&_v={bust}", wait_until="domcontentloaded", timeout=60000)
+        page.goto(f"{url}/viewer?ex={mid}&nowelcome=1&_v={bust}", wait_until="domcontentloaded", timeout=60000)
         wait_app(page)
         return
     # fresh:true reloads the stock catalog plan and ignores any in-device layout.
