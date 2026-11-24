@@ -164,7 +164,8 @@ const TEX = {
 TEX.grass.repeat.set(90, 90);
 const TEXSCALE = { whiteBoard: 6, ledgestone: 5, wood: 6, tile: 4, subway: 3, concrete: 10, porch: 4, gym: 4, stone: 3, terrace: 6, paver: 6, board: 4, brick: 5, metal: 6, shingle: 4, darkShingle: 5, limewash: 8, palePlaster: 10, lightOak: 5, walnutPlank: 5, slate: 8, lightStone: 3 };
 const MAT = {};
-for (const k of ['wood', 'tile', 'subway', 'concrete', 'porch', 'gym', 'stone', 'terrace', 'paver']) MAT[k] = new THREE.MeshLambertMaterial({ map: TEX[k] });
+for (const k of ['subway', 'concrete', 'porch', 'gym', 'terrace', 'paver']) MAT[k] = new THREE.MeshLambertMaterial({ map: TEX[k] });
+for (const k of ['wood', 'tile', 'stone']) MAT[k] = new THREE.MeshStandardMaterial({ map: TEX[k], roughness: 0.72, metalness: 0.04 });
 MAT.brick = new THREE.MeshStandardMaterial({ map: TEX.brick, roughness: .95 });
 MAT.board = new THREE.MeshStandardMaterial({ map: TEX.board, roughness: .85 });
 MAT.whiteBoard = new THREE.MeshStandardMaterial({ map: TEX.whiteBoard, roughness: .82 });
@@ -267,6 +268,126 @@ function applyStyleDaylight(kit, st, H, WS) {
     root.add(dl);
   }
 }
+
+let timeOfDay = 0.38; // 0 dawn … 0.38 morning … 0.75 golden hour … 1 night
+let qualityLevel = 2;
+let nightLights = [];
+let frameEma = 16, lastFrameAt = 0, lastQualityAt = 0, qualityGraceUntil = 0;
+function armQualityGrace(ms = 6000) { qualityGraceUntil = performance.now() + ms; lastQualityAt = qualityGraceUntil; }
+
+function lerpHex(a, b, t) {
+  const ca = new THREE.Color(a), cb = new THREE.Color(b);
+  return ca.lerp(cb, Math.max(0, Math.min(1, t)));
+}
+function todLabel(u) {
+  if (u >= 0.88) return 'Night';
+  if (u >= 0.72) return 'Sunset';
+  if (u >= 0.5) return 'Afternoon';
+  if (u >= 0.22) return 'Morning';
+  return 'Dawn';
+}
+function syncTodUi() {
+  const sl = $('tod'), lab = $('todVal');
+  if (sl) sl.value = String(Math.round(timeOfDay * 100));
+  if (lab) lab.textContent = todLabel(timeOfDay);
+}
+function setTimeOfDay(u) {
+  timeOfDay = Math.max(0, Math.min(1, +u));
+  if (!Number.isFinite(timeOfDay)) timeOfDay = 0.38;
+  applyTimeOfDay();
+  syncTodUi();
+}
+function setQualityLevel(q) {
+  q = Math.max(0, Math.min(2, q | 0));
+  if (q === qualityLevel) return;
+  qualityLevel = q;
+  lastQualityAt = performance.now();
+  const pr = q === 2 ? Math.min(devicePixelRatio || 1, 2) : q === 1 ? Math.min(devicePixelRatio || 1, 1.25) : 1;
+  renderer.setPixelRatio(pr);
+  const map = q === 2 ? 2048 : q === 1 ? 1024 : 512;
+  sun.shadow.mapSize.set(map, map);
+  sun.castShadow = q > 0;
+  if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+  applyTimeOfDay();
+}
+function applyNightLights(night) {
+  for (const l of nightLights) {
+    if (l.parent) l.parent.remove(l);
+    try { l.dispose(); } catch {}
+  }
+  nightLights = [];
+  if (night < 0.05 || !itemsGroup) return;
+  const budget = qualityLevel === 0 ? 6 : qualityLevel === 1 ? 12 : 22;
+  let n = 0;
+  itemsGroup.traverse((o) => {
+    if (n >= budget) return;
+    const it = o.userData && o.userData.item;
+    if (!it || o.parent !== itemsGroup) return;
+    if (!/^(pendant|tableLamp|deskLamp)$/.test(it.type)) return;
+    const pend = it.type === 'pendant';
+    const l = new THREE.PointLight('#ffd9a0', (pend ? 2.1 : 0.9) * Math.min(1, night * 1.5), pend ? 24 : 12, 2);
+    l.castShadow = false;
+    l.position.set(0, pend ? 0.1 : 2.05, 0);
+    o.add(l);
+    nightLights.push(l);
+    n++;
+  });
+}
+function applyTimeOfDay() {
+  if (!sun) return;
+  const u = timeOfDay;
+  const st = STYLES[currentStyle] || STYLES.default;
+  const setAmt = 0.86;
+  const night = Math.max(0, (u - setAmt) / (1 - setAmt));
+  const elev = Math.max(0, Math.sin((Math.min(u, setAmt) / setAmt) * Math.PI));
+  const az = (Math.min(u, setAmt) / setAmt) * Math.PI;
+  const R = Math.max(BW || 48, BH || 48) * 0.8 + 10;
+  const dist = R * 1.5;
+  sun.position.set(Math.cos(az) * dist, 6 + elev * 110, Math.sin(az * 0.4 + 0.55) * dist * 0.75);
+  if (sun.target) sun.target.position.set(0, 0, 0);
+  let sunCol = new THREE.Color(st.sunColor || '#fff3df');
+  let bg = new THREE.Color(st.bg || '#cfe3f2');
+  let sunI = st.sun ?? 1.6, hemiI = st.hemi ?? 0.95, ambI = st.ambient ?? 0;
+  if (u < 0.2) {
+    const g = 1 - u / 0.2;
+    sunCol = lerpHex(st.sunColor || '#fff3df', '#ffc4a0', g);
+    bg = lerpHex(st.bg || '#cfe3f2', '#f0c8b4', g * 0.7);
+    sunI *= 0.75 + 0.25 * (1 - g);
+  } else if (u >= 0.7 && night < 1) {
+    const g = Math.min(1, (u - 0.7) / (setAmt - 0.7));
+    sunCol = lerpHex(st.sunColor || '#fff3df', '#ff8a30', g);
+    bg = lerpHex(st.bg || '#cfe3f2', '#e8894a', g * 0.85);
+    sunI = (st.sun ?? 1.6) * (1.15 - 0.55 * g);
+    hemiI = (st.hemi ?? 0.95) * (1 - 0.45 * g);
+    ambI = (st.ambient ?? 0) * (1 - 0.6 * g);
+  }
+  if (night > 0) {
+    sunCol = lerpHex(sunCol, '#1a2a4a', Math.min(1, night * 1.2));
+    bg = lerpHex(bg, '#0b1220', Math.min(1, night * 1.1));
+    sunI *= Math.max(0.03, 1 - night);
+    hemiI = (st.hemi ?? 0.95) * Math.max(0.12, 1 - night * 0.9);
+    ambI = Math.max(0.05, (st.ambient ?? 0) * (1 - night)) + night * 0.14;
+  }
+  sun.color.copy(sunCol);
+  sun.intensity = sunI;
+  hemi.intensity = hemiI;
+  if (st.hemiColor) hemi.color.set(st.hemiColor);
+  amb.intensity = ambI;
+  if (!panoSphere) {
+    styleBg = '#' + bg.getHexString();
+    scene.background = bg;
+    if (scene.fog) { scene.fog.color.copy(bg); }
+    styleFog = { color: styleBg, near: st.fogNear || 260, far: st.fogFar || 560 };
+  }
+  const gloss = qualityLevel >= 2 ? 0.08 : 0;
+  const rough = qualityLevel >= 2 ? 0.62 : 0.82;
+  for (const k of ['wood', 'tile', 'stone', 'lightOak', 'walnutPlank', 'slate']) {
+    if (MAT[k] && MAT[k].roughness != null) { MAT[k].roughness = rough; MAT[k].metalness = gloss; }
+  }
+  if (MAT.glass) MAT.glass.metalness = qualityLevel >= 1 ? 0.18 : 0.1;
+  applyNightLights(night);
+}
+
 
 
 
@@ -2733,6 +2854,8 @@ function buildModel(model, opts = {}) {
   activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])), planInfo: (activeLayout && activeLayout.planInfo) ? { ...activeLayout.planInfo } : undefined };
   buildFloors();
   refreshItems();
+  applyTimeOfDay();
+  armQualityGrace();
   applyArchFinishes();
   stripOpeningTrim();
   ensureEditor();
@@ -4019,9 +4142,20 @@ function loop() {
       m.material.opacity = u.base * (0.8 + 0.14 * Math.sin(t * 3.1 + u.t0) + 0.06 * Math.sin(t * 13.7 + u.t0 * 2));
     }
   }
+  const now = performance.now();
+  if (lastFrameAt) {
+    const dt = now - lastFrameAt;
+    frameEma = frameEma * 0.9 + dt * 0.1;
+    if (now > qualityGraceUntil) {
+      if (frameEma > 33 && qualityLevel > 0 && now - lastQualityAt > 2500) setQualityLevel(qualityLevel - 1);
+      else if (frameEma < 17 && qualityLevel < 2 && now - lastQualityAt > 5000) setQualityLevel(qualityLevel + 1);
+    }
+  }
+  lastFrameAt = now;
   renderer.render(scene, camera); labelRenderer.render(scene, camera);
   requestAnimationFrame(loop);
 }
+
 function syncStyleUi() {
   const sel = $('bStyle'), wrap = $('styleWrap');
   if (!sel) return;
@@ -4043,6 +4177,10 @@ function setStyle(id) {
   setRoof(keepRoof); setLabels(keepLabels); setCut(keepCut); setPlan(keepPlan);
 }
 if ($('bStyle')) $('bStyle').addEventListener('change', e => setStyle(e.target.value));
+if ($('tod')) {
+  $('tod').addEventListener('input', (e) => setTimeOfDay((+e.target.value) / 100));
+  syncTodUi();
+}
 
 function frameModel(modeHint = 'orbit') {
   const rooms = M?.rooms || [];
@@ -4181,6 +4319,9 @@ window.app = {
   planReadout,
   setDollhouse,
   setWalkStick,
+  setTimeOfDay,
+  getTimeOfDay: () => timeOfDay,
+  getQualityLevel: () => qualityLevel,
   dbg: () => ({ roof, root, ceilings, wallsFull, M, itemsGroup }),
 };
 

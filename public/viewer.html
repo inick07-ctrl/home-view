@@ -119,6 +119,10 @@
     body.walk-mode #joystick { display:none; }
     body.walk-mode #pad { display:grid; }
   }
+
+  .todpick{display:flex;align-items:center;gap:8px;font-size:13px;margin:8px 0 0;flex-wrap:wrap}
+  .todpick input[type=range]{width:140px;accent-color:#e0a95a}
+  #todVal{font-size:12px;opacity:.8;min-width:4.5em}
 </style>
 <link rel="stylesheet" href="/css/plan-editor.css">
 <script type="importmap">
@@ -169,6 +173,10 @@
         <option value="warm-luxury">Warm Luxury</option>
         <option value="english-country">English Country</option>
       </select>
+    </label>
+    <label id="todWrap" class="todpick">Time of day
+      <input type="range" id="tod" min="0" max="100" step="1" value="38" aria-label="Time of day">
+      <span id="todVal">Morning</span>
     </label>
   </div>
   <div id="siteHud" hidden>
