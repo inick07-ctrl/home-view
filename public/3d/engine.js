@@ -5,7 +5,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import REGISTRY from './models/registry.js';
 import { parcelDefaults, lotStats, formatLotArea, worldRings, buildableRings, xfHouse, houseFromWorld } from '../js/parcel.js';
-import { sanitizeWalls, clipCounters, autoFurnish, installFurniture, buildItemMesh, makeItem, itemRect, clearanceHit, isCoveredPorch, isPorchLike, CATALOG as ITEM_CATALOG } from './furniture.js';
+import { sanitizeWalls, clipCounters, autoFurnish, dressRooms, installFurniture, buildItemMesh, makeItem, itemRect, clearanceHit, isCoveredPorch, isPorchLike, CATALOG as ITEM_CATALOG } from './furniture.js';
 import { mountPlanEditor, cloneWalls, cloneRooms, cloneItems, cloneRoofs, loadLocalLayout, sanitizeLayout } from './plan-editor.js';
 import { createWalkAudio } from './walk-audio.js';
 import { mountPlanExport, setPlan2d, openExportDialog, exportPlansPdf, buildPlanSvgSet } from './plan-export.js';
@@ -116,6 +116,16 @@ const TEX = {
       g.fillStyle = 'rgba(255,250,240,.18)'; g.fillRect(i * s / n + 3, 0, 2, s);
     }
   }, 512),
+  walnutPlank: canvasTex((g, s) => {
+    const n = 7;
+    for (let i = 0; i < n; i++) {
+      const v = 92 + rnd(i + 11) * 22;
+      g.fillStyle = `rgb(${v + 28},${v - 8},${v - 28})`;
+      g.fillRect(i * s / n, 0, s / n, s);
+      g.fillStyle = 'rgba(40,20,10,.4)'; g.fillRect(i * s / n, 0, 2, s);
+      g.fillStyle = 'rgba(180,140,90,.12)'; g.fillRect(i * s / n + 3, 0, 1.5, s);
+    }
+  }, 512),
   slate: canvasTex((g, s) => {
     g.fillStyle = '#e4dccf'; g.fillRect(0, 0, s, s);
     const stones = [
@@ -152,7 +162,7 @@ const TEX = {
   }, 256),
 };
 TEX.grass.repeat.set(90, 90);
-const TEXSCALE = { whiteBoard: 6, ledgestone: 5, wood: 6, tile: 4, subway: 3, concrete: 10, porch: 4, gym: 4, stone: 3, terrace: 6, paver: 6, board: 4, brick: 5, metal: 6, shingle: 4, darkShingle: 5, limewash: 8, palePlaster: 10, lightOak: 5, slate: 8, lightStone: 3 };
+const TEXSCALE = { whiteBoard: 6, ledgestone: 5, wood: 6, tile: 4, subway: 3, concrete: 10, porch: 4, gym: 4, stone: 3, terrace: 6, paver: 6, board: 4, brick: 5, metal: 6, shingle: 4, darkShingle: 5, limewash: 8, palePlaster: 10, lightOak: 5, walnutPlank: 5, slate: 8, lightStone: 3 };
 const MAT = {};
 for (const k of ['wood', 'tile', 'subway', 'concrete', 'porch', 'gym', 'stone', 'terrace', 'paver']) MAT[k] = new THREE.MeshLambertMaterial({ map: TEX[k] });
 MAT.brick = new THREE.MeshStandardMaterial({ map: TEX.brick, roughness: .95 });
@@ -166,12 +176,49 @@ MAT.ceiling = new THREE.MeshLambertMaterial({ color: '#faf8f3', side: THREE.Doub
 MAT.limewash = new THREE.MeshStandardMaterial({ map: TEX.limewash, roughness: .95, color: '#ffffff' });
 MAT.palePlaster = new THREE.MeshStandardMaterial({ map: TEX.palePlaster, roughness: .96, color: '#ffffff', side: THREE.DoubleSide });
 MAT.lightOak = new THREE.MeshStandardMaterial({ map: TEX.lightOak, roughness: .8, color: '#ffffff' });
+MAT.walnutPlank = new THREE.MeshStandardMaterial({ map: TEX.walnutPlank, roughness: .78, color: '#ffffff' });
 MAT.slate = new THREE.MeshStandardMaterial({ map: TEX.slate, roughness: .5, metalness: .04, color: '#ffffff' });
 MAT.lightStone = new THREE.MeshStandardMaterial({ map: TEX.lightStone, roughness: .88, color: '#ffffff' });
 MAT.softFrame = new THREE.MeshStandardMaterial({ color: '#8c927c', roughness: .75 });
+MAT.galleryWhite = new THREE.MeshStandardMaterial({ color: '#f4f2ed', roughness: .96 });
+MAT.softWhite = new THREE.MeshStandardMaterial({ color: '#f7f4ee', roughness: .97 });
+MAT.warmCream = new THREE.MeshStandardMaterial({ color: '#f3ead9', roughness: .96 });
 
 const STYLES = {
   default: { id: 'default', name: 'Default' },
+  modern: {
+    id: 'modern', name: 'Modern',
+    floors: { wood: 'lightOak', tile: 'tile', gym: 'tile', stone: 'lightStone' },
+    intWalls: 'galleryWhite', ceiling: 'palePlaster',
+    ambient: 0.22, ambColor: '#f4f6f8',
+    hemi: 1.15, hemiColor: '#f5f7fa', groundColor: '#c5c8cc',
+    sun: 1.85, sunColor: '#fff7ea', bg: '#d9e3ec',
+    fogNear: 280, fogFar: 620,
+    daylight: true, frame: '#3a3a3c',
+    glass: { color: '#c5dcec', opacity: 0.32, emissive: '#e8f2fa', emissiveIntensity: 0.18 },
+  },
+  scandinavian: {
+    id: 'scandinavian', name: 'Scandinavian',
+    floors: { wood: 'lightOak', tile: 'slate', gym: 'slate', stone: 'lightStone' },
+    intWalls: 'softWhite', ceiling: 'palePlaster',
+    ambient: 0.42, ambColor: '#fffaf4',
+    hemi: 1.35, hemiColor: '#fff8f0', groundColor: '#d5ccba',
+    sun: 2.0, sunColor: '#fff6e8', bg: '#e7eef3',
+    fogNear: 280, fogFar: 620,
+    daylight: true, frame: '#d7d2c8',
+    glass: { color: '#cfe6f6', opacity: 0.3, emissive: '#fff3d2', emissiveIntensity: 0.28 },
+  },
+  'warm-luxury': {
+    id: 'warm-luxury', name: 'Warm Luxury',
+    floors: { wood: 'walnutPlank', tile: 'stone', gym: 'stone', stone: 'stone' },
+    intWalls: 'warmCream', ceiling: 'palePlaster',
+    ambient: 0.2, ambColor: '#fff0e0',
+    hemi: 1.08, hemiColor: '#fff4e6', groundColor: '#c4b49a',
+    sun: 1.95, sunColor: '#ffd9a0', bg: '#d8d0c4',
+    fogNear: 260, fogFar: 600,
+    daylight: true, amber: '#ffcc88', frame: '#5c4a38',
+    glass: { color: '#c8d8e4', opacity: 0.34, emissive: '#ffe4b8', emissiveIntensity: 0.22 },
+  },
   'english-country': {
     id: 'english-country', name: 'English Country',
     floors: { wood: 'slate', tile: 'slate', gym: 'slate', stone: 'slate' },
@@ -182,10 +229,45 @@ const STYLES = {
     fogNear: 280, fogFar: 620,
     amber: '#ffd9a0',
     frame: '#8c927c',
+    glass: { color: '#cfe6f6', opacity: 0.3, emissive: '#fff3d2', emissiveIntensity: 0.4 },
   },
 };
 let currentStyle = 'default';
 let loadedModel = null;
+let dressItems = [];
+
+function applyStyleGlass(st) {
+  const g = st && st.glass;
+  if (g) {
+    MAT.glass.color.set(g.color || GLASS_DEFAULT.color);
+    MAT.glass.opacity = g.opacity ?? GLASS_DEFAULT.opacity;
+    MAT.glass.emissive.set(g.emissive || '#000000');
+    MAT.glass.emissiveIntensity = g.emissiveIntensity || 0;
+  } else {
+    MAT.glass.color.set(GLASS_DEFAULT.color);
+    MAT.glass.opacity = GLASS_DEFAULT.opacity;
+    MAT.glass.emissive.set('#000000');
+    MAT.glass.emissiveIntensity = 0;
+  }
+}
+
+function applyStyleDaylight(kit, st, H, WS) {
+  const inside = (x, y) => M.rooms.some(r => !(r[7]?.outside) && x > r[3] && x < r[5] && y > r[4] && y < r[6]);
+  const frame = st.frame || '#3a3a3c';
+  for (const w of (WS?.win || [])) {
+    const x0 = w[0], y0 = w[1], x1 = w[2], y1 = w[3], sill = w[4] ?? 3, head = w[5] ?? 7;
+    const vert = (x1 - x0) < (y1 - y0);
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, ch = (sill + head) / 2;
+    let lx = cx, ly = cy;
+    if (vert) lx = inside(cx - 0.8, cy) ? cx - 0.45 : cx + 0.45;
+    else ly = inside(cx, cy - 0.8) ? cy - 0.45 : cy + 0.45;
+    const dl = new THREE.PointLight('#fff6e8', 1.15, 16, 2);
+    dl.position.set(Wx(lx), ch, Wz(ly));
+    dl.castShadow = false;
+    root.add(dl);
+  }
+}
+
 
 
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), new THREE.MeshLambertMaterial({ map: TEX.grass }));
@@ -224,7 +306,7 @@ function clearSiteEnv({ restore = true } = {}) {
   ground.visible = true;
   ground.position.y = -0.6;
   if (restore) {
-    MAT.glass.opacity = (currentStyle === 'english-country') ? 0.3 : GLASS_DEFAULT.opacity;
+    applyStyleGlass(STYLES[currentStyle] || STYLES.default);
     scene.background = new THREE.Color(styleBg);
     if (!scene.fog) scene.fog = new THREE.Fog(styleBg, styleFog.near, styleFog.far);
     else { scene.fog.color.set(styleBg); scene.fog.near = styleFog.near; scene.fog.far = styleFog.far; }
@@ -265,7 +347,7 @@ function applySiteEnv() {
     MAT.glass.opacity = Math.min(MAT.glass.opacity, 0.22);
   } else if (panoSphere) {
     disposeSiteMesh(panoSphere); panoSphere = null;
-    MAT.glass.opacity = (currentStyle === 'english-country') ? 0.3 : GLASS_DEFAULT.opacity;
+    applyStyleGlass(STYLES[currentStyle] || STYLES.default);
     scene.background = new THREE.Color(styleBg);
     if (!scene.fog) scene.fog = new THREE.Fog(styleBg, styleFog.near, styleFog.far);
     else { scene.fog.color.set(styleBg); scene.fog.near = styleFog.near; scene.fog.far = styleFog.far; }
@@ -817,7 +899,7 @@ function refreshItems() {
   const mt = M?.materials || {};
   const roofCol = mt.roof || ({ metal: '#2b2c2e', darkShingle: '#2e2f31', shingle: '#5d5952' }[mt.roofTex] || '#3a3b3d');
   const ctx = { Wx, Wz, ceiling: (M?.wallH || 9), house: { ext: mt.ext || '#e9e5dc', trim: mt.trim || (new THREE.Color(mt.ext || '#ffffff').getHSL({}).l < 0.35 ? '#1d1e20' : '#f4f2ec'), roof: roofCol, metal: mt.roofTex === 'metal' } };
-  for (const rec of currentItems) {
+  for (const rec of [...currentItems, ...(dressItems || [])]) {
     const painted = recWithFinishes(rec);
     const mesh = buildItemMesh(painted, ctx);
     if (!mesh) continue;
@@ -2163,13 +2245,7 @@ function buildModel(model, opts = {}) {
   hemi.intensity = st.hemi ?? 0.95; hemi.color.set(st.hemiColor || '#ffffff'); hemi.groundColor.set(st.groundColor || '#c9c1b2');
   amb.intensity = st.ambient ?? 0; amb.color.set(st.ambColor || '#ffffff');
   sun.intensity = st.sun ?? 1.6; sun.color.set(st.sunColor || '#fff3df');
-  if (currentStyle === 'english-country') {
-    MAT.glass.color.set('#cfe6f6'); MAT.glass.opacity = 0.3;
-    MAT.glass.emissive.set('#fff3d2'); MAT.glass.emissiveIntensity = 0.4;
-  } else {
-    MAT.glass.color.set('#9fd0ee'); MAT.glass.opacity = 0.45;
-    MAT.glass.emissive.set('#000000'); MAT.glass.emissiveIntensity = 0;
-  }
+  applyStyleGlass(st);
   const bg = st.bg || '#cfe3f2'; scene.background.set(bg);
   styleBg = bg; styleFog = { color: bg, near: st.fogNear || 260, far: st.fogFar || 560 };
   if (scene.fog) { scene.fog.color.set(bg); scene.fog.near = styleFog.near; scene.fog.far = styleFog.far; }
@@ -2615,6 +2691,7 @@ function buildModel(model, opts = {}) {
   }
   addPorchPosts(kit, M);
   if (currentStyle === 'english-country') applyEnglishCountry(kit, st, H, WS);
+  else if (st.daylight) applyStyleDaylight(kit, st, H, WS);
   // Convert leftover wall-counter slabs into detailed items, then auto-furnish (or restore saved items).
   const fromCounters = [];
   for (const c of (WS.counter || [])) {
@@ -2652,6 +2729,7 @@ function buildModel(model, opts = {}) {
       }
     }
   } else currentItems = cloneItems(defaultItems);
+  dressItems = dressRooms(M, WS, currentItems, currentStyle) || [];
   activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])), planInfo: (activeLayout && activeLayout.planInfo) ? { ...activeLayout.planInfo } : undefined };
   buildFloors();
   refreshItems();

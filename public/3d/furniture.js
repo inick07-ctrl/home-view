@@ -435,6 +435,19 @@ function juteTex() { // chunky natural jute / sisal basket weave
   JUTE = new THREE.CanvasTexture(c); JUTE.wrapS = JUTE.wrapT = THREE.RepeatWrapping; JUTE.colorSpace = THREE.SRGBColorSpace;
   return JUTE;
 }
+
+function buildArt(g, rec) {
+  const W = rec.w || 3.2, H = rec.h || 2.4, D = rec.d || 0.1;
+  const y0 = rec.hang != null ? rec.hang : 4.4;
+  const frame = mat(rec.frame || '#2a2824', { r: 0.55, m: 0.08 });
+  const field = mat(rec.color || '#c4b49a', { r: 0.85 });
+  const accent = mat(rec.accent || '#6d7a63', { r: 0.8 });
+  add(g, box(W, H, D * 0.5), frame, 0, y0 + H / 2, -D * 0.15);
+  add(g, box(W - 0.16, H - 0.16, 0.03), field, 0, y0 + H / 2, D * 0.15);
+  add(g, box(W * 0.42, H * 0.28, 0.02), accent, -W * 0.12, y0 + H / 2 + H * 0.08, D * 0.2);
+  add(g, box(W * 0.22, H * 0.45, 0.02), mat(rec.accent2 || '#8a6a4a', { r: 0.8 }), W * 0.18, y0 + H / 2 - H * 0.06, D * 0.2);
+}
+
 function buildRug(g, rec) {
   const W = rec.w || 8, D = rec.d || 6;
   if (rec.variant === 'jute') {
@@ -565,6 +578,26 @@ function buildBench(g, rec) {
   add(g, box(L.hx * 2, 0.06, 0.06), wood, 0, 0.5, 0); // centre rail ends in the side stretchers
 }
 
+
+function buildTablescape(g, rec) {
+  const W = rec.w || 6.5, D = rec.d || 3.2, H = rec.h || 2.5;
+  const along = Math.min(W, rec.variant === 'round' ? Math.min(W, D) : W);
+  add(g, box(Math.min(along * 0.62, 4.6), 0.015, Math.min(D * 0.32, 1.05)), mat('#efe8dc', { r: 0.92 }), 0, H + 0.012, 0);
+  add(g, cyl(0.2, 0.16, 0.1, 16), mat('#efece5', { r: 0.5 }), 0, H + 0.07, 0);
+  add(g, sph(0.14, 10), mat('#3d6a3a', { r: 0.72 }), 0, H + 0.18, 0);
+  const seats = Math.max(2, Math.min(6, Math.round(along / 1.7)));
+  const span = Math.min(along - 1.3, (seats - 1) * 1.7);
+  for (let i = 0; i < seats; i++) {
+    const t = seats === 1 ? 0 : (i - (seats - 1) / 2) * (span / Math.max(1, seats - 1));
+    for (const s of [-1, 1]) {
+      const z = s * Math.min(D * 0.28, 0.95);
+      add(g, cyl(0.13, 0.13, 0.02, 16), mat('#f4f1ea', { r: 0.6 }), t, H + 0.03, z);
+      add(g, cyl(0.09, 0.09, 0.012, 16), mat('#e8e2d6', { r: 0.55 }), t, H + 0.042, z);
+      add(g, cyl(0.035, 0.03, 0.09, 10), mat('#d7e8ee', { r: 0.2, m: 0.12 }), t + 0.15, H + 0.08, z);
+    }
+  }
+}
+
 function buildDiningTable(g, rec) {
   const wood = woodOf(rec);
   const W = rec.w || 6.5, D = rec.d || 3.2, H = rec.h || 2.5;
@@ -578,6 +611,7 @@ function buildDiningTable(g, rec) {
     for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; add(g, cyl(0.07, 0.09, H - 0.24, 6), dark, Math.cos(a) * R * 0.22, 0.12 + (H - 0.24) / 2, Math.sin(a) * R * 0.22); }
     add(g, cyl(R * 0.2, R * 0.2, H - 0.24, 20), dark, 0, 0.12 + (H - 0.24) / 2, 0);
     add(g, cyl(R, R, 0.1, 48), mat(WOOD[rec.wood] || WOOD.espresso, { r: 0.42 }), 0, H - 0.07, 0);
+    if (rec.setTable !== false) buildTablescape(g, rec);
     return;
   }
   if (variant === 'turned') turnedLegs(g, W, D, H - 0.12, wood, 0.16);
@@ -591,6 +625,7 @@ function buildDiningTable(g, rec) {
   // chamfered top (two layers)
   add(g, rbox(W, 0.07, D, 0.02), wood, 0, H - 0.085, 0);
   add(g, rbox(W - 0.08, 0.05, D - 0.08, 0.015), mat(WOOD[rec.wood] || WOOD.oak, { r: 0.45 }), 0, H - 0.02, 0);
+  if (rec.setTable !== false) buildTablescape(g, rec);
 }
 
 function buildDiningChair(g, rec) {
@@ -1055,6 +1090,7 @@ export const CATALOG = {
   rug: { name: 'Area rug', category: 'decor', w: 8, d: 6, h: 0.06, variants: ['plain', 'jute'], build: buildRug },
   mediaConsole: { name: 'Media console', category: 'living', w: 6, d: 1.6, h: 2.2, build: buildMediaConsole },
   plant: { name: 'Potted tree', category: 'decor', w: 2.2, d: 2.2, h: 6.2, variants: ['fiddle', 'olive'], build: buildPlant },
+  art: { name: 'Wall art', category: 'decor', w: 3.2, d: 0.12, h: 2.4, build: buildArt },
   bed: { name: 'Bed', category: 'bedroom', w: 5.3, d: 6.8, h: 3.8, variants: ['upholstered', 'panel'], finishes: Object.keys(FINISHES), build: buildBed },
   nightstand: { name: 'Nightstand', category: 'bedroom', w: 1.85, d: 1.4, h: 2.25, build: buildNightstand },
   dresser: { name: 'Dresser', category: 'bedroom', w: 5.2, d: 1.7, h: 3.2, build: buildDresser },
@@ -1347,6 +1383,13 @@ export function makeItem(type, opts = {}) {
     shade: opts.shade,
     ceil: opts.ceil != null ? +opts.ceil : undefined,
     fuel: t.fuels ? (t.fuels.includes(opts.fuel) ? opts.fuel : t.defaultFuel) : undefined,
+    pot: opts.pot,
+    hang: opts.hang,
+    accent: opts.accent,
+    accent2: opts.accent2,
+    frame: opts.frame,
+    dress: opts.dress,
+    setTable: opts.setTable,
   };
 }
 
@@ -1792,4 +1835,97 @@ function buildSportsCar(g, rec) {
   add(g, box(0.08, 0.28, 0.4), mat('#f8fbff', { r: 0.2, m: 0.2 }), -W / 2 + 0.02, 1.15, D * 0.22);
   const wx = W * 0.3, wz = D * 0.4;
   for (const x of [-wx, wx]) for (const z of [-wz, wz]) addWheel(g, x, z, 0.62, 0.32);
+}
+
+
+const DRESS_PALETTES = {
+  default: { rug: '#b7a68c', field: '#d8cfc0', art: '#c4b49a', accent: '#6d7a63', accent2: '#8a6a4a', frame: '#2a2824', pot: '#c9b49a', plant: 'fiddle', wood: 'walnut' },
+  modern: { rug: '#d9d6d0', field: '#f0eeea', art: '#e8e6e1', accent: '#2c2c2c', accent2: '#8a8a8a', frame: '#1a1a1a', pot: '#4a4a4a', plant: 'olive', wood: 'oak' },
+  scandinavian: { rug: '#e8e2d6', field: '#f7f3ec', art: '#efe8dc', accent: '#8aa0a8', accent2: '#c9d4c8', frame: '#d7d2c8', pot: '#efece5', plant: 'olive', wood: 'oak' },
+  'warm-luxury': { rug: '#6e3b2e', field: '#c4a574', art: '#e8dcc8', accent: '#3d2b20', accent2: '#c9a45c', frame: '#3d2b20', pot: '#3d2b20', plant: 'fiddle', wood: 'walnut' },
+  'english-country': { rug: '#c4b8a4', field: '#e4ddd0', art: '#e4ddd0', accent: '#8c927c', accent2: '#d4b07a', frame: '#8c927c', pot: '#c9b49a', plant: 'olive', wood: 'oak' },
+};
+
+function dressOverlaps(a, b, pad = 0.12) {
+  const ra = itemRect(a), rb = itemRect(b);
+  return ra[0] < rb[2] - pad && ra[2] > rb[0] + pad && ra[1] < rb[3] - pad && ra[3] > rb[1] + pad;
+}
+
+/** Add missing designer decor to every room, including ones the model furnished itself. Does not replace existing items. */
+export function dressRooms(M, WS, existing, styleId) {
+  const pal = DRESS_PALETTES[styleId] || DRESS_PALETTES.default;
+  const rooms = M.rooms || [];
+  const items = (existing || []).slice();
+  const extra = [];
+  const add = (type, opts, room) => {
+    const ro = room?.[7] || {};
+    const loftZ = (ro.loft || ro.noFloor) ? (ro.deckZ ?? ro.loftZ ?? 10.55) : 0;
+    const rec = makeItem(type, { z: loftZ, dress: true, ...opts });
+    if (room) {
+      const r = itemRect(rec);
+      const pad = type === 'rug' ? 0.05 : 0.08;
+      if (r[0] < room[3] + pad || r[1] < room[4] + pad || r[2] > room[5] - pad || r[3] > room[6] - pad) return null;
+    }
+    if (!(rec.z > 7.5) && clearanceHit(itemRect(rec), rooms, WS, type === 'rug' ? 0.02 : 0.05)) return null;
+    const collide = items.some((it) => {
+      if (type === 'rug' && it.type !== 'rug') return false;
+      if (type === 'art' && (it.type === 'rug' || it.type === 'tableLamp' || it.type === 'deskLamp')) return false;
+      if ((type === 'tableLamp' || type === 'deskLamp') && it.type === 'rug') return false;
+      if (type === 'counterItems') return it.type === 'counterItems';
+      return dressOverlaps(rec, it, type === 'plant' ? 0.2 : 0.12);
+    });
+    if (collide) return null;
+    items.push(rec); extra.push(rec); return rec;
+  };
+
+  for (const room of rooms) {
+    const [name, , , x0, y0, x1, y1, o = {}] = room;
+    const n = name || '';
+    if (o.outside && !/porch|patio|terrace|screen/i.test(n)) continue;
+    if (/garage|\bbay\b|shop|mech|safe|attic|unfinished|storage|closet|wic|w\.i\.c|pantry/i.test(n) && !/mud|laundry|utility/i.test(n)) continue;
+    const rw = x1 - x0, rd = y1 - y0;
+    if (rw < 5 || rd < 5) continue;
+    const here = items.filter((it) => it.x > x0 && it.x < x1 && it.y > y0 && it.y < y1 && !(it.z > 7.5 && !((o.loft || o.noFloor))));
+    const has = (t) => here.some((it) => it.type === t);
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const living = /living|family|great|hearth|lounge|\bden\b|dining|entry|foyer/i.test(n);
+    const sleeping = /bed|primary|master|suite|guest|loft/i.test(n);
+    const kitchen = /kitchen|kitchenette/i.test(n);
+
+    if ((living || sleeping) && !has('rug') && Math.min(rw, rd) >= 6) {
+      add('rug', { x: cx, y: cy, w: Math.min(rw - 2, living ? 10 : 8), d: Math.min(rd - 2, living ? 8 : 6), color: pal.rug, field: pal.field, variant: styleId === 'scandinavian' ? 'jute' : 'plain' }, room);
+    }
+    if (!has('plant') && Math.min(rw, rd) >= 7 && !/bath|powder|laundry|toilet/i.test(n)) {
+      const doors = doorsOnRoom(room, WS);
+      const wall = longestWallWithoutDoor(room, doors);
+      const cornerWall = wall === 'n' || wall === 's' ? 'e' : 's';
+      const spot = againstWall(room, cornerWall, 2.0, 2.0, 0.55);
+      add('plant', { ...spot, variant: pal.plant, pot: pal.pot }, room);
+    }
+    if (!has('art') && !/bath|powder|laundry|toilet|kitchen/i.test(n) && Math.min(rw, rd) >= 6) {
+      const doors = doorsOnRoom(room, WS);
+      const wall = longestWallWithoutDoor(room, doors);
+      const spot = againstWall(room, wall, 3.2, 0.12, 0.08);
+      if (!here.some((it) => it.type === 'tv' && Math.hypot(it.x - spot.x, it.y - spot.y) < 4)) {
+        add('art', { ...spot, w: Math.min(3.6, (wall === 'n' || wall === 's' ? rw : rd) * 0.35), color: pal.art, accent: pal.accent, accent2: pal.accent2, frame: pal.frame }, room);
+      }
+    }
+    if (sleeping) {
+      for (const ns of here.filter((it) => it.type === 'nightstand')) {
+        if (here.some((it) => (it.type === 'tableLamp' || it.type === 'deskLamp') && Math.hypot(it.x - ns.x, it.y - ns.y) < 1.6)) continue;
+        add('tableLamp', { x: ns.x, y: ns.y, rot: ns.rot }, room);
+      }
+    }
+    if (living) {
+      for (const st of here.filter((it) => it.type === 'sideTable')) {
+        if (here.some((it) => it.type === 'tableLamp' && Math.hypot(it.x - st.x, it.y - st.y) < 1.6)) continue;
+        add('tableLamp', { x: st.x, y: st.y, rot: st.rot }, room);
+      }
+    }
+    if (kitchen && !has('counterItems')) {
+      const host = here.find((it) => it.type === 'island') || here.find((it) => it.type === 'counter');
+      if (host) add('counterItems', { x: host.x, y: host.y, rot: host.rot, onCounter: true }, room);
+    }
+  }
+  return extra;
 }
