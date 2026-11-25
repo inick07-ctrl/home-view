@@ -152,9 +152,15 @@ function makeHelpers(k) {
   // batched boxes (one mesh per colour) — keeps draw calls down for frames, rafters, trim
   const batches = {};
   const box = (col, a, b, c, d, z0, z1, roof = false) => {
-    const g = new T.BoxGeometry(Math.abs(c - a), z1 - z0, Math.abs(d - b));
-    g.translate(k.W((a + c) / 2), (z0 + z1) / 2, k.Z((b + d) / 2));
-    (batches[col + (roof ? '|r' : '')] ||= []).push(g.toNonIndexed());
+    const parts = (typeof k.clipLowBarrier === 'function')
+      ? k.clipLowBarrier(a, b, c, d, z0, z1)
+      : [[a, b, c, d, z0, z1]];
+    for (const p of parts) {
+      if (p[2] - p[0] < 0.04 || p[3] - p[1] < 0.04 || p[5] - p[4] < 0.02) continue;
+      const g = new T.BoxGeometry(Math.abs(p[2] - p[0]), p[5] - p[4], Math.abs(p[3] - p[1]));
+      g.translate(k.W((p[0] + p[2]) / 2), (p[4] + p[5]) / 2, k.Z((p[1] + p[3]) / 2));
+      (batches[col + (roof ? '|r' : '')] ||= []).push(g.toNonIndexed());
+    }
   };
   // sloped member in a vertical plane of constant plan-y: from (x0,z0) to (x1,z1), depth = vertical size, width along y
   const slope = (col, y, x0, z0, x1, z1, depth, width, roof = true) => {
@@ -719,8 +725,7 @@ export function closeToHome(opts = {}) {
     // Mud + laundry + powder rooms
     P('mudBench', { x: XG1 + 0.95, y: 42.7, rot: 270, w: 3.4 });
     P('mudBench', { x: 33.8, y: YL - 0.95, rot: 180, w: 4.4 });
-    P('washerDryer', { x: 27.6, y: YLS - 1.35, rot: 180 });
-    P('washerDryer', { x: 30.0, y: YLS - 1.35, rot: 180 });
+    P('washerDryer', { x: 28.8, y: YLS - 1.35, rot: 180, w: 4.5, d: 2.3 });
     P('counter', { x: 33.9, y: YLS - 1.2, w: 4.2, d: 2, rot: 180 });
     P('toilet', { x: 29.7, y: YPS + 1.4, rot: 0 });
     P('vanity', { x: XG1 + 1.05, y: 37.2, rot: 270, w: 2.6 });

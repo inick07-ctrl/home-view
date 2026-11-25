@@ -5,8 +5,13 @@ furniture placement validator reports any violation.
 Checks: floor-standing items in halls/foyers/galleries/geometric
 circulation or within ~3 ft of a hallway mouth; item overlaps (except
 intentional groupings); items in a fireplace firebox/hearth, door
-clearance, or stair zone; tall pieces not backed against a wall;
-blocked 36-inch walk paths; duplicate coffee tables in one group.
+clearance (inside and outside, including porch approaches), or stair
+zone; tall pieces not backed against a wall; blocked 36-inch walk
+paths; duplicate coffee tables in one group; laundry rooms have
+exactly one washer and one dryer; no duplicate appliances; bath
+fixtures backed to walls with the door zone clear; every bed
+headboard flush against a wall; at most one sofa per porch or
+outdoor space.
 
 Usage:
   python3 scripts/check-furniture-placement.py [--url http://127.0.0.1:3000] [--shots /workspace/shots]

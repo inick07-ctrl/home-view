@@ -981,12 +981,24 @@ function buildMudBench(g, rec) {
 }
 
 function buildWasherDryer(g, rec) {
-  const body = mat('#e8eaed', { r: 0.45, m: 0.2 });
-  const W = rec.w || 2.25, D = rec.d || 2.3, H = rec.h || 3.3;
-  add(g, rbox(W, H, D, 0.03), body, 0, H / 2, 0);
-  add(g, cyl(0.55, 0.55, 0.08, 24), mat('#9aa0a6', { r: 0.3, m: 0.3 }), 0, 1.6, D / 2 - 0.02, Math.PI / 2, 0, 0);
-  add(g, cyl(0.42, 0.42, 0.04, 24), mat('#c5d0d8', { r: 0.2, m: 0.1 }), 0, 1.6, D / 2 + 0.02, Math.PI / 2, 0, 0);
-  add(g, box(W - 0.2, 0.15, 0.04), mat('#333', { r: 0.4 }), 0, H - 0.3, D / 2 + 0.01);
+  const W = rec.w || 4.5, D = rec.d || 2.3, H = rec.h || 3.3;
+  const pair = W >= 3.6;
+  const unitW = pair ? (W - 0.08) / 2 : W;
+  const drawUnit = (cx, kind) => {
+    const body = mat(kind === 'dryer' ? '#e6e8eb' : '#eef0f3', { r: 0.45, m: 0.2 });
+    add(g, rbox(unitW, H, D, 0.03), body, cx, H / 2, 0);
+    add(g, cyl(0.55, 0.55, 0.08, 24), mat('#9aa0a6', { r: 0.3, m: 0.3 }), cx, 1.6, D / 2 - 0.02, Math.PI / 2, 0, 0);
+    add(g, cyl(0.42, 0.42, 0.04, 24), mat(kind === 'dryer' ? '#b8c0c8' : '#c5d0d8', { r: 0.2, m: 0.1 }), cx, 1.6, D / 2 + 0.02, Math.PI / 2, 0, 0);
+    add(g, box(Math.max(0.4, unitW - 0.2), 0.15, 0.04), mat('#333', { r: 0.4 }), cx, H - 0.3, D / 2 + 0.01);
+    if (kind === 'dryer') add(g, cyl(0.08, 0.08, 0.06, 12), mat('#555', { r: 0.4 }), cx + unitW / 2 - 0.25, H - 0.3, D / 2 + 0.04);
+    else add(g, cyl(0.06, 0.06, 0.05, 12), mat('#888', { r: 0.4 }), cx - unitW / 2 + 0.25, H - 0.3, D / 2 + 0.04);
+  };
+  if (pair) {
+    drawUnit(-W / 2 + unitW / 2, 'washer');
+    drawUnit(W / 2 - unitW / 2, 'dryer');
+  } else {
+    drawUnit(0, 'washer');
+  }
 }
 
 function buildPowerRack(g, rec) {
@@ -1116,7 +1128,7 @@ export const CATALOG = {
   toilet: { name: 'Toilet', category: 'bath', w: 1.4, d: 2.4, h: 2.55, build: buildToilet },
   shower: { name: 'Shower', category: 'bath', w: 4, d: 3.2, h: 8, build: buildShower },
   mudBench: { name: 'Mudroom bench', category: 'bath', w: 5, d: 1.6, h: 5.0, build: buildMudBench },
-  washerDryer: { name: 'Washer / dryer', category: 'bath', w: 2.25, d: 2.3, h: 3.3, build: buildWasherDryer },
+  washerDryer: { name: 'Washer / dryer', category: 'bath', w: 4.5, d: 2.3, h: 3.3, build: buildWasherDryer },
   powerRack: { name: 'Power rack', category: 'gym', w: 4.2, d: 4, h: 7.5, build: buildPowerRack },
   weightBench: { name: 'Weight bench', category: 'gym', w: 2.2, d: 4, h: 2.4, build: buildWeightBench },
   barbell: { name: 'Barbell', category: 'gym', w: 7.2, d: 0.8, h: 1.0, build: buildBarbell },
@@ -1577,7 +1589,42 @@ export function doorwayZones(WS, walk = 2.4, edge = 0.15) {
     const walkR = vert
       ? [r[0] - walk, r[1] - edge, r[2] + walk, r[3] + edge]
       : [r[0] - edge, r[1] - walk, r[2] + edge, r[3] + walk];
-    zones.push({ door: r, walk: walkR });
+    zones.push({ door: r, walk: walkR, kind: 'doorway' });
+  }
+  return zones;
+}
+
+/**
+ * Door clearances plus a 3–6 ft walk path from an exterior / porch door
+ * out across the porch to the steps or far edge, so sofas and rails cannot
+ * sit in front of an entry.
+ */
+export function doorApproachZones(rooms, WS, walk = 3, edge = 0.15) {
+  const zones = doorwayZones(WS, walk, edge);
+  const at = (x, y) => (rooms || []).find((r) => x > r[3] && x < r[5] && y > r[4] && y < r[6]) || null;
+  for (const d of (WS?.door || [])) {
+    const r = [d[0], d[1], d[2], d[3]];
+    const vert = (r[2] - r[0]) < (r[3] - r[1]);
+    const cx = (r[0] + r[2]) / 2, cy = (r[1] + r[3]) / 2;
+    const doorW = vert ? (r[3] - r[1]) : (r[2] - r[0]);
+    const pathW = Math.max(3.2, Math.min(doorW, 6.0));
+    const probes = vert
+      ? [[cx - 2, cy, -1, 0], [cx + 2, cy, 1, 0]]
+      : [[cx, cy - 2, 0, -1], [cx, cy + 2, 0, 1]];
+    for (const [px, py, dx, dy] of probes) {
+      const room = at(px, py);
+      if (!room || !(isPorchLike(room) || room[7]?.outside)) continue;
+      const far = vert ? (dx < 0 ? room[3] : room[5]) : (dy < 0 ? room[4] : room[6]);
+      const start = vert ? cx : cy;
+      const span = Math.abs(far - start);
+      if (span < 1) continue;
+      const end = start + (vert ? dx : dy) * Math.min(span, 12);
+      const half = pathW / 2;
+      const walkR = vert
+        ? [Math.min(cx, end) - edge, cy - half, Math.max(cx, end) + edge, cy + half]
+        : [cx - half, Math.min(cy, end) - edge, cx + half, Math.max(cy, end) + edge];
+      zones.push({ door: r, walk: walkR, kind: 'approach' });
+    }
   }
   return zones;
 }
@@ -1706,7 +1753,10 @@ export function clearanceHit(rect, rooms, WS, margin = 0.1, opts = {}) {
     }
   }
   if (!opts.ignoreDoor) {
-    for (const z of doorwayZones(WS, 3.0, 0.05)) {
+    const zones = (rooms && rooms.length)
+      ? doorApproachZones(rooms, WS, 3.0, 0.05)
+      : doorwayZones(WS, 3.0, 0.05);
+    for (const z of zones) {
       const iv = intersect(r, z.walk);
       if (iv && area(iv) > 0.35) return { kind: 'doorway' };
     }
@@ -1981,9 +2031,8 @@ export function autoFurnish(M, WS) {
     if (/laundry|utility|mud/i.test(n) && !/hall/i.test(n)) {
       const wall = longestWallWithoutDoor(room, doors);
       if (/laundry|utility/i.test(n)) {
-        const a = againstWall(room, wall, 2.25, 2.3, 0.4);
-        put('washerDryer', { ...a });
-        put('washerDryer', { x: a.x + (a.rot === 0 || a.rot === 180 ? 2.4 : 0), y: a.y + (a.rot === 90 || a.rot === 270 ? 2.4 : 0), rot: a.rot });
+        const a = againstWall(room, wall, 4.5, 2.3, 0.4);
+        put('washerDryer', { ...a, w: 4.5, d: 2.3 });
       }
       if (/mud/i.test(n)) {
         const bWall = /laundry|utility/i.test(n) ? (wall === 'n' ? 's' : wall === 's' ? 'n' : wall === 'e' ? 'w' : 'e') : wall;

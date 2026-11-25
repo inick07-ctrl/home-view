@@ -732,6 +732,7 @@ bindSiteHud();
 // ---------- per-model state ----------
 let M = null, root = null, wallsFull, wallsCut, roof, labels, planOverlay, ceilings;
 let fires = [];
+let railGaps = [];
 let CX = 0, CZ = 0, BW = 90, BH = 80, solids = [];
 const Wx = (x) => x - CX, Wz = (y) => y - CZ;
 
@@ -3058,11 +3059,16 @@ function buildModel(model, opts = {}) {
   const detected = {};
   installFurniture(kit, { rooms: M.rooms, WS, detected, Wx, Wz, itemsGroup, ceiling: H });
   chimneyMeshes = [];
+  railGaps = [];
   const _kitBlock = kit.block ? kit.block.bind(kit) : null;
   if (_kitBlock) {
     kit.block = (a, b, c, d, z0, z1, color, opts) => {
       const w = Math.abs(c - a), dep = Math.abs(d - b), h = (z1 || 0) - (z0 || 0);
       const cx = (a + c) / 2, cy = (b + d) / 2;
+      // Record steps / landings so later low rails can leave a walk gap.
+      if ((z1 || 0) <= 0.8 && (z0 || 0) < 0.2 && Math.max(w, dep) >= 2 && Math.min(w, dep) >= 0.6 && Math.min(w, dep) <= 5) {
+        railGaps.push({ x0: Math.min(a, c), y0: Math.min(b, d), x1: Math.max(a, c), y1: Math.max(b, d), z0: -1, z1: 9 });
+      }
       if (!(opts && opts.keep) && h >= 6 && w <= 1.25 && dep <= 1.25 && (M.rooms || []).some((r) => isCoveredPorch(r) && !(r[7] && r[7].noPosts) && cx >= r[3] && cx <= r[5] && cy >= r[4] && cy <= r[6])) {
         return;
       }
@@ -3102,6 +3108,7 @@ function buildModel(model, opts = {}) {
   kit.openingsOnY = (y, tol = 0.85) => openingsOnAxis('y', y, tol);
   kit.garageDoorsOnX = (x, tol = 0.85) => garageDoorsOnAxis('x', x, tol);
   kit.garageDoorsOnY = (y, tol = 0.85) => garageDoorsOnAxis('y', y, tol);
+  kit.clipLowBarrier = (a, b, c, d, z0, z1) => clipLowBarrierToOpenings(a, b, c, d, z0, z1);
   function openingsOnAxis(axis, pos, tol) {
     const holes = [];
     const add = (r, isDoor) => {
@@ -3860,8 +3867,57 @@ function subtractBox(p, hole) {
   if (p[5] > iz1 + 1e-4) out.push([ix0, iy0, ix1, iy1, iz1, p[5]]);
   return out;
 }
+function railOpeningBoxes() {
+  const out = [];
+  const add = (r, pad, z0, z1) => {
+    const rx0 = Math.min(r[0], r[2]), rx1 = Math.max(r[0], r[2]);
+    const ry0 = Math.min(r[1], r[3]), ry1 = Math.max(r[1], r[3]);
+    const horiz = (rx1 - rx0) >= (ry1 - ry0);
+    out.push({
+      x0: horiz ? rx0 : rx0 - pad, x1: horiz ? rx1 : rx1 + pad,
+      y0: horiz ? ry0 - pad : ry0, y1: horiz ? ry1 + pad : ry1,
+      z0, z1,
+    });
+  };
+  for (const r of (M?.walls?.door || [])) {
+    const top = Math.max(r[4] ?? 8, doorOpeningTop(r, M?.wallH || 9));
+    add(r, 0.45, -1, top + 0.04);
+  }
+  for (const r of (M?.walls?.win || [])) {
+    const sill = r[4] ?? 3;
+    if (sill > 2.4) continue; // only sidelights / floor-length openings
+    const top = r[5] ?? 8;
+    add(r, 0.25, -1, top + 0.04);
+  }
+  for (const s of (railGaps || [])) out.push(s);
+  return out;
+}
+function clipLowBarrierToOpenings(a, b, c, d, z0, z1) {
+  const x0 = Math.min(a, c), x1 = Math.max(a, c), y0 = Math.min(b, d), y1 = Math.max(b, d);
+  const thick = Math.min(x1 - x0, y1 - y0);
+  const long = Math.max(x1 - x0, y1 - y0);
+  const h = (z1 || 0) - (z0 || 0);
+  // Only punch low, wall-like rails / knee walls / cap rails — not posts, pillar caps, or full walls.
+  if ((z1 || 0) > 4.6 && h > 4.2) return [[a, b, c, d, z0, z1]];
+  if (thick > 0.7) return [[a, b, c, d, z0, z1]];
+  if (long < 1.2) return [[a, b, c, d, z0, z1]];
+  const holes = railOpeningBoxes();
+  if (!holes.length) return [[a, b, c, d, z0, z1]];
+  let pieces = [[x0, y0, x1, y1, z0, z1]];
+  for (const hole of holes) {
+    const next = [];
+    for (const p of pieces) next.push(...subtractBox(p, hole));
+    pieces = next;
+    if (!pieces.length) break;
+  }
+  return pieces;
+}
 function clipThinBlockToOpenings(a, b, c, d, z0, z1) {
   const x0 = Math.min(a, c), x1 = Math.max(a, c), y0 = Math.min(b, d), y1 = Math.max(b, d);
+  const h = (z1 || 0) - (z0 || 0);
+  // Low knee walls, porch rails and cap trim: punch every door, floor-length
+  // window, step and walkway, and allow a slightly thicker section.
+  if ((z1 || 0) <= 4.6 || h <= 4.2) return clipLowBarrierToOpenings(a, b, c, d, z0, z1);
   if (Math.min(x1 - x0, y1 - y0) > 0.28) return [[a, b, c, d, z0, z1]];
   const holes = openingBoxes();
   if (!holes.length) return [[a, b, c, d, z0, z1]];

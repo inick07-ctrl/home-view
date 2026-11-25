@@ -159,9 +159,15 @@ function makeHelpers(k) {
   const custom = (geo, col, o = keep) => { const m = k.block(0, 0, 0.05, 0.05, 0, 0.05, col, o); if (!m) return null; m.geometry.dispose(); m.geometry = geo; return m; };
   const batches = {};
   const box = (col, a, b, c, d, z0, z1, roof = false) => {
-    const g = new T.BoxGeometry(Math.abs(c - a), z1 - z0, Math.abs(d - b));
-    g.translate(k.W((a + c) / 2), (z0 + z1) / 2, k.Z((b + d) / 2));
-    (batches[col + (roof ? '|r' : '')] ||= []).push(g.toNonIndexed());
+    const parts = (typeof k.clipLowBarrier === 'function')
+      ? k.clipLowBarrier(a, b, c, d, z0, z1)
+      : [[a, b, c, d, z0, z1]];
+    for (const p of parts) {
+      if (p[2] - p[0] < 0.04 || p[3] - p[1] < 0.04 || p[5] - p[4] < 0.02) continue;
+      const g = new T.BoxGeometry(Math.abs(p[2] - p[0]), p[5] - p[4], Math.abs(p[3] - p[1]));
+      g.translate(k.W((p[0] + p[2]) / 2), (p[4] + p[5]) / 2, k.Z((p[1] + p[3]) / 2));
+      (batches[col + (roof ? '|r' : '')] ||= []).push(g.toNonIndexed());
+    }
   };
   // sloped member in the vertical plane of constant plan-y
   const slope = (col, y, x0, z0, x1, z1, depth, width, roof = true) => {
@@ -582,8 +588,7 @@ export default {
     P('bookshelf', { x: XMBE + 0.8, y: 23.3, rot: 270 });
     P('rug', { x: 44.5, y: 19.4, w: 8, d: 6 });
     // Laundry
-    P('washerDryer', { x: XMBE + 1.4, y: 30.0, rot: 270 });
-    P('washerDryer', { x: XMBE + 1.4, y: 32.4, rot: 270 });
+    P('washerDryer', { x: XMBE + 1.4, y: 31.2, rot: 270, w: 4.5, d: 2.3 });
     P('counter', { x: XOF - 1.2, y: 32.5, w: 5.4, d: 2, rot: 90, ...KC });
     // Bedroom #2
     P('bed', { x: X0 + 0.25 + 3.4, y: 44.6, rot: 270, w: 5.3, d: 6.8, variant: 'panel', finish: 'sage' });
