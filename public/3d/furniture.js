@@ -366,17 +366,15 @@ function buildAccentChair(g, rec) {
 function buildCoffeeTable(g, rec) {
   const wood = woodOf(rec);
   if (rec.variant === 'organic') {
-    // two-tier organic oval tables: each top sits on a solid drum pedestal (no legs to float)
+    // single organic oval table on a solid drum pedestal (not two overlapping tops)
     const W = rec.w || 4.6, D = rec.d || 2.6;
     const ell = (w, d, h) => { const geo = cyl(0.5, 0.5, h, 40); return { geo, sx: w, sz: d }; };
     const part = (w, d, h, y, x, z, m) => { const e = ell(w, d, h); const mm = add(g, e.geo, m, x, y, z); mm.scale.set(e.sx, 1, e.sz); return mm; };
     const top = mat(WOOD[rec.wood] || WOOD.walnut, { r: 0.35 });
-    part(W * 0.78, D * 0.82, 0.12, 1.06, -W * 0.08, 0.1, top);          // low lobe top (underside 1.0)
-    part(W * 0.34, D * 0.34, 1.0, 0.5, -W * 0.1, 0.1, wood);             // its pedestal, floor → underside
-    part(W * 0.6, D * 0.66, 0.1, 1.47, W * 0.16, -0.12, top);           // upper lobe (underside 1.42)
-    part(W * 0.16, D * 0.16, 0.36, 1.24, W * 0.2, -0.12, wood);          // spacer from low top to upper top
-    add(g, box(0.6, 0.06, 0.42), mat('#ece6dc', { r: 0.6 }), W * 0.18, 1.55, -0.1);
-    add(g, cyl(0.08, 0.06, 0.4, 12), mat('#e8e4dc', { r: 0.2, m: 0.1 }), W * 0.3, 1.72, 0.0);
+    part(W * 0.96, D * 0.92, 0.12, 1.22, 0, 0, top);
+    part(W * 0.28, D * 0.28, 1.16, 0.58, 0, 0, wood);
+    add(g, box(0.6, 0.06, 0.42), mat('#ece6dc', { r: 0.6 }), 0.15, 1.32, 0.1);
+    add(g, cyl(0.08, 0.06, 0.4, 12), mat('#e8e4dc', { r: 0.2, m: 0.1 }), 0.45, 1.48, 0.05);
     return;
   }
   const stone = mat(rec.top === 'stone' ? '#d8d3ca' : (WOOD[rec.wood] || WOOD.oak), { r: rec.top === 'stone' ? 0.4 : 0.55, m: rec.top === 'stone' ? 0.08 : 0 });
@@ -1170,9 +1168,235 @@ export function isCirculationName(name) {
   const n = String(name || '').trim();
   if (isHallName(n)) return true;
   if (/limewash/i.test(n)) return false;
-  return /^(foyer|entry|entryway|vestibule|corridor|passage|passageway)$/i.test(n)
-    || /\b(foyer|entryway|vestibule|corridor|passageway)\b/i.test(n)
+  return /^(foyer|entry|entryway|vestibule|corridor|passage|passageway|gallery)$/i.test(n)
+    || /\b(foyer|entryway|vestibule|corridor|passageway|gallery)\b/i.test(n)
     || /^entry(\s+hall)?$/i.test(n);
+}
+
+/** Rooms that are never treated as halls by geometry alone (they may still be halls by name). */
+function isGeomHallExempt(name) {
+  const n = String(name || '').trim();
+  if (!n) return false;
+  return /bath|powder|\bwc\b|toilet|shower|closet|wic|w\.i\.c|pantry|laundry|utility|mud|garage|\bbay\b|shop|mech|storage|attic|unfinished|safe|bed|kitchen|dining|office|living|great|family|hearth|lounge|\bden\b|exercise|gym|porch|patio|master|suite|guest|loft|nook|alcove/i.test(n);
+}
+
+function roomsAbut(a, b, eps = 0.2) {
+  const oX = Math.min(a[5], b[5]) - Math.max(a[3], b[3]);
+  const oY = Math.min(a[6], b[6]) - Math.max(a[4], b[4]);
+  const gapX = Math.max(a[3], b[3]) - Math.min(a[5], b[5]);
+  const gapY = Math.max(a[4], b[4]) - Math.min(a[6], b[6]);
+  if (oX > 0.4 && gapY <= eps && gapY >= -eps) {
+    const perp = (a[6] <= b[4] + eps && a[6] >= b[4] - eps) ? a[6] : a[4];
+    const intoB = (perp <= (b[4] + b[6]) / 2) ? 1 : -1;
+    return { horiz: true, a: Math.max(a[3], b[3]), b: Math.min(a[5], b[5]), perp, intoB };
+  }
+  if (oY > 0.4 && gapX <= eps && gapX >= -eps) {
+    const shared = (Math.abs(a[5] - b[3]) <= eps) ? a[5] : a[3];
+    const intoB = (shared <= (b[3] + b[5]) / 2) ? 1 : -1;
+    return { horiz: false, a: Math.max(a[4], b[4]), b: Math.min(a[6], b[6]), perp: shared, intoB };
+  }
+  return null;
+}
+
+function neighborCount(room, rooms, eps = 0.2) {
+  let n = 0;
+  for (const other of rooms || []) {
+    if (other === room || other[7]?.outside) continue;
+    if (roomsAbut(room, other, eps)) n++;
+  }
+  return n;
+}
+
+/** Narrow connector (< ~5 ft) between two or more rooms, not a named bath/closet/etc. */
+export function isGeometricCirculation(room, rooms) {
+  if (!room || room[7]?.outside || isPorchLike(room)) return false;
+  if (isCirculationName(room[0])) return false;
+  if (isGeomHallExempt(room[0])) return false;
+  const w = room[5] - room[3], d = room[6] - room[4];
+  if (Math.min(w, d) >= 5 - 1e-6) return false;
+  return neighborCount(room, rooms) >= 2;
+}
+
+export function isCirculationRoom(room, rooms) {
+  if (!room || room[7]?.outside || isPorchLike(room)) return false;
+  if (isCirculationName(room[0])) return true;
+  return isGeometricCirculation(room, rooms);
+}
+
+export function circulationRects(rooms, inset = 0.15) {
+  const out = [];
+  for (const r of rooms || []) {
+    if (!isCirculationRoom(r, rooms)) continue;
+    const a = r[3] + inset, b = r[4] + inset, c = r[5] - inset, d = r[6] - inset;
+    if (c > a && d > b) out.push([a, b, c, d]);
+  }
+  return out;
+}
+
+function mergeIntervals(ivs) {
+  const a = ivs.slice().sort((p, q) => p[0] - q[0]);
+  const out = [];
+  for (const iv of a) {
+    if (!out.length || iv[0] > out[out.length - 1][1] + 0.05) out.push(iv.slice());
+    else out[out.length - 1][1] = Math.max(out[out.length - 1][1], iv[1]);
+  }
+  return out;
+}
+
+function subtractIntervals(span, covers) {
+  let gaps = [span.slice()];
+  for (const [c0, c1] of covers) {
+    const next = [];
+    for (const [a, b] of gaps) {
+      if (c1 <= a || c0 >= b) { next.push([a, b]); continue; }
+      if (c0 > a + 0.12) next.push([a, c0]);
+      if (c1 < b - 0.12) next.push([c1, b]);
+    }
+    gaps = next;
+  }
+  return gaps.filter(([a, b]) => b - a >= 1.15);
+}
+
+function wallCoversOnEdge(edge, WS) {
+  const walls = [...(WS?.int || []), ...(WS?.ext || [])];
+  const ivs = [];
+  for (const w of walls) {
+    const x0 = Math.min(w[0], w[2]), x1 = Math.max(w[0], w[2]);
+    const y0 = Math.min(w[1], w[3]), y1 = Math.max(w[1], w[3]);
+    const wHoriz = (x1 - x0) >= (y1 - y0);
+    if (wHoriz !== edge.horiz) continue;
+    const mid = wHoriz ? (y0 + y1) / 2 : (x0 + x1) / 2;
+    if (Math.abs(mid - edge.perp) > 0.5) continue;
+    const lo = wHoriz ? x0 : y0, hi = wHoriz ? x1 : y1;
+    const a = Math.max(edge.a, lo), b = Math.min(edge.b, hi);
+    if (b - a > 0.2) ivs.push([a, b]);
+  }
+  return mergeIntervals(ivs);
+}
+
+function doorOpensOnEdge(edge, WS) {
+  const ivs = [];
+  for (const d of (WS?.door || [])) {
+    const x0 = Math.min(d[0], d[2]), x1 = Math.max(d[0], d[2]);
+    const y0 = Math.min(d[1], d[3]), y1 = Math.max(d[1], d[3]);
+    const dHoriz = (x1 - x0) >= (y1 - y0);
+    if (dHoriz !== edge.horiz) continue;
+    const mid = dHoriz ? (y0 + y1) / 2 : (x0 + x1) / 2;
+    if (Math.abs(mid - edge.perp) > 0.6) continue;
+    const lo = dHoriz ? x0 : y0, hi = dHoriz ? x1 : y1;
+    const a = Math.max(edge.a, lo), b = Math.min(edge.b, hi);
+    if (b - a > 0.5) ivs.push([a, b]);
+  }
+  return ivs;
+}
+
+/**
+ * 3 ft keep-out in the receiving room at every opening out of a circulation
+ * space, including ~3 ft along the wall on either side of the mouth
+ * (covers the gap between a fireplace and a hall entrance).
+ */
+export function hallwayMouthZones(rooms, WS, mouth = 3) {
+  const out = [];
+  const list = rooms || [];
+  for (const hall of list) {
+    if (!isCirculationRoom(hall, list)) continue;
+    for (const rec of list) {
+      if (rec === hall || rec[7]?.outside || isPorchLike(rec) || isCirculationRoom(rec, list)) continue;
+      const edge = roomsAbut(hall, rec, 0.25);
+      if (!edge) continue;
+      const covers = wallCoversOnEdge(edge, WS);
+      let opens = subtractIntervals([edge.a, edge.b], covers);
+      for (const d of doorOpensOnEdge(edge, WS)) {
+        if (!opens.some((iv) => !(d[1] <= iv[0] || d[0] >= iv[1]))) opens.push(d);
+      }
+      if (!opens.length && !covers.length) opens = [[edge.a, edge.b]];
+      opens = mergeIntervals(opens);
+      for (const [lo0, hi0] of opens) {
+        const lo = Math.max(rec[3], rec[4] && !edge.horiz ? rec[4] : rec[3], lo0 - mouth);
+        // clamp the expanded mouth to the receiving room along the edge axis
+        let a, b, x0, y0, x1, y1;
+        if (edge.horiz) {
+          a = Math.max(rec[3], lo0 - mouth);
+          b = Math.min(rec[5], hi0 + mouth);
+          if (edge.intoB > 0) { y0 = edge.perp; y1 = Math.min(rec[6], edge.perp + mouth); }
+          else { y0 = Math.max(rec[4], edge.perp - mouth); y1 = edge.perp; }
+          x0 = a; x1 = b;
+        } else {
+          a = Math.max(rec[4], lo0 - mouth);
+          b = Math.min(rec[6], hi0 + mouth);
+          if (edge.intoB > 0) { x0 = edge.perp; x1 = Math.min(rec[5], edge.perp + mouth); }
+          else { x0 = Math.max(rec[3], edge.perp - mouth); x1 = edge.perp; }
+          y0 = a; y1 = b;
+        }
+        if (x1 - x0 > 0.3 && y1 - y0 > 0.3) out.push([x0, y0, x1, y1]);
+      }
+    }
+  }
+  return out;
+}
+
+/** Sample points along a 1-D opening so a wide cased opening is reachable at any clear stretch. */
+function sampleSpan(lo, hi, step = 1.4) {
+  const a = lo + Math.min(0.5, (hi - lo) / 3);
+  const b = hi - Math.min(0.5, (hi - lo) / 3);
+  if (b <= a) return [(lo + hi) / 2];
+  const pts = [];
+  for (let t = a; t <= b + 1e-6; t += step) pts.push(Math.min(t, b));
+  if (pts[pts.length - 1] < b - 0.2) pts.push(b);
+  return pts;
+}
+
+function doorOnRoomPerimeter(room, d) {
+  const cx = (d[0] + d[2]) / 2, cy = (d[1] + d[3]) / 2;
+  const x0 = room[3], y0 = room[4], x1 = room[5], y1 = room[6];
+  const alongX = cx >= x0 - 0.4 && cx <= x1 + 0.4 && (Math.abs(cy - y0) <= 0.4 || Math.abs(cy - y1) <= 0.4);
+  const alongY = cy >= y0 - 0.4 && cy <= y1 + 0.4 && (Math.abs(cx - x0) <= 0.4 || Math.abs(cx - x1) <= 0.4);
+  return alongX || alongY;
+}
+
+/**
+ * Real openings (doors or wall gaps) on a room, each with sample points
+ * along the opening. A long opening is reachable if ANY sample is.
+ */
+export function roomOpenings(room, rooms, WS) {
+  const out = [];
+  if (!room) return out;
+  for (const d of (WS?.door || [])) {
+    if (!doorOnRoomPerimeter(room, d)) continue;
+    const vert = (d[2] - d[0]) < (d[3] - d[1]);
+    const pts = vert
+      ? sampleSpan(Math.min(d[1], d[3]), Math.max(d[1], d[3])).map((y) => [(d[0] + d[2]) / 2, y])
+      : sampleSpan(Math.min(d[0], d[2]), Math.max(d[0], d[2])).map((x) => [x, (d[1] + d[3]) / 2]);
+    out.push({ pts, kind: 'door' });
+  }
+  for (const rec of rooms || []) {
+    if (rec === room || rec[7]?.outside) continue;
+    const edge = roomsAbut(room, rec, 0.25);
+    if (!edge) continue;
+    const covers = wallCoversOnEdge(edge, WS);
+    let opens = subtractIntervals([edge.a, edge.b], covers);
+    for (const d of doorOpensOnEdge(edge, WS)) {
+      if (!opens.some((iv) => !(d[1] <= iv[0] || d[0] >= iv[1]))) opens.push(d);
+    }
+    if (!opens.length && !covers.length) opens = [[edge.a, edge.b]];
+    for (const [lo, hi] of mergeIntervals(opens)) {
+      if (hi - lo < 1.15) continue;
+      const pts = sampleSpan(lo, hi).map((t) => edge.horiz ? [t, edge.perp] : [edge.perp, t]);
+      out.push({ pts, kind: 'opening' });
+    }
+  }
+  return out;
+}
+
+export function roomOpeningMids(room, rooms, WS) {
+  const mids = [];
+  for (const op of roomOpenings(room, rooms, WS)) {
+    const pts = op.pts || [];
+    if (!pts.length) continue;
+    const mid = pts[Math.floor(pts.length / 2)];
+    if (!mids.some((q) => Math.hypot(q[0] - mid[0], q[1] - mid[1]) < 1.0)) mids.push(mid);
+  }
+  return mids;
 }
 
 export function isWallHungType(type) {
@@ -1342,14 +1566,7 @@ export function plantCornerAwayFromDoors(room, WS, w = 2.0, d = 2.0) {
 }
 
 export function hallwayRects(rooms, inset = 0.2) {
-  const out = [];
-  for (const r of rooms || []) {
-    if (r[7]?.outside) continue;
-    if (!isHallName(r[0])) continue;
-    const a = r[3] + inset, b = r[4] + inset, c = r[5] - inset, d = r[6] - inset;
-    if (c > a && d > b) out.push([a, b, c, d]);
-  }
-  return out;
+  return circulationRects(rooms, inset);
 }
 
 export function doorwayZones(WS, walk = 2.4, edge = 0.15) {
@@ -1475,14 +1692,24 @@ function clipRect(rect, zone) {
   return options[0];
 }
 
-export function clearanceHit(rect, rooms, WS, margin = 0.1) {
+export function clearanceHit(rect, rooms, WS, margin = 0.1, opts = {}) {
   const r = [rect[0] + margin, rect[1] + margin, rect[2] - margin, rect[3] - margin];
   if (r[2] <= r[0] || r[3] <= r[1]) return { kind: 'tight' };
-  for (const h of hallwayRects(rooms, 0.15)) {
-    if (intersect(r, h) && area(intersect(r, h)) > 0.35) return { kind: 'hallway' };
+  if (!opts.ignoreHall) {
+    for (const h of circulationRects(rooms, 0.15)) {
+      const iv = intersect(r, h);
+      if (iv && area(iv) > 0.2) return { kind: 'hallway' };
+    }
+    for (const h of hallwayMouthZones(rooms, WS, 3)) {
+      const iv = intersect(r, h);
+      if (iv && area(iv) > 0.2) return { kind: 'hallway' };
+    }
   }
-  for (const z of doorwayZones(WS, 2.2, 0.05)) {
-    if (intersect(r, z.walk) && area(intersect(r, z.walk)) > 0.4) return { kind: 'doorway' };
+  if (!opts.ignoreDoor) {
+    for (const z of doorwayZones(WS, 3.0, 0.05)) {
+      const iv = intersect(r, z.walk);
+      if (iv && area(iv) > 0.35) return { kind: 'doorway' };
+    }
   }
   return null;
 }
@@ -1709,7 +1936,7 @@ export function autoFurnish(M, WS) {
     const loftZ = (ro.loft || ro.noFloor) ? (ro.deckZ ?? ro.loftZ ?? 10.55) : 0;
     const rec = makeItem(type, { z: loftZ, ...opts });
     // Loft items sit above main-floor door swings and halls.
-    if (!(rec.z > 7.5) && clearanceHit(itemRect(rec), rooms, WS, 0.05)) return null;
+    if (!(rec.z > 7.5) && clearanceHit(itemRect(rec), rooms, WS, 0.05, { ignoreHall: rec.type === 'rug' || rec.type === 'pendant' || rec.type === 'curtains' || isWallHungType(rec.type), ignoreDoor: rec.type === 'rug' || rec.type === 'pendant' || rec.type === 'curtains' || isWallHungType(rec.type) })) return null;
     if (currentRoom && !roomContains(currentRoom, rec)) return null;
     items.push(rec);
     return rec;
@@ -1940,7 +2167,7 @@ export function installFurniture(kit, ctx) {
         w: Math.max(w, depth), d: Math.min(w, depth),
         rot: w >= depth ? 0 : 90,
       });
-      if (clearanceHit(itemRect(rec), rooms, WS, 0.02)) return null;
+      if (clearanceHit(itemRect(rec), rooms, WS, 0.02, { ignoreHall: rec.type === 'rug' || rec.type === 'pendant' || rec.type === 'curtains' || isWallHungType(rec.type), ignoreDoor: rec.type === 'rug' || rec.type === 'pendant' || rec.type === 'curtains' || isWallHungType(rec.type) })) return null;
       (detected.counters ||= []).push(rec);
       if (rec.type === 'island') (detected.islands ||= []).push(rec);
       return null; // detailed mesh is built later with the item list
@@ -2066,7 +2293,7 @@ export function dressRooms(M, WS, existing, styleId, opts = {}) {
       const pad = type === 'rug' ? 0.05 : 0.08;
       if (r[0] < room[3] + pad || r[1] < room[4] + pad || r[2] > room[5] - pad || r[3] > room[6] - pad) return null;
     }
-    if (!(rec.z > 7.5) && clearanceHit(itemRect(rec), rooms, WS, type === 'rug' ? 0.02 : 0.05)) return null;
+    if (!(rec.z > 7.5) && clearanceHit(itemRect(rec), rooms, WS, type === 'rug' ? 0.02 : 0.05, { ignoreHall: type === 'rug' || type === 'pendant' || type === 'curtains' || isWallHungType(type), ignoreDoor: type === 'rug' || type === 'pendant' || type === 'curtains' || isWallHungType(type) })) return null;
     const collide = items.some((it) => {
       if (type === 'rug' && it.type !== 'rug') return false;
       if (type === 'art' && (it.type === 'rug' || it.type === 'tableLamp' || it.type === 'deskLamp')) return false;

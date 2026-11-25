@@ -6,6 +6,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import REGISTRY from './models/registry.js';
 import { parcelDefaults, lotStats, formatLotArea, worldRings, buildableRings, xfHouse, houseFromWorld } from '../js/parcel.js';
 import { sanitizeWalls, clipCounters, autoFurnish, dressRooms, installFurniture, buildItemMesh, makeItem, itemRect, clearanceHit, isCoveredPorch, isPorchLike, isCirculationName, isWallHungType, wallRefMatches, wallStillExists, snapWallDecor, hangOnInteriorWall, CATALOG as ITEM_CATALOG } from './furniture.js';
+import { solveLayout, validateLayout, itemBlocksCirculation } from './furniture-layout.js';
 import { mountPlanEditor, cloneWalls, cloneRooms, cloneItems, cloneRoofs, loadLocalLayout, sanitizeLayout } from './plan-editor.js';
 import { createWalkAudio } from './walk-audio.js';
 import { mountPlanExport, setPlan2d, openExportDialog, exportPlansPdf, buildPlanSvgSet, loadPlanInfo, savePlanInfo } from './plan-export.js';
@@ -1169,8 +1170,19 @@ function setItemsList(items, { soft } = {}) {
   refreshItems();
   try { dispatchEvent(new CustomEvent('peakstead-areas')); } catch {}
 }
+function applyFurnitureSolver(rooms, WS, current, dress, defaults) {
+  const solved = solveLayout(rooms, WS, [...(current || []), ...(dress || [])]);
+  const nextCurrent = solved.items.filter((it) => !it.dress);
+  const nextDress = solved.items.filter((it) => !!it.dress);
+  const nextDefaults = defaults
+    ? solveLayout(rooms, WS, defaults).items.filter((it) => !it.dress)
+    : defaults;
+  if (typeof activeLayout !== 'undefined' && activeLayout) activeLayout.items = cloneItems(nextCurrent);
+  return { currentItems: nextCurrent, dressItems: nextDress, defaultItems: nextDefaults, dropped: solved.dropped, report: solved.report };
+}
 function addItemOp(type, opts = {}) {
   const rec = makeItem(type, opts);
+  if (M && itemBlocksCirculation(rec, M.rooms, M.walls)) return null;
   setItemsList([...(currentItems || []), rec]);
   return rec;
 }
@@ -3177,6 +3189,7 @@ function buildModel(model, opts = {}) {
   defaultItems = filterBlockingPlants(defaultItems, M.rooms, WS);
   if (wallDecorOn) currentItems = pruneOrphanWallDecor(currentItems, WS);
   dressItems = dressRooms(M, WS, currentItems, currentStyle, { wallDecor: wallDecorOn }) || [];
+  ({ currentItems, dressItems, defaultItems } = applyFurnitureSolver(M.rooms, WS, currentItems, dressItems, defaultItems));
   activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])), planInfo: (activeLayout && activeLayout.planInfo) ? { ...activeLayout.planInfo } : undefined, wallDecor: !!wallDecorOn, stairs: stairsOn !== false };
   buildFloors();
   refreshItems();
@@ -3723,6 +3736,7 @@ function setWallDecor(v, opts = {}) {
   if (!opts.silent && M) {
     if (wallDecorOn) currentItems = pruneOrphanWallDecor(currentItems, M.walls);
     dressItems = dressRooms(M, M.walls, currentItems, currentStyle, { wallDecor: wallDecorOn }) || [];
+    ({ currentItems, dressItems } = applyFurnitureSolver(M.rooms, M.walls, currentItems, dressItems));
     refreshItems();
   }
   if (activeLayout) activeLayout.wallDecor = wallDecorOn;
@@ -4673,6 +4687,8 @@ window.app = {
   getRooms: () => M?.rooms || [],
   getItems: () => currentItems,
   getAllItems: () => [...currentItems, ...(dressItems || [])],
+  validateFurniture: () => validateLayout(M?.rooms || [], M?.walls || {}, [...(currentItems || []), ...(dressItems || [])]),
+
   addItem: addItemOp,
   setItems: (list) => setItemsList(list),
   patchRoom: patchRoomOp,

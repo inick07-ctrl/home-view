@@ -739,7 +739,7 @@ function buildOldWorld(g, rec) {
 
   if (!styled) return;
   // ---- styling from the photo: woven log basket at the left, potted plant + brass ball stake on the shelf
-  const bx = -W / 2 - 1.05, bz = zJ + 0.55, bh = 1.35, br = 0.62;
+  const bx = -W / 2 - 0.95, bz = Math.min(D / 2 - 0.35, zJ + 1.15), bh = 1.35, br = 0.62;
   const wick = limeMat('wicker', 4, 1.5);
   const bk2 = add(g, new THREE.CylinderGeometry(br, br * 0.85, bh, 28, 1, true), new THREE.MeshStandardMaterial({ map: wick.map, roughness: 0.85, side: THREE.DoubleSide }), bx, bh / 2, bz);
   add(g, new THREE.CylinderGeometry(br * 0.85, br * 0.85, 0.06, 28), wick, bx, 0.03, bz);
