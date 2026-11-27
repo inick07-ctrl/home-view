@@ -601,7 +601,7 @@ export function interpretSketch(sketch, size = {}) {
   base.rooms = base.rooms.map((rm, k) => {
     const p = pieces[k];
     const o = { ...(rm[7] || {}) };
-    if (!p.primary) { o.noAuto = true; o.minor = true; o.noLabel = true; }
+    if (!p.primary) { o.noAuto = true; o.minor = true; o.noLabel = true; o.planNoLabel = true; }
     const region = p.region;
     const label = p.primary ? region.name : region.name;
     const dims = p.primary && region.rects.length === 1 ? rm[1] : `${Math.round(region.sf)} sf`;
