@@ -59,8 +59,47 @@ function mat(color, o = {}) {
   return MATS[key] ||= new THREE.MeshStandardMaterial({
     color, roughness: o.r ?? 0.78, metalness: o.m ?? 0,
     emissive: o.e ? new THREE.Color(color) : 0, emissiveIntensity: o.e || 0,
+    envMapIntensity: o.env ?? 0.85,
   });
 }
+function pbrClone(src, color, repeatX = 2, repeatY = 2) {
+  if (!src || !src.map) return null;
+  const cloneMap = (t) => {
+    if (!t) return null;
+    const c = t.clone();
+    c.needsUpdate = true;
+    c.wrapS = c.wrapT = THREE.RepeatWrapping;
+    c.repeat.set(repeatX, repeatY);
+    return c;
+  };
+  return new THREE.MeshStandardMaterial({
+    map: cloneMap(src.map),
+    normalMap: cloneMap(src.normalMap),
+    roughnessMap: cloneMap(src.roughnessMap),
+    color: color || '#ffffff',
+    roughness: src.roughness ?? 0.3,
+    metalness: src.metalness ?? 0.04,
+    envMapIntensity: src.envMapIntensity ?? 1.1,
+    normalScale: src.normalScale ? src.normalScale.clone() : new THREE.Vector2(0.6, 0.6),
+  });
+}
+function stoneTopMat(color, w = 4, d = 2) {
+  const src = (typeof MAT !== 'undefined' && MAT.quartz) || (globalThis.MAT && globalThis.MAT.quartz);
+  // MAT is in engine.js, not this module. The engine installs it on a shared hook:
+  const hook = stoneTopMat.source;
+  const msrc = hook || src;
+  if (!msrc || !msrc.map) return mat(color || '#e8e4dc', { r: 0.35, m: 0.04, env: 1.1 });
+  const key = 'stone|' + (color || '') + '|' + w.toFixed(1) + '|' + d.toFixed(1);
+  return MATS[key] ||= pbrClone(msrc, color || '#f4f2ee', Math.max(1.2, w / 3), Math.max(1.2, d / 3));
+}
+export function setStoneTopSource(mat) { stoneTopMat.source = mat; }
+function carpetMat(color, w, d) {
+  const hook = carpetMat.source;
+  if (!hook || !hook.map) return mat(color, { r: 0.95 });
+  const key = 'carpet|' + (color || '') + '|' + w.toFixed(1) + '|' + d.toFixed(1);
+  return MATS[key] ||= pbrClone(hook, color || '#ffffff', Math.max(1, w / 2.5), Math.max(1, d / 2.5));
+}
+export function setCarpetSource(mat) { carpetMat.source = mat; }
 
 const GEO = {};
 function tag(g) { g.userData.shared = true; return g; }
@@ -457,8 +496,9 @@ function buildRug(g, rec) {
     return;
   }
   const col = rec.color || '#c4b8a4';
-  add(g, box(W, 0.04, D), mat(col, { r: 0.95 }), 0, 0.025, 0);
-  add(g, box(W - 0.25, 0.005, D - 0.25), mat(rec.field || '#ddd4c6', { r: 0.97 }), 0, 0.048, 0);
+  const field = rec.field || '#ddd4c6';
+  add(g, box(W, 0.04, D), carpetMat(col, W, D), 0, 0.025, 0);
+  add(g, box(W - 0.25, 0.005, D - 0.25), carpetMat(field, W - 0.25, D - 0.25), 0, 0.048, 0);
 }
 
 function buildMediaConsole(g, rec) {
@@ -807,10 +847,11 @@ function buildCounter(g, rec) {
       add(g, cyl(0.015, 0.015, 0.4, 8), pull, x + dw * 0.32, H - 0.75, D / 2 - 0.03);
     }
   }
-  add(g, rbox(W + 0.1, 0.12, D + 0.08, 0.015), top, 0, H - 0.04, -0.02);
+  const stone = stoneTopMat(topCol, W, D) || top;
+  add(g, rbox(W + 0.1, 0.12, D + 0.08, 0.015), stone, 0, H - 0.04, -0.02);
   if (v === 'waterfall' || v === 'fluted-waterfall') {
     // stone wraps down both ends to the floor (sits on the floor, butts the top)
-    for (const s of [-1, 1]) add(g, box(0.12, H - 0.1, D + 0.08), top, s * (W / 2 + 0.05 - 0.06), (H - 0.1) / 2, -0.02);
+    for (const s of [-1, 1]) add(g, box(0.12, H - 0.1, D + 0.08), stone, s * (W / 2 + 0.05 - 0.06), (H - 0.1) / 2, -0.02);
   }
 }
 

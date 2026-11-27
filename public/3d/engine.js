@@ -5,11 +5,12 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import REGISTRY from './models/registry.js';
 import { parcelDefaults, lotStats, formatLotArea, worldRings, buildableRings, xfHouse, houseFromWorld } from '../js/parcel.js';
-import { sanitizeWalls, clipCounters, autoFurnish, dressRooms, installFurniture, buildItemMesh, makeItem, itemRect, clearanceHit, isCoveredPorch, isPorchLike, isCirculationName, isWallHungType, wallRefMatches, wallStillExists, snapWallDecor, hangOnInteriorWall, CATALOG as ITEM_CATALOG } from './furniture.js';
+import { sanitizeWalls, clipCounters, autoFurnish, dressRooms, installFurniture, buildItemMesh, makeItem, itemRect, clearanceHit, isCoveredPorch, isPorchLike, isCirculationName, isWallHungType, wallRefMatches, wallStillExists, snapWallDecor, hangOnInteriorWall, CATALOG as ITEM_CATALOG, setStoneTopSource, setCarpetSource } from './furniture.js';
 import { solveLayout, validateLayout, itemBlocksCirculation } from './furniture-layout.js';
 import { mountPlanEditor, cloneWalls, cloneRooms, cloneItems, cloneRoofs, loadLocalLayout, sanitizeLayout } from './plan-editor.js';
 import { createWalkAudio } from './walk-audio.js';
 import { mountPlanExport, setPlan2d, openExportDialog, exportPlansPdf, buildPlanSvgSet, loadPlanInfo, savePlanInfo } from './plan-export.js';
+import { installRenderQuality, isCoarseDevice, readQualityMode, writeQualityMode, startingLevel } from './render-quality.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('c');
@@ -242,9 +243,10 @@ function applyStyleGlass(st) {
   const g = st && st.glass;
   if (g) {
     MAT.glass.color.set(g.color || GLASS_DEFAULT.color);
-    MAT.glass.opacity = g.opacity ?? GLASS_DEFAULT.opacity;
+    MAT.glass.userData.baseOpacity = g.opacity ?? GLASS_DEFAULT.opacity;
+    MAT.glass.opacity = (MAT.glass.transmission > 0.01) ? 1 : (g.opacity ?? GLASS_DEFAULT.opacity);
     MAT.glass.emissive.set(g.emissive || '#000000');
-    MAT.glass.emissiveIntensity = g.emissiveIntensity || 0;
+    MAT.glass.emissiveIntensity = (g.emissiveIntensity || 0) * 0.12;
   } else {
     MAT.glass.color.set(GLASS_DEFAULT.color);
     MAT.glass.opacity = GLASS_DEFAULT.opacity;
@@ -263,7 +265,7 @@ function applyStyleDaylight(kit, st, H, WS) {
     let lx = cx, ly = cy;
     if (vert) lx = inside(cx - 0.8, cy) ? cx - 0.45 : cx + 0.45;
     else ly = inside(cx, cy - 0.8) ? cy - 0.45 : cy + 0.45;
-    const dl = new THREE.PointLight('#fff6e8', 1.15, 16, 2);
+    const dl = new THREE.PointLight('#fff6e8', 0.7, 16, 2);
     dl.position.set(Wx(lx), ch, Wz(ly));
     dl.castShadow = false;
     root.add(dl);
@@ -271,7 +273,10 @@ function applyStyleDaylight(kit, st, H, WS) {
 }
 
 let timeOfDay = 0.38; // 0 dawn … 0.38 morning … 0.75 golden hour … 1 night
-let qualityLevel = 2;
+let qualityMode = readQualityMode();
+let qualityLevel = startingLevel(qualityMode);
+let renderQuality = null;
+let qualityLocked = false;
 let nightLights = [];
 let frameEma = 16, lastFrameAt = 0, lastQualityAt = 0, qualityGraceUntil = 0;
 function armQualityGrace(ms = 6000) { qualityGraceUntil = performance.now() + ms; lastQualityAt = qualityGraceUntil; }
@@ -298,6 +303,15 @@ function setTimeOfDay(u) {
   applyTimeOfDay();
   syncTodUi();
 }
+function setQualityMode(mode, { persist = true } = {}) {
+  if (mode !== 'auto' && mode !== 'standard' && mode !== 'high') mode = 'auto';
+  qualityMode = mode;
+  if (persist) writeQualityMode(mode);
+  const next = startingLevel(mode);
+  if (next !== qualityLevel) setQualityLevel(next);
+  const qSel = $('bQuality');
+  if (qSel) qSel.value = qualityMode;
+}
 function setQualityLevel(q) {
   q = Math.max(0, Math.min(2, q | 0));
   if (q === qualityLevel) return;
@@ -309,6 +323,7 @@ function setQualityLevel(q) {
   sun.shadow.mapSize.set(map, map);
   sun.castShadow = q > 0;
   if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+  if (renderQuality) renderQuality.applyLevel(q);
   applyTimeOfDay();
 }
 function applyNightLights(night) {
@@ -385,7 +400,11 @@ function applyTimeOfDay() {
   for (const k of ['wood', 'tile', 'stone', 'lightOak', 'walnutPlank', 'slate']) {
     if (MAT[k] && MAT[k].roughness != null) { MAT[k].roughness = rough; MAT[k].metalness = gloss; }
   }
-  if (MAT.glass) MAT.glass.metalness = qualityLevel >= 1 ? 0.18 : 0.1;
+  if (MAT.glass && MAT.glass.transmission < 0.01) MAT.glass.metalness = qualityLevel >= 1 ? 0.08 : 0.04;
+  if (renderQuality) {
+    renderQuality.updateSky({ night, allowSky: !panoSphere, immediate: false });
+    renderQuality.tuneLights(night);
+  }
   applyNightLights(night);
 }
 
@@ -394,6 +413,10 @@ function applyTimeOfDay() {
 
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), new THREE.MeshLambertMaterial({ map: TEX.grass }));
 ground.rotation.x = -Math.PI / 2; ground.position.y = -0.6; ground.receiveShadow = true; scene.add(ground);
+renderQuality = installRenderQuality({ renderer, scene, camera, sun, hemi, amb, ground, MAT, TEX });
+renderQuality.applyLevel(qualityLevel);
+renderQuality.ready.then(() => { try { setStoneTopSource(MAT.quartz); setCarpetSource(MAT.carpet); } catch {} });
+try { setStoneTopSource(MAT.quartz); setCarpetSource(MAT.carpet); } catch {}
 
 // ---------- project site photos (optional 360 pano + aerial ground) ----------
 const SITE_DEFAULTS = { panoYaw: 0, panoHeight: 6, groundScale: 200, groundRot: 0, groundX: 0, groundY: 0 };
@@ -2592,7 +2615,7 @@ function captureThumb({ width = 1000, height = 625 } = {}) {
   if (!renderer) return Promise.reject(new Error('No renderer'));
   const prevW = canvas.width, prevH = canvas.height;
   // Capture the current view into a cropped JPEG.
-  renderer.render(scene, camera);
+  if (renderQuality) renderQuality.render(); else renderer.render(scene, camera);
   const src = renderer.domElement;
   const out = document.createElement('canvas');
   out.width = width;
@@ -4531,6 +4554,7 @@ async function loadProjectModel() {
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight); labelRenderer.setSize(innerWidth, innerHeight);
+  if (renderQuality) renderQuality.setSize(innerWidth, innerHeight);
 });
 const clock = new THREE.Clock();
 
@@ -4619,13 +4643,16 @@ function loop() {
   if (lastFrameAt) {
     const dt = now - lastFrameAt;
     frameEma = frameEma * 0.9 + dt * 0.1;
-    if (now > qualityGraceUntil) {
-      if (frameEma > 33 && qualityLevel > 0 && now - lastQualityAt > 2500) setQualityLevel(qualityLevel - 1);
-      else if (frameEma < 17 && qualityLevel < 2 && now - lastQualityAt > 5000) setQualityLevel(qualityLevel + 1);
+    if (!qualityLocked && now > qualityGraceUntil) {
+      const minQ = qualityMode === 'high' ? 1 : 0;
+      const maxQ = qualityMode === 'standard' ? 1 : 2;
+      if (frameEma > 33 && qualityLevel > minQ && now - lastQualityAt > 2500) setQualityLevel(qualityLevel - 1);
+      else if (qualityMode === 'auto' && frameEma < 17 && qualityLevel < maxQ && now - lastQualityAt > 5000) setQualityLevel(qualityLevel + 1);
     }
   }
   lastFrameAt = now;
-  renderer.render(scene, camera); labelRenderer.render(scene, camera);
+  if (renderQuality) renderQuality.render(); else renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
   requestAnimationFrame(loop);
 }
 
@@ -4653,6 +4680,10 @@ if ($('bStyle')) $('bStyle').addEventListener('change', e => setStyle(e.target.v
 if ($('tod')) {
   $('tod').addEventListener('input', (e) => setTimeOfDay((+e.target.value) / 100));
   syncTodUi();
+}
+if ($('bQuality')) {
+  $('bQuality').value = qualityMode;
+  $('bQuality').addEventListener('change', (e) => setQualityMode(e.target.value));
 }
 
 function frameModel(modeHint = 'orbit') {
@@ -4814,6 +4845,9 @@ window.app = {
   setTimeOfDay,
   getTimeOfDay: () => timeOfDay,
   getQualityLevel: () => qualityLevel,
+  setQualityMode, getQualityMode: () => qualityMode,
+  lockQuality: (on) => { qualityLocked = !!on; },
+  getFrameEma: () => frameEma,
   startTour, stopTour, finishTour: finishTourRise, isTourActive: () => !!tourActive,
   listLevels, setLevel, getLevel: () => currentLevel,
   getClientInfo, setClientInfo,
@@ -4823,6 +4857,9 @@ window.app = {
   dbg: () => ({ roof, root, ceilings, wallsFull, M, itemsGroup }),
 };
 
+if (renderQuality?.ready) {
+  try { await Promise.race([renderQuality.ready, new Promise((r) => setTimeout(r, 4000))]); } catch {}
+}
 if (SRC.kind === 'example') await loadExample(params.get('ex') || REGISTRY[0].id);
 else if (SRC.kind === 'draft') loadBuilderDraft();
 else if (SRC.kind !== 'embed') await loadProjectModel();

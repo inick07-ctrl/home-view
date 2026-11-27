@@ -1,0 +1,25 @@
+Textures in this folder are from ambientCG (https://ambientcg.com/),
+published under the Creative Commons CC0 1.0 Universal Public Domain Dedication:
+https://creativecommons.org/publicdomain/zero/1.0/
+
+No attribution is legally required. We still thank Lennart Demes / ambientCG.
+
+Assets used (1K, color + OpenGL normal + roughness, recompressed):
+- WoodFloor051  (wood-oak)  https://ambientcg.com/a/WoodFloor051
+- WoodFloor043  (wood-walnut)  https://ambientcg.com/a/WoodFloor043
+- Grass001  (grass)  https://ambientcg.com/a/Grass001
+- RoofingTiles003  (shingles)  https://ambientcg.com/a/RoofingTiles003
+- Metal038  (metal-roof)  https://ambientcg.com/a/Metal038
+- Bricks053  (brick)  https://ambientcg.com/a/Bricks053
+- Rocks020  (stone)  https://ambientcg.com/a/Rocks020
+- Tiles107  (tile)  https://ambientcg.com/a/Tiles107
+- Tiles133A  (subway)  https://ambientcg.com/a/Tiles133A
+- PavingStones070  (paver)  https://ambientcg.com/a/PavingStones070
+- Concrete031  (concrete)  https://ambientcg.com/a/Concrete031
+- Carpet008  (carpet)  https://ambientcg.com/a/Carpet008
+- WoodSiding001  (siding-dark)  https://ambientcg.com/a/WoodSiding001
+- Terrazzo001  (quartz)  https://ambientcg.com/a/Tiles107
+
+These textures are self-hosted with this app. They are not modified except for
+resizing/recompression (and a slight contrast adjustment on the quartz/tile
+counter map).
