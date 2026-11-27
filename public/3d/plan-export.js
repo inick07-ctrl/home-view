@@ -1,4 +1,5 @@
 // PeakStead Designs — 2D plan view + professional multi-sheet PDF export (client-side).
+import { parseFacing, planNorthRotation } from './sun-path.js';
 // Vector drawings are built as SVG (same art for the in-app 2D view and the PDF).
 // jsPDF + svg2pdf are loaded on demand from /vendor (self-hosted, no CDN at runtime).
 
@@ -86,6 +87,11 @@ export function loadPlanInfo(snap) {
     price: String(fromLayout.price || stored.price || '').slice(0, 40),
     contactName: String(fromLayout.contactName || stored.contactName || '').slice(0, 80),
     contactPhone: String(fromLayout.contactPhone || stored.contactPhone || '').slice(0, 40),
+    houseFacing: parseFacing(fromLayout.houseFacing || stored.houseFacing),
+    sunSeason: ['winter', 'equinox', 'summer', 'date'].includes(fromLayout.sunSeason || stored.sunSeason)
+      ? (fromLayout.sunSeason || stored.sunSeason) : undefined,
+    sunDate: String(fromLayout.sunDate || stored.sunDate || '').slice(0, 10),
+    zip: String(fromLayout.zip || stored.zip || '').replace(/\D/g, '').slice(0, 5),
   };
 }
 export function savePlanInfo(snap, info) {
@@ -99,6 +105,10 @@ export function savePlanInfo(snap, info) {
     price: String(info.price || '').slice(0, 40),
     contactName: String(info.contactName || '').slice(0, 80),
     contactPhone: String(info.contactPhone || '').slice(0, 40),
+    houseFacing: parseFacing(info.houseFacing),
+    sunSeason: ['winter', 'equinox', 'summer', 'date'].includes(info.sunSeason) ? info.sunSeason : undefined,
+    sunDate: String(info.sunDate || '').slice(0, 10),
+    zip: String(info.zip || '').replace(/\D/g, '').slice(0, 5),
   };
   try { localStorage.setItem(infoKey(snap), JSON.stringify(rec)); } catch {}
   if (snap && typeof snap.onPlanInfo === 'function') snap.onPlanInfo(rec);
@@ -190,12 +200,16 @@ function titleBlock(W, H, meta) {
   return { svg: bits.join(''), x, y, tw, th, drawX: 0.45, drawY: 0.42, drawW: W - 0.9, drawH: H - 0.52 - th - 0.2 };
 }
 
-function northArrow(x, y, s = 0.45) {
+function facingOf(snap) {
+  return parseFacing(snap?.planInfo?.houseFacing || snap?.houseFacing);
+}
+function northArrow(x, y, s = 0.45, facing = 's') {
   const h = s, w = s * 0.38;
-  return [
+  const rot = planNorthRotation(facing);
+  return `<g transform="rotate(${rot} ${x} ${y})">` + [
     `<polygon points="${x},${y - h} ${x + w},${y + h * 0.35} ${x},${y + h * 0.1} ${x - w},${y + h * 0.35}" fill="#111"/>`,
     text(x, y - h - 0.08, 'N', 0.12, { bold: true }),
-  ].join('');
+  ].join('') + '</g>';
 }
 function scaleBar(x, y, scale, width = 1.5) {
   const ipf = scale.ipf;
@@ -876,9 +890,9 @@ function drawA1(W, H, snap, info) {
     const scale = pickScale(world.w, world.h, box.w, box.h);
     const xf = xform(world, box, scale);
     const bits = [drawFloorPlan(xf, snap)];
-    bits.push(northArrow(tb.drawX + 0.55, tb.drawY + tb.drawH - 0.15, 0.35));
+    bits.push(northArrow(tb.drawX + 0.55, tb.drawY + tb.drawH - 0.15, 0.35, facingOf(snap)));
     bits.push(scaleBar(tb.drawX + 1.3, tb.drawY + tb.drawH - 0.35, scale, 1.8));
-    bits.push(text(tb.drawX + tb.drawW - 0.1, tb.drawY + 0.2, 'FLOOR PLAN  ·  NORTH UP', 0.1, { anchor: 'end', bold: true }));
+    bits.push(text(tb.drawX + tb.drawW - 0.1, tb.drawY + 0.2, 'FLOOR PLAN  ·  SEE NORTH ARROW', 0.1, { anchor: 'end', bold: true }));
     return bits.join('');
   });
 }
@@ -908,7 +922,7 @@ function drawA2(W, H, snap, info, lot) {
     const scale = pickScale(world.w, world.h, box.w, box.h, true);
     const xf = xform(world, box, scale);
     const bits = [drawSitePlan(xf, snap, lot)];
-    bits.push(northArrow(tb.drawX + 0.55, tb.drawY + tb.drawH - 0.15, 0.35));
+    bits.push(northArrow(tb.drawX + 0.55, tb.drawY + tb.drawH - 0.15, 0.35, facingOf(snap)));
     bits.push(scaleBar(tb.drawX + 1.3, tb.drawY + tb.drawH - 0.35, scale, 1.8));
     if (lot?.acres) {
       bits.push(text(tb.drawX + tb.drawW - 0.1, tb.drawY + 0.2,
@@ -959,7 +973,7 @@ function drawA31(W, H, snap, info) {
     const scale = pickScale(world.w, world.h, box.w, box.h);
     const xf = xform(world, box, scale);
     const bits = [drawRoofPlan(xf, snap)];
-    bits.push(northArrow(tb.drawX + 0.55, tb.drawY + tb.drawH - 0.15, 0.35));
+    bits.push(northArrow(tb.drawX + 0.55, tb.drawY + tb.drawH - 0.15, 0.35, facingOf(snap)));
     bits.push(scaleBar(tb.drawX + 1.3, tb.drawY + tb.drawH - 0.35, scale, 1.8));
     bits.push(text(tb.drawX + tb.drawW - 0.1, tb.drawY + 0.2, 'ROOF PLAN  ·  PITCH LABELS ARE RISE:RUN', 0.1, { anchor: 'end', bold: true }));
     return bits.join('');
@@ -1160,7 +1174,7 @@ function floorPlanOnlySvg(snap, widthIn, heightIn) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${widthIn}in" height="${heightIn}in" viewBox="0 0 ${widthIn} ${heightIn}">
     <rect x="0" y="0" width="${widthIn}" height="${heightIn}" fill="#fff"/>
     ${drawFloorPlan(xf, snap)}
-    ${northArrow(0.5, heightIn - 0.35, 0.32)}
+    ${northArrow(0.5, heightIn - 0.35, 0.32, facingOf(snap))}
     ${scaleBar(1.2, heightIn - 0.5, scale, 1.6)}
     ${text(widthIn - 0.35, heightIn - 0.2, PRELIM, 0.08, { anchor: 'end', color: '#444' })}
   </svg>`;

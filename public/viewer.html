@@ -20,8 +20,12 @@
   #help{font-size:12px;opacity:.85;margin-top:8px;line-height:1.35}
   #hud.collapsed .btns,#hud.collapsed #help,#hud.collapsed .sub,#hud.collapsed #siteHud,#hud.collapsed #sponsorHud{display:none}
   #toggleHud{position:absolute;right:8px;top:6px;background:none;border:0;color:var(--fg);font-size:16px;cursor:pointer;opacity:.8}
-  #north{position:fixed;right:14px;top:14px;z-index:5;width:64px;height:64px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 18px rgba(0,0,0,.25)}
-  #north svg{width:54px;height:54px;transition:none}
+  #north{position:fixed;right:14px;top:14px;z-index:5;width:88px;border-radius:16px;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 4px 6px;box-shadow:0 4px 18px rgba(0,0,0,.25);color:#fff}
+  #north svg{width:80px;height:80px;transition:none;display:block}
+  #sunMeta{font:600 9px/1.25 Inter,system-ui,sans-serif;text-align:center;opacity:.9;max-width:86px;margin-top:1px}
+  #bSunPlay.on{background:#e0a95a;color:#1d1d1d;border-color:#e0a95a}
+  #bSunDate{font-size:12px;padding:2px 4px;border-radius:6px;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.2);color:inherit}
+  #bSunDate[hidden]{display:none !important}
   .label{color:#1f2328;background:rgba(255,255,255,.88);border:1px solid rgba(0,0,0,.12);padding:2px 6px;border-radius:6px;font-size:12px;font-weight:600;text-align:center;white-space:nowrap;pointer-events:none;line-height:1.2}
   .label small{display:block;font-weight:500;font-size:10.5px;opacity:.75}
   .label.minor{font-size:10px;font-weight:500;opacity:.85;padding:1px 4px}
@@ -55,7 +59,7 @@
   #sf .sf-warn{font-size:11px;color:#f3c2bc;margin-top:4px;max-width:220px}
   body.walk-pad #sf{bottom:max(148px,calc(140px + env(safe-area-inset-bottom)))}
   @media (max-width:600px){#sf{right:8px;bottom:max(8px,env(safe-area-inset-bottom));padding:7px 10px;padding-right:max(10px,env(safe-area-inset-right))}#sf .sf-h{font-size:13px}#sf .sf-unit{font-size:11px}#sf .sf-sub{font-size:10px}}
-  @media (max-width:600px){#hud{padding:8px 10px}#hud .sub{display:none}#help{font-size:11px}.label{font-size:10px;padding:1px 4px}.label small{font-size:9px}.label.minor{display:none}#hud h1{font-size:14px}.btns button{font-size:12px;padding:6px 8px}#north{width:52px;height:52px}#north svg{width:44px;height:44px}}
+  @media (max-width:600px){#hud{padding:8px 10px}#hud .sub{display:none}#help{font-size:11px}.label{font-size:10px;padding:1px 4px}.label small{font-size:9px}.label.minor{display:none}#hud h1{font-size:14px}.btns button{font-size:12px;padding:6px 8px}#north{width:76px}#north svg{width:68px;height:68px}#sunMeta{font-size:8px}}
   :root{--tbh:56px}
   #topbar{position:fixed;left:0;right:0;top:0;z-index:7;display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:8px 12px;background:rgba(20,24,28,.92);color:#f3f1ec;box-shadow:0 2px 12px rgba(0,0,0,.25)}
   #topbar .topbar-row{display:flex;align-items:center;gap:10px;min-height:36px}
@@ -208,10 +212,32 @@
         <option value="english-country">English Country</option>
       </select>
     </label>
+    <label id="faceWrap" class="stylepick">House faces
+      <select id="bFacing" aria-label="House faces">
+        <option value="n">North</option>
+        <option value="ne">Northeast</option>
+        <option value="e">East</option>
+        <option value="se">Southeast</option>
+        <option value="s" selected>South</option>
+        <option value="sw">Southwest</option>
+        <option value="w">West</option>
+        <option value="nw">Northwest</option>
+      </select>
+    </label>
+    <label id="seasonWrap" class="stylepick">Sun date
+      <select id="bSeason" aria-label="Sun date">
+        <option value="winter">Winter solstice</option>
+        <option value="equinox">Equinox</option>
+        <option value="summer">Summer solstice</option>
+        <option value="date">Date…</option>
+      </select>
+      <input type="date" id="bSunDate" hidden aria-label="Sun path date">
+    </label>
     <label id="todWrap" class="todpick">Time of day
       <input type="range" id="tod" min="0" max="100" step="1" value="38" aria-label="Time of day">
       <span id="todVal">Morning</span>
     </label>
+    <button type="button" id="bSunPlay" title="Animate the sun from sunrise to sunset">Play sun path</button>
     <label id="qualWrap" class="stylepick">Quality
       <select id="bQuality" aria-label="Render quality">
         <option value="auto">Auto</option>
@@ -272,7 +298,22 @@
   <div id="help"></div>
 </div>
 <div id="sf" aria-label="Estimated square footage"><div class="sf-h"><span id="sfHeated">—</span> <span class="sf-unit">sf heated</span></div><div class="sf-sub" id="sfSub"></div><div class="sf-lot" id="sfLot" hidden></div><div class="sf-warn" id="lotWarn" hidden></div></div>
-<div id="north" title="North"><svg viewBox="-30 -30 60 60"><g id="narrow"><polygon points="0,-24 8,4 0,-2 -8,4" fill="#e0574f"/><polygon points="0,24 8,4 0,-2 -8,4" fill="#ddd" opacity=".7"/><text x="0" y="-8" font-size="0" fill="#fff">N</text></g><text id="nlabel" x="0" y="5" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">N</text></svg></div>
+<div id="north" title="Compass and sun path">
+  <svg viewBox="-50 -50 100 100" aria-hidden="true">
+    <circle r="46" fill="rgba(8,10,10,.35)" stroke="rgba(255,255,255,.28)" stroke-width="1.2"/>
+    <g id="sunCompass">
+      <path id="sunArc" fill="none" stroke="#f4c14e" stroke-width="2.6" stroke-linecap="round" opacity=".95"/>
+      <g id="sunDot"><circle r="5" fill="#ffe27a" stroke="#f0b429" stroke-width="1.1"/></g>
+      <polygon points="0,-26 6,2 0,-3 -6,2" fill="#e0574f"/>
+      <polygon points="0,22 6,2 0,-3 -6,2" fill="#ddd" opacity=".7"/>
+      <text x="0" y="-32" text-anchor="middle" font-size="9" font-weight="700" fill="#fff">N</text>
+      <text x="33" y="4" text-anchor="middle" font-size="8" fill="rgba(255,255,255,.75)">E</text>
+      <text x="0" y="40" text-anchor="middle" font-size="8" fill="rgba(255,255,255,.75)">S</text>
+      <text x="-33" y="4" text-anchor="middle" font-size="8" fill="rgba(255,255,255,.75)">W</text>
+    </g>
+  </svg>
+  <div id="sunMeta">Faces South</div>
+</div>
 <aside id="planReadout" hidden>
   <button type="button" id="planReadoutClose" aria-label="Close plan readout">×</button>
   <h2>Plan readout</h2>

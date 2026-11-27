@@ -11,6 +11,7 @@ import { mountPlanEditor, cloneWalls, cloneRooms, cloneItems, cloneRoofs, loadLo
 import { createWalkAudio } from './walk-audio.js';
 import { mountPlanExport, setPlan2d, openExportDialog, exportPlansPdf, buildPlanSvgSet, loadPlanInfo, savePlanInfo } from './plan-export.js';
 import { installRenderQuality, isCoarseDevice, readQualityMode, writeQualityMode, startingLevel } from './render-quality.js';
+import { parseFacing, facingBearing, modelAzimuthForCompass, solarPosition, solarHourFromSlider, sliderFromSolarHour, formatSolarHour, seasonDate, sunArcSamples, seasonLabel, resolveObserver, DAYLIGHT_END, DEFAULT_FACING, SEASONS, isoDate, parseISODate } from './sun-path.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('c');
@@ -272,7 +273,11 @@ function applyStyleDaylight(kit, st, H, WS) {
   }
 }
 
-let timeOfDay = 0.38; // 0 dawn … 0.38 morning … 0.75 golden hour … 1 night
+let timeOfDay = 0.38; // 0 dawn … daylight end at sunset … 1 night
+let houseFacing = DEFAULT_FACING;
+let sunSeason = 'date';
+let sunDateISO = isoDate(new Date());
+let sunPlayRaf = 0;
 let qualityMode = readQualityMode();
 let qualityLevel = startingLevel(qualityMode);
 let renderQuality = null;
@@ -285,19 +290,51 @@ function lerpHex(a, b, t) {
   const ca = new THREE.Color(a), cb = new THREE.Color(b);
   return ca.lerp(cb, Math.max(0, Math.min(1, t)));
 }
+function currentSunDate() {
+  return seasonDate(sunSeason, undefined, sunDateISO);
+}
+function currentObserver() {
+  let zip = '';
+  try { zip = String((activeLayout && activeLayout.planInfo && activeLayout.planInfo.zip) || localStorage.getItem('peakstead-cost-zip') || '').replace(/\D/g, '').slice(0, 5); } catch {}
+  const addr = (activeLayout && activeLayout.planInfo && activeLayout.planInfo.address) || '';
+  if (!zip) {
+    const m = String(addr).match(/\b(\d{5})\b/);
+    if (m) zip = m[1];
+  }
+  let parcel = null;
+  try { parcel = siteCfg && siteCfg.parcel; } catch {}
+  return resolveObserver({
+    lat: activeLayout && activeLayout.planInfo && activeLayout.planInfo.lat,
+    lon: activeLayout && activeLayout.planInfo && activeLayout.planInfo.lon,
+    zip,
+    parcelLat: parcel && parcel.anchorLat,
+    parcelLon: parcel && parcel.anchorLon,
+  });
+}
+let lastSunState = null;
+function currentSun(force) {
+  if (lastSunState && !force) return lastSunState;
+  const obs = currentObserver();
+  const date = currentSunDate();
+  const hour = solarHourFromSlider(timeOfDay, obs.lat, date);
+  const pos = solarPosition(obs.lat, date, hour);
+  lastSunState = { obs, date, hour, ...pos, worldAzimuth: (pos.azimuth - facingBearing(houseFacing) + 180 + 360) % 360 };
+  return lastSunState;
+}
 function todLabel(u) {
-  if (u >= 0.88) return 'Night';
-  if (u >= 0.72) return 'Sunset';
-  if (u >= 0.5) return 'Afternoon';
-  if (u >= 0.22) return 'Morning';
-  return 'Dawn';
+  const s = currentSun();
+  if (s.elevation < -0.8) return 'Night';
+  return formatSolarHour(s.hour);
 }
 function syncTodUi() {
   const sl = $('tod'), lab = $('todVal');
   if (sl) sl.value = String(Math.round(timeOfDay * 100));
   if (lab) lab.textContent = todLabel(timeOfDay);
+  syncSunControls();
+  updateSunArc();
 }
-function setTimeOfDay(u) {
+function setTimeOfDay(u, { fromPlay = false } = {}) {
+  if (!fromPlay) stopSunPlay();
   timeOfDay = Math.max(0, Math.min(1, +u));
   if (!Number.isFinite(timeOfDay)) timeOfDay = 0.38;
   applyTimeOfDay();
@@ -350,32 +387,30 @@ function applyNightLights(night) {
   });
 }
 function applyTimeOfDay() {
+  lastSunState = null;
   if (!sun) return;
   const u = timeOfDay;
   const st = STYLES[currentStyle] || STYLES.default;
-  const setAmt = 0.86;
-  const night = Math.max(0, (u - setAmt) / (1 - setAmt));
-  const elev = Math.max(0, Math.sin((Math.min(u, setAmt) / setAmt) * Math.PI));
-  const az = (Math.min(u, setAmt) / setAmt) * Math.PI;
+  const s = currentSun();
+  const night = s.elevation < 0 ? Math.min(1, (-s.elevation) / 6) : 0;
   const R = Math.max(BW || 48, BH || 48) * 0.8 + 10;
   const dist = R * 1.5;
-  sun.position.set(Math.cos(az) * dist, 6 + elev * 110, Math.sin(az * 0.4 + 0.55) * dist * 0.75);
+  const worldAz = modelAzimuthForCompass(s.azimuth, houseFacing) * Math.PI / 180;
+  const el = s.elevation * Math.PI / 180;
+  const cosEl = Math.cos(el);
+  const horiz = Math.max(0.08, Math.abs(cosEl));
+  sun.position.set(Math.sin(worldAz) * horiz * dist, Math.sin(el) * dist, -Math.cos(worldAz) * horiz * dist);
   if (sun.target) sun.target.position.set(0, 0, 0);
   let sunCol = new THREE.Color(st.sunColor || '#fff3df');
   let bg = new THREE.Color(st.bg || '#cfe3f2');
   let sunI = st.sun ?? 1.6, hemiI = st.hemi ?? 0.95, ambI = st.ambient ?? 0;
-  if (u < 0.2) {
-    const g = 1 - u / 0.2;
-    sunCol = lerpHex(st.sunColor || '#fff3df', '#ffc4a0', g);
-    bg = lerpHex(st.bg || '#cfe3f2', '#f0c8b4', g * 0.7);
-    sunI *= 0.75 + 0.25 * (1 - g);
-  } else if (u >= 0.7 && night < 1) {
-    const g = Math.min(1, (u - 0.7) / (setAmt - 0.7));
-    sunCol = lerpHex(st.sunColor || '#fff3df', '#ff8a30', g);
-    bg = lerpHex(st.bg || '#cfe3f2', '#e8894a', g * 0.85);
-    sunI = (st.sun ?? 1.6) * (1.15 - 0.55 * g);
-    hemiI = (st.hemi ?? 0.95) * (1 - 0.45 * g);
-    ambI = (st.ambient ?? 0) * (1 - 0.6 * g);
+  const golden = s.elevation >= 0 && s.elevation < 14 ? 1 - (s.elevation / 14) : (s.elevation < 0 ? 1 : 0);
+  if (golden > 0 && night < 1) {
+    sunCol = lerpHex(st.sunColor || '#fff3df', '#ff8a30', golden);
+    bg = lerpHex(st.bg || '#cfe3f2', '#e8894a', golden * 0.85);
+    sunI = (st.sun ?? 1.6) * (1.15 - 0.55 * golden);
+    hemiI = (st.hemi ?? 0.95) * (1 - 0.45 * golden);
+    ambI = (st.ambient ?? 0) * (1 - 0.6 * golden);
   }
   if (night > 0) {
     sunCol = lerpHex(sunCol, '#1a2a4a', Math.min(1, night * 1.2));
@@ -960,7 +995,7 @@ function wallsOnRoom(WS, room, slack = 0.6) {
 }
 function translateSeg(w, dx, dy) { w[0] += dx; w[1] += dy; w[2] += dx; w[3] += dy; }
 function captureLayout() {
-  activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])), planInfo: (activeLayout && activeLayout.planInfo) ? { ...activeLayout.planInfo } : undefined, wallDecor: !!wallDecorOn, stairs: stairsOn !== false };
+  activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])), planInfo: { ...((activeLayout && activeLayout.planInfo) || {}), houseFacing, sunSeason, sunDate: sunDateISO }, wallDecor: !!wallDecorOn, stairs: stairsOn !== false };
   return activeLayout;
 }
 function rebuildPlan() {
@@ -2732,8 +2767,8 @@ function buildModel(model, opts = {}) {
   for (const r of M.rooms) { x0 = Math.min(x0, r[3]); y0 = Math.min(y0, r[4]); x1 = Math.max(x1, r[5]); y1 = Math.max(y1, r[6]); }
   CX = (x0 + x1) / 2; CZ = (y0 + y1) / 2; BW = x1 - x0; BH = y1 - y0;
   const R = Math.max(BW, BH) * 0.8 + 10;
-  sun.position.set(R * .7, 110, R * .9); sun.target.position.set(0, 0, 0);
   Object.assign(sun.shadow.camera, { left: -R, right: R, top: R, bottom: -R, near: 10, far: 400 }); sun.shadow.camera.updateProjectionMatrix();
+  applyTimeOfDay();
 
   const extMat = mats.extTex ? MAT[mats.extTex] : new THREE.MeshStandardMaterial({ color: mats.ext || '#ece5d8', roughness: .9 });
   const intMat = (st.intWalls && MAT[st.intWalls]) ? MAT[st.intWalls] : new THREE.MeshStandardMaterial({ color: mats.int || '#f8f6f1', roughness: .95 });
@@ -3220,7 +3255,7 @@ function buildModel(model, opts = {}) {
   if (wallDecorOn) currentItems = pruneOrphanWallDecor(currentItems, WS);
   dressItems = dressRooms(M, WS, currentItems, currentStyle, { wallDecor: wallDecorOn }) || [];
   ({ currentItems, dressItems, defaultItems } = applyFurnitureSolver(M.rooms, WS, currentItems, dressItems, defaultItems));
-  activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])), planInfo: (activeLayout && activeLayout.planInfo) ? { ...activeLayout.planInfo } : undefined, wallDecor: !!wallDecorOn, stairs: stairsOn !== false };
+  activeLayout = { version: 3, items: cloneItems(currentItems), rooms: cloneRooms(M.rooms), walls: cloneWalls(M.walls), roofs: cloneRoofs(M.roofs), finishes: JSON.parse(JSON.stringify(finishes || {})), deleted: JSON.parse(JSON.stringify(deletedRooms || [])), planInfo: { ...((activeLayout && activeLayout.planInfo) || {}), houseFacing, sunSeason, sunDate: sunDateISO }, wallDecor: !!wallDecorOn, stairs: stairsOn !== false };
   buildFloors();
   refreshItems();
   applyTimeOfDay();
@@ -4363,15 +4398,137 @@ function walkStep(dt) {
   camera.rotation.set(pitch, yaw, 0, 'YXZ');
 }
 
-// ---------- north arrow ----------
-const narrow = $('narrow'), dir = new THREE.Vector3();
+// ---------- north arrow + sun compass ----------
+const sunCompass = $('sunCompass'), sunDot = $('sunDot'), sunArc = $('sunArc'), sunMeta = $('sunMeta'), dir = new THREE.Vector3();
+let lastSunArcKey = '';
 function updateNorth() {
+  if (!sunCompass) return;
   camera.getWorldDirection(dir);
   let ang;
   if (Math.hypot(dir.x, dir.z) < 1e-3) { const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion); ang = Math.atan2(up.x, -up.z); }
   else ang = Math.atan2(dir.x, -dir.z);
   if (!Number.isFinite(ang)) return;
-  narrow.setAttribute('transform', `rotate(${(-ang * 180 / Math.PI).toFixed(1)})`);
+  const trueNorth = (180 - facingBearing(houseFacing)) * Math.PI / 180;
+  sunCompass.setAttribute('transform', `rotate(${(-(ang - trueNorth) * 180 / Math.PI).toFixed(1)})`);
+  const s = currentSun();
+  if (sunDot) {
+    const r = 36 - Math.max(0, Math.min(90, s.elevation)) / 90 * 16;
+    sunDot.setAttribute('transform', `rotate(${s.azimuth.toFixed(1)}) translate(0,${(-r).toFixed(1)})`);
+    sunDot.setAttribute('opacity', s.elevation > -1 ? '1' : '0.25');
+  }
+}
+function updateSunArc() {
+  if (!sunArc) return;
+  const obs = currentObserver();
+  const date = currentSunDate();
+  const key = [obs.lat.toFixed(3), isoDate(date), houseFacing].join('|');
+  if (key === lastSunArcKey) return;
+  lastSunArcKey = key;
+  const { points } = sunArcSamples(obs.lat, date, 28);
+  if (!points.length) { sunArc.setAttribute('d', ''); return; }
+  const d = points.map((p, i) => {
+    const r = 36 - Math.max(0, Math.min(90, p.elevation)) / 90 * 16;
+    const a = p.azimuth * Math.PI / 180;
+    const x = Math.sin(a) * r, y = -Math.cos(a) * r;
+    return `${i ? 'L' : 'M'}${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(' ');
+  sunArc.setAttribute('d', d);
+}
+function syncSunControls() {
+  const face = $('bFacing'), season = $('bSeason'), dateEl = $('bSunDate');
+  if (face) face.value = houseFacing;
+  if (season) season.value = SEASONS[sunSeason] ? sunSeason : 'date';
+  if (dateEl) {
+    dateEl.hidden = sunSeason !== 'date';
+    dateEl.value = sunDateISO || isoDate(currentSunDate());
+  }
+  if (sunMeta) {
+    const s = currentSun();
+    const faceLab = ({ n:'N', ne:'NE', e:'E', se:'SE', s:'S', sw:'SW', w:'W', nw:'NW' })[houseFacing] || 'S';
+    const el = s.elevation > -0.8 ? `${Math.round(s.elevation)}°` : 'set';
+    sunMeta.textContent = `Faces ${faceLab} · ${seasonLabel(sunSeason, currentSunDate())} · ${el}`;
+  }
+  const title = $('north');
+  if (title) {
+    const s = currentSun();
+    const obs = s.obs;
+    title.title = `Compass and sun path · ${obs.label} (${obs.lat.toFixed(2)}°N)`;
+  }
+}
+function persistSunSettings() {
+  const rec = { houseFacing, sunSeason, sunDate: sunDateISO };
+  if (SRC && (SRC.kind === 'example' || SRC.kind === 'draft' || SRC.kind === 'embed')) {
+    const key = 'peakstead-sun:' + (SRC.kind || 'example') + ':' + (currentId || SRC.id || 'default');
+    try { sessionStorage.setItem(key, JSON.stringify(rec)); } catch {}
+    return;
+  }
+  if (!activeLayout) try { captureLayout(); } catch {}
+  if (activeLayout) activeLayout.planInfo = { ...(activeLayout.planInfo || {}), ...rec };
+  try {
+    const snap = (typeof getPlanSnapshot === 'function') ? getPlanSnapshot() : { planInfo: activeLayout && activeLayout.planInfo, src: SRC, exampleId: currentId };
+    if (typeof savePlanInfo === 'function') savePlanInfo(snap, { ...(snap.planInfo || {}), ...rec });
+  } catch {}
+  if (SRC && SRC.kind === 'project') {
+    clearTimeout(clientSaveTimer);
+    clientSaveTimer = setTimeout(() => { saveLayoutRemote(captureLayout()).catch(() => {}); }, 800);
+  }
+}
+function restoreSunSettings() {
+  let rec = {};
+  if (activeLayout && activeLayout.planInfo) rec = { ...activeLayout.planInfo };
+  if (SRC && (SRC.kind === 'example' || SRC.kind === 'draft' || SRC.kind === 'embed')) {
+    const key = 'peakstead-sun:' + (SRC.kind || 'example') + ':' + (currentId || SRC.id || 'default');
+    try { rec = { ...rec, ...JSON.parse(sessionStorage.getItem(key) || '{}') }; } catch {}
+  }
+  houseFacing = parseFacing(rec.houseFacing);
+  if (SEASONS[rec.sunSeason]) sunSeason = rec.sunSeason;
+  else sunSeason = 'date';
+  sunDateISO = (rec.sunDate && parseISODate(rec.sunDate)) ? rec.sunDate : (sunSeason === 'date' ? isoDate(new Date()) : isoDate(seasonDate(sunSeason)));
+  lastSunArcKey = '';
+  applyTimeOfDay();
+  syncTodUi();
+}
+function setHouseFacing(id, { persist = true } = {}) {
+  stopSunPlay();
+  houseFacing = parseFacing(id);
+  lastSunArcKey = '';
+  applyTimeOfDay();
+  syncTodUi();
+  if (persist) persistSunSettings();
+}
+function setSunSeason(id, dateISO, { persist = true } = {}) {
+  stopSunPlay();
+  sunSeason = SEASONS[id] ? id : 'date';
+  if (sunSeason === 'date') sunDateISO = (dateISO && parseISODate(dateISO)) ? dateISO : (sunDateISO || isoDate(new Date()));
+  else sunDateISO = isoDate(seasonDate(sunSeason));
+  lastSunArcKey = '';
+  applyTimeOfDay();
+  syncTodUi();
+  if (persist) persistSunSettings();
+}
+function stopSunPlay() {
+  if (sunPlayRaf) { cancelAnimationFrame(sunPlayRaf); sunPlayRaf = 0; }
+  const btn = $('bSunPlay');
+  if (btn) { btn.classList.remove('on'); btn.textContent = 'Play sun path'; }
+}
+function playSunPath(on) {
+  if (on === false || (on == null && sunPlayRaf)) { stopSunPlay(); return false; }
+  stopSunPlay();
+  const dur = 11000;
+  const u0 = 0, u1 = DAYLIGHT_END;
+  const t0 = performance.now();
+  armQualityGrace(dur + 2500);
+  const btn = $('bSunPlay');
+  if (btn) { btn.classList.add('on'); btn.textContent = 'Stop sun path'; }
+  const step = (now) => {
+    const k = Math.min(1, (now - t0) / dur);
+    const eased = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+    setTimeOfDay(u0 + (u1 - u0) * eased, { fromPlay: true });
+    if (k < 1 && $('bSunPlay') && $('bSunPlay').classList.contains('on')) sunPlayRaf = requestAnimationFrame(step);
+    else stopSunPlay();
+  };
+  sunPlayRaf = requestAnimationFrame(step);
+  return true;
 }
 
 // ---------- GLB / glTF models (uploaded by users) ----------
@@ -4398,8 +4555,8 @@ function buildGLB(gltfScene, meta = {}) {
   box.setFromObject(gltfScene); const s2 = box.getSize(new THREE.Vector3());
   CX = 0; CZ = 0; BW = s2.x; BH = s2.z;
   const R = Math.max(BW, BH) * 0.8 + 10;
-  sun.position.set(R * .7, 110, R * .9);
   Object.assign(sun.shadow.camera, { left: -R, right: R, top: R, bottom: -R, near: 10, far: 400 }); sun.shadow.camera.updateProjectionMatrix();
+  applyTimeOfDay();
   M = { name: meta.name || 'Model', title: meta.name || 'Model', subtitle: meta.subtitle || '', rooms: [], walkStart: [0, BH / 2 + 6, 0] };
   $('mtitle').textContent = M.title; $('msub').textContent = M.subtitle;
   document.title = `${M.name} — PeakStead Designs`;
@@ -4504,6 +4661,7 @@ async function loadExample(id, opts = {}) {
   buildModel(mod.default, { layout: activeLayout });
   setMode('orbit', true);
   window.app.current = entry.id;
+  restoreSunSettings();
 }
 async function loadProjectModel() {
   assetBase = SRC.kind === 'share' ? `/api/share/${encodeURIComponent(SRC.token)}` : `/api/projects/${encodeURIComponent(SRC.id)}`;
@@ -4527,6 +4685,7 @@ async function loadProjectModel() {
     buildModel(mod.default, { layout: activeLayout });
     setMode('orbit', true);
     window.app.current = entry.id;
+    restoreSunSettings();
     await loadProjectSite(p);
     return;
   }
@@ -4548,6 +4707,7 @@ async function loadProjectModel() {
     }
   } catch (e) { console.error(e); return showError('This 3D model could not be opened: ' + (e.message || e)); }
   setMode('orbit', true);
+  restoreSunSettings();
   await loadProjectSite(p);
 }
 
@@ -4681,6 +4841,10 @@ if ($('tod')) {
   $('tod').addEventListener('input', (e) => setTimeOfDay((+e.target.value) / 100));
   syncTodUi();
 }
+if ($('bFacing')) $('bFacing').addEventListener('change', (e) => setHouseFacing(e.target.value));
+if ($('bSeason')) $('bSeason').addEventListener('change', (e) => setSunSeason(e.target.value, $('bSunDate') && $('bSunDate').value));
+if ($('bSunDate')) $('bSunDate').addEventListener('change', (e) => setSunSeason('date', e.target.value));
+if ($('bSunPlay')) $('bSunPlay').addEventListener('click', () => playSunPath());
 if ($('bQuality')) {
   $('bQuality').value = qualityMode;
   $('bQuality').addEventListener('change', (e) => setQualityMode(e.target.value));
@@ -4729,6 +4893,7 @@ function loadJsonModel(raw, fallbackName = 'Builder home', view = 'orbit') {
   frameModel(view);
   window.app.current = jsonModel.id || 'builder';
   if ($('back') && (SRC.kind === 'draft' || SRC.kind === 'embed')) { $('back').href = '/builder'; $('back').textContent = '← Builder'; }
+  restoreSunSettings();
   return true;
 }
 function loadBuilderDraft() {
@@ -4844,6 +5009,12 @@ window.app = {
   snapWallDecor,
   setTimeOfDay,
   getTimeOfDay: () => timeOfDay,
+  setHouseFacing, getHouseFacing: () => houseFacing,
+  setSunSeason, getSunSeason: () => sunSeason,
+  getSunDate: () => sunDateISO,
+  playSunPath, stopSunPlay,
+  sliderFromSolarHour: (hour) => sliderFromSolarHour(hour, currentObserver().lat, currentSunDate()),
+  getSunInfo: () => ({ facing: houseFacing, season: sunSeason, date: sunDateISO, ...currentSun() }),
   getQualityLevel: () => qualityLevel,
   setQualityMode, getQualityMode: () => qualityMode,
   lockQuality: (on) => { qualityLocked = !!on; },

@@ -116,6 +116,10 @@ export function sanitizeLayout(raw) {
       price: String(raw.planInfo.price || '').slice(0, 40),
       contactName: String(raw.planInfo.contactName || '').slice(0, 80),
       contactPhone: String(raw.planInfo.contactPhone || '').slice(0, 40),
+      houseFacing: ['n','ne','e','se','s','sw','w','nw'].includes(String(raw.planInfo.houseFacing || '')) ? raw.planInfo.houseFacing : undefined,
+      sunSeason: ['winter','equinox','summer','date'].includes(String(raw.planInfo.sunSeason || '')) ? raw.planInfo.sunSeason : undefined,
+      sunDate: String(raw.planInfo.sunDate || '').slice(0, 10),
+      zip: String(raw.planInfo.zip || '').replace(/\D/g, '').slice(0, 5),
     };
   }
   const wallDecor = raw.wallDecor === true;
