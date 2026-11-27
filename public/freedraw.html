@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Free Draw — PeakStead Designs</title>
+<meta name="description" content="Sketch the house you have in mind with your finger, mouse, or Apple Pencil. PeakStead Designs turns it into a 2D floor plan and a furnished 3D model.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/site.css">
+<link rel="stylesheet" href="/css/freedraw.css">
+</head>
+<body class="freedraw">
+<main>
+  <div class="fd-shell">
+    <div class="fd-toolbar">
+      <div class="title">Free Draw</div>
+      <div class="seg" role="tablist" aria-label="View">
+        <button type="button" id="vSketch" class="on">Sketch</button>
+        <button type="button" id="v2d" disabled title="Make your plan first">2D Plan</button>
+        <button type="button" id="v3d" disabled title="Make your plan first">3D Model</button>
+      </div>
+      <div class="stats" id="stats"></div>
+      <span class="spacer"></span>
+      <button type="button" class="btn small primary" id="make">Make my plan</button>
+      <button type="button" class="btn small" id="save" disabled>Save to My Projects</button>
+    </div>
+    <div class="fd-body" id="body">
+      <aside class="fd-side" id="side">
+        <section>
+          <h2>1. Draw</h2>
+          <div class="tools" role="radiogroup" aria-label="Drawing tool">
+            <button type="button" data-tool="wall" class="on" title="Draw walls">✏️ Walls</button>
+            <button type="button" data-tool="door" title="Mark a door: a short line across the wall">🚪 Door</button>
+            <button type="button" data-tool="window" title="Mark a window: a short line along the wall">🪟 Window</button>
+            <button type="button" data-tool="label" title="Tap inside a room to name it">🏷️ Label</button>
+            <button type="button" data-tool="erase" title="Tap a line or label to erase it">🧽 Erase</button>
+          </div>
+          <div class="labels" id="labelPick" hidden></div>
+          <div class="row tight">
+            <button type="button" class="btn small" id="undo">Undo</button>
+            <button type="button" class="btn small" id="redo">Redo</button>
+            <button type="button" class="btn small danger" id="clear">Clear</button>
+          </div>
+          <label class="sample">Try a sample sketch
+            <select id="sample">
+              <option value="">Choose…</option>
+              <option value="ranch">Ranch with garage and porch</option>
+              <option value="cottage">Simple cottage</option>
+              <option value="lshape">L-shaped home</option>
+            </select>
+          </label>
+        </section>
+        <section>
+          <h2>2. Size</h2>
+          <div class="seg small" id="sizeMode">
+            <button type="button" data-mode="dims" class="on">Width × depth</button>
+            <button type="button" data-mode="sqft">Total sq ft</button>
+          </div>
+          <div class="dims" id="dimsRow">
+            <label>Width (ft)<input id="w" type="number" inputmode="numeric" min="12" max="400" value="56"></label>
+            <label>Depth (ft)<input id="d" type="number" inputmode="numeric" min="12" max="400" value="30"></label>
+          </div>
+          <div id="sqftRow" hidden>
+            <label>Heated sq ft (not garage or porch)<input id="sf" type="number" inputmode="numeric" min="200" max="20000" value="1800"></label>
+          </div>
+          <p class="note">Width and depth are the house, not counting a porch.</p>
+        </section>
+        <section>
+          <h2>3. Make it real</h2>
+          <p class="note">Tap <b>Make my plan</b>. Your lines get straightened and squared up, rooms are found, and doors, windows, and furniture are added.</p>
+          <label class="chk"><input type="checkbox" id="showClean" checked> Show cleaned-up lines</label>
+          <div id="result" class="result" hidden></div>
+        </section>
+      </aside>
+      <section class="fd-stage" id="stage">
+        <canvas id="pad" aria-label="Drawing pad"></canvas>
+        <div class="hint" id="hint">Draw the outside walls of your house, then the inside walls. Lines don't need to be straight. Use Label to tap a room and name it.</div>
+        <iframe id="viewer" title="Plan and 3D model" src="about:blank" hidden></iframe>
+      </section>
+    </div>
+  </div>
+</main>
+<script type="module" src="/js/freedraw.js"></script>
+</body>
+</html>

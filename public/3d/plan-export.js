@@ -127,7 +127,8 @@ function xform(b, box, scale) {
   const dw = b.w * scale.ipf, dh = b.h * scale.ipf;
   const ox = box.x + (box.w - dw) / 2, oy = box.y + (box.h - dh) / 2;
   const X = (x) => ox + (x - b.x0) * scale.ipf;
-  const Y = (y) => oy + (b.y1 - y) * scale.ipf; // north up
+  // Plan view matches the 3D model: north (-y) is up the page, south (+y, the front) is down.
+  const Y = (y) => oy + (y - b.y0) * scale.ipf;
   const S = (ft) => ft * scale.ipf;
   return { X, Y, S, ox, oy, dw, dh, scale, b, box };
 }
@@ -256,7 +257,7 @@ function drawFloorPlan(xf, snap, { labels = true, dims = true } = {}) {
   const WS = snap.walls || {};
   // room fills (heated light, garage slightly darker, porch hatched-ish pale)
   for (const r of rooms) {
-    const x = xf.X(r[3]), y = xf.Y(r[6]), w = xf.S(r[5] - r[3]), h = xf.S(r[6] - r[4]);
+    const x = xf.X(r[3]), y = xf.Y(r[4]), w = xf.S(r[5] - r[3]), h = xf.S(r[6] - r[4]);
     const out = isOutsideRoom(r);
     const gar = /garage|\bbay\b|\bshop\b/i.test(r[0] || '');
     const fill = out ? '#f7f4ee' : gar ? '#eceae4' : '#ffffff';
@@ -265,7 +266,7 @@ function drawFloorPlan(xf, snap, { labels = true, dims = true } = {}) {
   const drawWalls = (list, sw, fill) => {
     for (const w of (list || [])) {
       const [a, b, c, d] = wallRect(w);
-      bits.push(rect(xf.X(a), xf.Y(d), xf.S(c - a), xf.S(d - b), sw, fill));
+      bits.push(rect(xf.X(a), xf.Y(b), xf.S(c - a), xf.S(d - b), sw, fill));
     }
   };
   drawWalls(WS.int, swInt, '#111');
@@ -275,7 +276,7 @@ function drawFloorPlan(xf, snap, { labels = true, dims = true } = {}) {
   for (const w of (WS.win || [])) {
     const [a, b, c, d] = wallRect(w);
     const horiz = isHoriz(w);
-    bits.push(rect(xf.X(a), xf.Y(d), xf.S(c - a), xf.S(d - b), 0.003, '#fff', '#fff'));
+    bits.push(rect(xf.X(a), xf.Y(b), xf.S(c - a), xf.S(d - b), 0.003, '#fff', '#fff'));
     if (horiz) {
       const midY = xf.Y((b + d) / 2);
       bits.push(line(xf.X(a), midY, xf.X(c), midY, swOpen));
@@ -296,7 +297,7 @@ function drawFloorPlan(xf, snap, { labels = true, dims = true } = {}) {
     const horiz = isHoriz(w);
     const width = horiz ? (c - a) : (d - b);
     const cx = (a + c) / 2, cy = (b + d) / 2;
-    bits.push(rect(xf.X(a), xf.Y(d), xf.S(c - a), xf.S(d - b), 0.003, '#fff', '#fff'));
+    bits.push(rect(xf.X(a), xf.Y(b), xf.S(c - a), xf.S(d - b), 0.003, '#fff', '#fff'));
     const meta = doorMeta.get(i) || {};
     if (meta.removed) {
       // Full-height opening: jamb ticks only, no swing or garage leaf / header mark.
@@ -310,7 +311,13 @@ function drawFloorPlan(xf, snap, { labels = true, dims = true } = {}) {
       bits.push(text(xf.X(cx), xf.Y(cy), 'OPEN', 0.08, { bold: true, rotate: horiz ? 0 : -90 }));
       return;
     }
-    const garage = meta.kind === 'garage' || width >= 7.5;
+    // Wide opening = overhead garage door only if a garage room is on one side (a wide cased opening
+    // between a kitchen and living room is just an opening).
+    const nearGarage = !!(insideRoom(rooms, cx, cy + 2, (r) => /garage|\bbay\b|\bshop\b/i.test(r[0] || ''))
+      || insideRoom(rooms, cx, cy - 2, (r) => /garage|\bbay\b|\bshop\b/i.test(r[0] || ''))
+      || insideRoom(rooms, cx + 2, cy, (r) => /garage|\bbay\b|\bshop\b/i.test(r[0] || ''))
+      || insideRoom(rooms, cx - 2, cy, (r) => /garage|\bbay\b|\bshop\b/i.test(r[0] || '')));
+    const garage = meta.kind === 'garage' || (width >= 7.5 && nearGarage);
     if (garage) {
       if (horiz) {
         bits.push(line(xf.X(a), xf.Y(cy) - 0.03, xf.X(c), xf.Y(cy) - 0.03, swOpen, '#111'));
@@ -325,6 +332,16 @@ function drawFloorPlan(xf, snap, { labels = true, dims = true } = {}) {
       return;
     }
     // jamb ticks
+    const jambs = () => {
+      if (horiz) {
+        bits.push(line(xf.X(a), xf.Y(b), xf.X(a), xf.Y(d), swOpen));
+        bits.push(line(xf.X(c), xf.Y(b), xf.X(c), xf.Y(d), swOpen));
+      } else {
+        bits.push(line(xf.X(a), xf.Y(b), xf.X(c), xf.Y(b), swOpen));
+        bits.push(line(xf.X(a), xf.Y(d), xf.X(c), xf.Y(d), swOpen));
+      }
+    };
+    if (width >= 7.5) { jambs(); return; } // wide cased opening: no door leaf to swing
     if (horiz) {
       bits.push(line(xf.X(a), xf.Y(b), xf.X(a), xf.Y(d), swOpen));
       bits.push(line(xf.X(c), xf.Y(b), xf.X(c), xf.Y(d), swOpen));
@@ -350,18 +367,17 @@ function drawFloorPlan(xf, snap, { labels = true, dims = true } = {}) {
       return 1;
     })();
     const r = xf.S(width);
+    // Hinge at the start of the opening; the leaf swings into the room and the arc
+    // runs from the open leaf to the closed position along the wall. Screen y grows
+    // with +y (south), so +inward on a horizontal wall is down the page.
     if (horiz) {
       const hx = xf.X(a), hy = xf.Y(cy);
-      const leafTo = xf.X(a) + (inward > 0 ? 0 : 0);
-      bits.push(line(hx, hy, hx, hy - inward * r, swOpen));
-      // arc from along-wall to into the room
-      const from = inward > 0 ? -90 : 90;
-      bits.push(arc90(hx, hy, r, from, 0.005));
+      bits.push(line(hx, hy, hx, hy + inward * r, swOpen));
+      bits.push(arc90(hx, hy, r, inward > 0 ? 0 : -90, 0.005));
     } else {
       const hx = xf.X(cx), hy = xf.Y(b);
       bits.push(line(hx, hy, hx + inward * r, hy, swOpen));
-      const from = inward > 0 ? 180 : 0;
-      bits.push(arc90(hx, hy, r, from, 0.005));
+      bits.push(arc90(hx, hy, r, inward > 0 ? 0 : 90, 0.005));
     }
   });
 
@@ -373,7 +389,7 @@ function drawFloorPlan(xf, snap, { labels = true, dims = true } = {}) {
     const w = +(it.w || 3.5), d = +(it.d || 10);
     const x0 = it.x - (alongX ? w : d) / 2, y0 = it.y - (alongX ? d : w) / 2;
     const x1 = it.x + (alongX ? w : d) / 2, y1 = it.y + (alongX ? d : w) / 2;
-    bits.push(rect(xf.X(x0), xf.Y(y1), xf.S(x1 - x0), xf.S(y1 - y0), 0.01, '#fff'));
+    bits.push(rect(xf.X(x0), xf.Y(y0), xf.S(x1 - x0), xf.S(y1 - y0), 0.01, '#fff'));
     const n = Math.max(4, Math.round((alongX ? d : w) / 0.85));
     for (let i = 1; i < n; i++) {
       const t = i / n;
@@ -389,6 +405,7 @@ function drawFloorPlan(xf, snap, { labels = true, dims = true } = {}) {
 
   if (labels) {
     for (const r of rooms) {
+      if (r[7] && r[7].planNoLabel) continue; // extra piece of an L-shaped room: the main piece carries the label
       const cx = xf.X((r[3] + r[5]) / 2), cy = xf.Y((r[4] + r[6]) / 2);
       const nm = (r[0] || 'ROOM').toUpperCase();
       const sz = `${fmtFtInTight(r[5] - r[3])} × ${fmtFtInTight(r[6] - r[4])}`;
@@ -649,7 +666,7 @@ function drawRoofPlan(xf, snap) {
   const wallH = snap.wallH || 9;
   // building outline under
   for (const r of (snap.rooms || [])) {
-    bits.push(rect(xf.X(r[3]), xf.Y(r[6]), xf.S(r[5] - r[3]), xf.S(r[6] - r[4]), 0.006, 'none', '#888'));
+    bits.push(rect(xf.X(r[3]), xf.Y(r[4]), xf.S(r[5] - r[3]), xf.S(r[6] - r[4]), 0.006, 'none', '#888'));
   }
   for (const rf of (snap.roofs || [])) {
     const polys = roofPolys(rf, wallH);
@@ -697,8 +714,8 @@ function drawSitePlan(xf, snap, lot) {
     const m = 25;
     const hb = boundsOf(snap);
     const a = hb.x0, b = hb.y0, c = hb.x1, d = hb.y1;
-    bits.push(rect(xf.X(a), xf.Y(d), xf.S(c - a), xf.S(d - b), 0.01, 'none', '#999'));
-    bits.push(rect(xf.X(a - m), xf.Y(d + m), xf.S((c + m) - (a - m)), xf.S((d + m) - (b - m)), 0.016, 'none', '#111'));
+    bits.push(rect(xf.X(a), xf.Y(b), xf.S(c - a), xf.S(d - b), 0.01, 'none', '#999'));
+    bits.push(rect(xf.X(a - m), xf.Y(b - m), xf.S((c + m) - (a - m)), xf.S((d + m) - (b - m)), 0.016, 'none', '#111'));
     bits.push(dimV(xf, d, d + m, (a + c) / 2, 0.2));
     bits.push(dimV(xf, b - m, b, (a + c) / 2, 0.2));
     bits.push(dimH(xf, a - m, a, (b + d) / 2, 0.2));
@@ -712,7 +729,7 @@ function drawSitePlan(xf, snap, lot) {
   for (const r of (snap.rooms || [])) {
     const out = isOutsideRoom(r);
     const gar = /garage|\bbay\b|\bshop\b/i.test(r[0] || '');
-    bits.push(rect(xf.X(r[3]), xf.Y(r[6]), xf.S(r[5] - r[3]), xf.S(r[6] - r[4]), 0.012, out ? '#f4f1ea' : gar ? '#ddd' : '#fff'));
+    bits.push(rect(xf.X(r[3]), xf.Y(r[4]), xf.S(r[5] - r[3]), xf.S(r[6] - r[4]), 0.012, out ? '#f4f1ea' : gar ? '#ddd' : '#fff'));
   }
   // driveway from garage doors
   for (const w of (snap.walls?.door || [])) {
@@ -739,14 +756,14 @@ function drawSitePlan(xf, snap, lot) {
       if (eastGar) polyD = [a - depth, b - 1, a, d + 1];
       else polyD = [c, b - 1, c + depth, d + 1];
     }
-    bits.push(rect(xf.X(polyD[0]), xf.Y(polyD[3]), xf.S(polyD[2] - polyD[0]), xf.S(polyD[3] - polyD[1]), 0.008, '#e8e6e1', '#333'));
+    bits.push(rect(xf.X(polyD[0]), xf.Y(polyD[1]), xf.S(polyD[2] - polyD[0]), xf.S(polyD[3] - polyD[1]), 0.008, '#e8e6e1', '#333'));
     bits.push(text(xf.X((polyD[0] + polyD[2]) / 2), xf.Y((polyD[1] + polyD[3]) / 2), 'DRIVEWAY (TYP.)', 0.08));
   }
   const types = snap.itemTypes || {};
   for (const it of (snap.items || [])) {
     const t = it.type || '';
     const rec = itemRectPlan(it);
-    const x = xf.X(rec[0]), y = xf.Y(rec[3]), w = xf.S(rec[2] - rec[0]), h = xf.S(rec[3] - rec[1]);
+    const x = xf.X(rec[0]), y = xf.Y(rec[1]), w = xf.S(rec[2] - rec[0]), h = xf.S(rec[3] - rec[1]);
     if (/^septicTank/.test(t)) {
       bits.push(rect(x, y, w, h, 0.01, '#fff', '#111'));
       bits.push(text(xf.X(it.x), xf.Y(it.y), 'SEPTIC', 0.08, { bold: true }));
