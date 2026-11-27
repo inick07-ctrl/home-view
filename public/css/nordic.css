@@ -148,3 +148,32 @@ body.builder{background:#f7f7f7}
 @media (max-width:820px){.feature-grid{grid-template-columns:1fr}}
 .hero-media,.hero-media img{object-position:50% 70%}
 .hero-shade{background:linear-gradient(180deg,rgba(20,20,20,.46) 0%,rgba(20,20,20,.22) 30%,rgba(0,0,0,0) 55%,rgba(0,0,0,.30) 100%) !important}
+
+/* Free Draw workspace */
+.fd-toolbar{background:rgba(255,255,255,.94);border-bottom-color:var(--line)}
+.fd-toolbar .title{font-weight:600;letter-spacing:-.02em}
+.fd-toolbar .stats .sf{color:var(--acc2)}
+.fd-side{background:#fff;border-right-color:var(--line)}
+.fd-side section{border-bottom-color:var(--line)}
+.fd-side h2{color:var(--soft);font-weight:600}
+.tools button,.labels button{background:#fff;border-color:#e3e3e3;color:var(--ink);font-weight:500}
+.tools button:hover,.labels button:hover{background:var(--band)}
+.tools button.on,.labels button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.fd-side select{background:#fff;color:var(--ink);border-color:#d9d9d9}
+.fd-side label.chk{color:var(--ink)}
+.result .warn{color:#b5651d}
+.fd-stage{background:#f7f5f0}
+.fd-stage iframe{background:#e6e9ea}
+.fd-stage .hint{background:rgba(255,255,255,.92);color:var(--ink);box-shadow:0 4px 16px rgba(0,0,0,.08)}
+
+/* Login / sign-up hero keeps the original PeakStead 3D background (dark night render). */
+.hero-band.hero-classic{background:#071018}
+.hero-classic .hero-media,.hero-classic .hero-media img{object-position:72% 50%}
+.hero-classic .hero-shade{background:
+  linear-gradient(180deg,rgba(6,12,22,.62) 0%,rgba(6,12,22,.30) 34%,rgba(6,12,22,.18) 64%,rgba(6,12,22,.55) 100%),
+  linear-gradient(90deg,rgba(6,12,22,.35) 0%,transparent 45%) !important}
+.hero-classic #auth{background:rgba(255,255,255,.95);box-shadow:0 18px 50px rgba(0,0,0,.35)}
+@media (max-width:820px){.hero-classic .hero-media,.hero-classic .hero-media img{object-position:82% 40%}}
+.hero-classic .hero-copy h1,.hero-classic .hero-copy p.lead{text-shadow:0 1px 3px rgba(0,0,0,.75),0 2px 22px rgba(0,0,0,.6)}
+.hero-classic .hero-shade::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 48% 36% at 50% 30%,rgba(6,12,22,.55),transparent 70%)}
+@media (max-width:520px){header.top nav{gap:0;flex-wrap:nowrap}header.top .pill{padding:6px 8px;font-size:13px}header.top a.pill[href="/#signup"]{margin-left:2px}}
