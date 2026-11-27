@@ -13,7 +13,7 @@ export const LOGO = '<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><pa
 export function header(user, active = '') {
   const h = document.createElement('header'); h.className = 'top';
   const link = (href, text, key) => `<a class="pill${active === key ? ' on' : ''}" href="${href}">${text}</a>`;
-  h.innerHTML = `<a class="brand" href="${user ? '/dashboard' : '/'}">${LOGO}<span>PeakStead Designs</span></a><nav>${link('/examples', 'Examples', 'examples')}${link('/builder', 'Builder', 'builder')}${user
+  h.innerHTML = `<a class="brand" href="${user ? '/dashboard' : '/'}">${LOGO}<span>PeakStead Designs</span></a><nav>${link('/examples', 'Examples', 'examples')}${link('/builder', 'Builder', 'builder')}${link('/freedraw', 'Free Draw', 'freedraw')}${user
     ? link('/dashboard', 'My projects', 'dashboard') + (user.admin ? link('/admin', 'Sponsors', 'admin') : '') + `<button class="pill" id="logoutBtn" title="${esc(user.email)}">Log out</button>`
     : link('/#login', 'Log in', 'login') + link('/#signup', 'Sign up', 'signup')}</nav>`;
   document.body.prepend(h);
@@ -48,7 +48,7 @@ export function renderGallery(el, project, fileUrl, { onDelete } = {}) {
 }
 
 export function footer() {
-  const html = `<a class="foot-brand" href="/">${LOGO}<span>PeakStead Designs</span></a> · <a href="/examples">Examples</a> · <a href="/builder">Builder</a> · <a href="/advertise">Advertise with PeakStead Designs</a>`;
+  const html = `<a class="foot-brand" href="/">${LOGO}<span>PeakStead Designs</span></a> · <a href="/examples">Examples</a> · <a href="/builder">Builder</a> · <a href="/freedraw">Free Draw</a> · <a href="/advertise">Advertise with PeakStead Designs</a>`;
   const f = document.querySelector('footer');
   if (f) { f.classList.add('site-foot'); f.innerHTML = html; return f; }
   const el = document.createElement('footer'); el.className = 'site-foot'; el.innerHTML = html;
