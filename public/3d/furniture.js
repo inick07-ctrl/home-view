@@ -2318,6 +2318,7 @@ const DRESS_PALETTES = {
   modern: { rug: '#d9d6d0', field: '#f0eeea', art: '#e8e6e1', accent: '#2c2c2c', accent2: '#8a8a8a', frame: '#1a1a1a', pot: '#4a4a4a', plant: 'olive', wood: 'oak' },
   scandinavian: { rug: '#e8e2d6', field: '#f7f3ec', art: '#efe8dc', accent: '#8aa0a8', accent2: '#c9d4c8', frame: '#d7d2c8', pot: '#efece5', plant: 'olive', wood: 'oak' },
   'warm-luxury': { rug: '#6e3b2e', field: '#c4a574', art: '#e8dcc8', accent: '#3d2b20', accent2: '#c9a45c', frame: '#3d2b20', pot: '#3d2b20', plant: 'fiddle', wood: 'walnut' },
+  'nordic-modern': { rug: '#ddd5c6', field: '#efe9de', art: '#e9e2d4', accent: '#1c1a17', accent2: '#c08a4e', frame: '#1c1a17', pot: '#2a2724', plant: 'olive', wood: 'oak' },
   'english-country': { rug: '#c4b8a4', field: '#e4ddd0', art: '#e4ddd0', accent: '#8c927c', accent2: '#d4b07a', frame: '#8c927c', pot: '#c9b49a', plant: 'olive', wood: 'oak' },
 };
 

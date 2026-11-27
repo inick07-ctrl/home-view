@@ -1,0 +1,44 @@
+/* PeakStead Designs viewer — Nordic Modern light chrome (frosted white panels, near-black type, blue accent). */
+@font-face{font-family:"Inter";font-style:normal;font-weight:100 900;font-display:swap;src:url(/fonts/InterVariable.woff2) format("woff2")}
+:root{--bg:rgba(255,255,255,.86);--fg:#171717;--acc:#3d6ce1}
+html,body{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;letter-spacing:-.01em;background:#e6e9ea}
+#topbar{background:rgba(255,255,255,.88);color:#171717;backdrop-filter:saturate(1.4) blur(14px);-webkit-backdrop-filter:saturate(1.4) blur(14px);box-shadow:none;border-bottom:1px solid rgba(0,0,0,.06)}
+#topbar .brand{color:#171717;font-weight:600}
+#topbar .brand svg path:last-child{fill:#171717}
+#topbar .back,#saveWrap .save-ctl,#tabs button,#favBtn{background:#fff;color:#171717;border:1px solid #e3e3e3;font-weight:500}
+#topbar .back:hover,#saveWrap .save-ctl:hover,#tabs button:hover{background:#f4f4f4}
+#saveWrap .save-ctl.primary,#editPlanBtn{background:#3d6ce1;border-color:#3d6ce1;color:#fff;font-weight:500}
+#tabs button.on{background:#171717;border-color:#171717;color:#fff}
+#costPill{background:#f4f4f4;border-color:#f4f4f4;color:#171717;font-weight:600}
+#costPill:hover,#costPill.on{background:#171717;border-color:#171717;color:#fff}
+#costDrawer,#planReadout{background:rgba(255,255,255,.96);color:#171717;border:0;box-shadow:0 12px 40px rgba(0,0,0,.14)}
+#planReadoutClose{color:#171717}
+.pr-room,.pr-room.pr-flag{border-top-color:#ececec}
+.pr-flags{color:#b5651d}
+#hud{background:rgba(255,255,255,.86);color:#171717;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-radius:18px;box-shadow:0 8px 30px rgba(0,0,0,.10)}
+#hud h1{font-weight:600;letter-spacing:-.02em}
+#toggleHud{color:#171717}
+.btns button{background:#fff;color:#171717;border:1px solid #e3e3e3;border-radius:999px;padding:6px 11px;font-weight:450}
+.btns button:hover{background:#f4f4f4}
+.btns button.on{background:#171717;color:#fff;border-color:#171717}
+#bEdit{border-color:#3d6ce1 !important;color:#3d6ce1;font-weight:600}
+.stylepick,.todpick{color:#171717}
+.stylepick select{background:#fff;color:#171717;border:1px solid #e3e3e3;border-radius:999px;padding:6px 10px}
+.todpick input[type=range],#siteHud input[type=range]{accent-color:#3d6ce1}
+#siteHud{border-top-color:#ececec}
+#siteHud input[type=number],#siteHud select{background:#fff;border-color:#e3e3e3}
+#north{background:rgba(255,255,255,.9)}
+#sf{background:rgba(255,255,255,.88);color:#171717;box-shadow:0 6px 22px rgba(0,0,0,.10)}
+#sf .sf-warn{color:#b3261e}
+#pad button{background:rgba(255,255,255,.9);color:#171717;border:1px solid #e3e3e3}
+#walkmsg{background:rgba(255,255,255,.92);color:#171717;border-radius:16px}
+#tourLabel{background:rgba(255,255,255,.94);color:#171717}
+#welcome{background:rgba(20,20,20,.35);backdrop-filter:blur(6px)}
+.welcome-card,#contactSheet{background:#fff;color:#171717;border:0;border-radius:22px}
+.welcome-card input,#contactSheet input{background:#fff;color:#171717;border:1px solid #dcdcdc}
+.welcome-card input::placeholder{color:#a3a3a3}
+#welcomeStart{background:#3d6ce1;color:#fff}
+#welcomeContact,#welcomeSkip,#contactClose,#contactSave{background:#f4f4f4;color:#171717}
+#contactCall{color:#3d6ce1}
+#sponsorHud{border-top-color:#ececec}
+#exportPlansBtn{background:#fff !important;color:#171717 !important;border:1px solid #e3e3e3 !important;font-weight:500 !important}

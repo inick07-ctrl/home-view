@@ -162,8 +162,68 @@ const TEX = {
     }
   }, 256),
 };
+// Nordic Modern: warm larch battens, limestone with oak inlay, pale spruce panels
+TEX.larchBatten = canvasTex((g, s) => {
+  g.fillStyle = '#6b5038'; g.fillRect(0, 0, s, s);
+  const n = 10, bw = s / n;
+  for (let i = 0; i < n; i++) {
+    const v = rnd(i + 41);
+    const r = 200 + v * 22, gg = 162 + v * 20, b = 118 + v * 18;
+    g.fillStyle = `rgb(${r | 0},${gg | 0},${b | 0})`;
+    g.fillRect(i * bw + 3, 0, bw - 6, s);
+    for (let k = 0; k < 14; k++) {
+      g.fillStyle = `rgba(120,80,40,${0.05 + rnd(i * 31 + k) * 0.08})`;
+      g.fillRect(i * bw + 3 + rnd(i * 17 + k) * (bw - 8), 0, 1.2, s);
+    }
+    g.fillStyle = 'rgba(255,240,215,.16)'; g.fillRect(i * bw + 3, 0, 2, s);
+  }
+}, 512);
+TEX.larchRoof = canvasTex((g, s) => {
+  g.fillStyle = '#4a3c2e'; g.fillRect(0, 0, s, s);
+  const n = 10, bw = s / n;
+  for (let i = 0; i < n; i++) {
+    const v = rnd(i + 77);
+    const r = 138 + v * 20, gg = 116 + v * 16, b = 92 + v * 12;
+    g.fillStyle = `rgb(${r | 0},${gg | 0},${b | 0})`;
+    g.fillRect(i * bw + 3, 0, bw - 6, s);
+    g.fillStyle = 'rgba(255,240,220,.12)'; g.fillRect(i * bw + 3, 0, 2, s);
+  }
+}, 512);
+TEX.limestoneInlay = canvasTex((g, s) => {
+  g.fillStyle = '#ece6da'; g.fillRect(0, 0, s, s);
+  for (let i = 0; i < 2600; i++) {
+    const v = 200 + rnd(i) * 50;
+    g.fillStyle = `rgba(${v},${v - 10},${v - 26},.10)`;
+    g.fillRect(rnd(i + 1) * s, rnd(i + 2) * s, 2, 2);
+  }
+  // oak inlay strips framing each limestone slab
+  g.fillStyle = '#b98d5f';
+  const t = Math.max(3, s * 0.011);
+  g.fillRect(0, 0, s, t); g.fillRect(0, s / 2 - t / 2, s, t);
+  g.fillRect(0, 0, t, s); g.fillRect(s / 2 - t / 2, 0, t, s);
+  g.fillStyle = 'rgba(90,55,20,.25)';
+  g.fillRect(0, t - 1, s, 1); g.fillRect(0, s / 2 + t / 2 - 1, s, 1);
+}, 512);
+TEX.sprucePanel = canvasTex((g, s) => {
+  g.fillStyle = '#ecdcc0'; g.fillRect(0, 0, s, s);
+  for (let i = 0; i < 50; i++) {
+    g.fillStyle = `rgba(170,125,70,${0.025 + rnd(i + 5) * 0.04})`;
+    g.fillRect(0, rnd(i + 9) * s, s, 1 + rnd(i + 3) * 2);
+  }
+  g.fillStyle = 'rgba(120,85,45,.30)';
+  g.fillRect(0, 0, s, 2); g.fillRect(0, 0, 2, s);
+}, 256);
+TEX.clayPanel = canvasTex((g, s) => {
+  g.fillStyle = '#e4ddd1'; g.fillRect(0, 0, s, s);
+  for (let i = 0; i < 900; i++) {
+    const v = 205 + rnd(i) * 40;
+    g.fillStyle = `rgba(${v},${v - 6},${v - 16},.10)`;
+    g.fillRect(rnd(i + 3) * s, rnd(i + 4) * s, 3, 3);
+  }
+  g.fillStyle = '#c9a06a'; g.fillRect(0, 0, s, 4); g.fillRect(0, 0, 4, s);
+}, 256);
 TEX.grass.repeat.set(90, 90);
-const TEXSCALE = { whiteBoard: 6, ledgestone: 5, wood: 6, tile: 4, subway: 3, concrete: 10, porch: 4, gym: 4, stone: 3, terrace: 6, paver: 6, board: 4, brick: 5, metal: 6, shingle: 4, darkShingle: 5, limewash: 8, palePlaster: 10, lightOak: 5, walnutPlank: 5, slate: 8, lightStone: 3 };
+const TEXSCALE = { whiteBoard: 6, ledgestone: 5, wood: 6, tile: 4, subway: 3, concrete: 10, porch: 4, gym: 4, stone: 3, terrace: 6, paver: 6, board: 4, brick: 5, metal: 6, shingle: 4, darkShingle: 5, limewash: 8, palePlaster: 10, lightOak: 5, walnutPlank: 5, slate: 8, lightStone: 3, larchBatten: 3, larchRoof: 4, limestoneInlay: 7, sprucePanel: 6, clayPanel: 5 };
 const MAT = {};
 for (const k of ['subway', 'concrete', 'porch', 'gym', 'terrace', 'paver']) MAT[k] = new THREE.MeshLambertMaterial({ map: TEX[k] });
 for (const k of ['wood', 'tile', 'stone']) MAT[k] = new THREE.MeshStandardMaterial({ map: TEX[k], roughness: 0.72, metalness: 0.04 });
@@ -181,6 +241,10 @@ MAT.lightOak = new THREE.MeshStandardMaterial({ map: TEX.lightOak, roughness: .8
 MAT.walnutPlank = new THREE.MeshStandardMaterial({ map: TEX.walnutPlank, roughness: .78, color: '#ffffff' });
 MAT.slate = new THREE.MeshStandardMaterial({ map: TEX.slate, roughness: .5, metalness: .04, color: '#ffffff' });
 MAT.lightStone = new THREE.MeshStandardMaterial({ map: TEX.lightStone, roughness: .88, color: '#ffffff' });
+MAT.larchBatten = new THREE.MeshStandardMaterial({ map: TEX.larchBatten, roughness: .82, color: '#ffffff' });
+MAT.limestoneInlay = new THREE.MeshStandardMaterial({ map: TEX.limestoneInlay, roughness: .7, color: '#ffffff' });
+MAT.sprucePanel = new THREE.MeshStandardMaterial({ map: TEX.sprucePanel, roughness: .88, color: '#ffffff' });
+MAT.clayPanel = new THREE.MeshStandardMaterial({ map: TEX.clayPanel, roughness: .95, color: '#ffffff', side: THREE.DoubleSide });
 MAT.softFrame = new THREE.MeshStandardMaterial({ color: '#8c927c', roughness: .75 });
 MAT.galleryWhite = new THREE.MeshStandardMaterial({ color: '#f4f2ed', roughness: .96 });
 MAT.softWhite = new THREE.MeshStandardMaterial({ color: '#f7f4ee', roughness: .97 });
@@ -221,6 +285,19 @@ const STYLES = {
     daylight: true, amber: '#ffcc88', frame: '#5c4a38',
     glass: { color: '#c8d8e4', opacity: 0.34, emissive: '#ffe4b8', emissiveIntensity: 0.22 },
   },
+  'nordic-modern': {
+    id: 'nordic-modern', name: 'Nordic Modern',
+    floors: { wood: 'limestoneInlay', tile: 'limestoneInlay', gym: 'limestoneInlay', stone: 'limestoneInlay' },
+    intWalls: 'sprucePanel', ceiling: 'clayPanel',
+    ambient: 0.34, ambColor: '#fff6ea',
+    hemi: 1.25, hemiColor: '#fff4e4', groundColor: '#cdbfa6',
+    sun: 2.15, sunColor: '#ffe6c2', bg: '#e6e9ea',
+    fogNear: 280, fogFar: 640,
+    daylight: true, frame: '#8a5e36', groundTint: '#f2ead8',
+    // Warm larch cladding on walls and roof, oak window frames, pale clay-panel undersides.
+    exterior: { extTex: 'larchBatten', ext: '#c39461', trim: '#7a5434', roofTex: 'larchRoof', roof: '#a88460', roofUnder: '#e8dccb', roofUnderGlow: 0.22, winFrame: '#7a5434' },
+    glass: { color: '#d4e4ec', opacity: 0.26, emissive: '#fff1d8', emissiveIntensity: 0.22 },
+  },
   'english-country': {
     id: 'english-country', name: 'English Country',
     floors: { wood: 'slate', tile: 'slate', gym: 'slate', stone: 'slate' },
@@ -234,9 +311,19 @@ const STYLES = {
     glass: { color: '#cfe6f6', opacity: 0.3, emissive: '#fff3d2', emissiveIntensity: 0.4 },
   },
 };
+// Site-wide default render look (each home's own defaultStyle is still one click away in the Style menu).
+const DEFAULT_LOOK = 'nordic-modern';
 let currentStyle = 'default';
 let loadedModel = null;
 let dressItems = [];
+
+function styledMaterials(base, st) {
+  const m = { ...(base || {}) };
+  if (!st || !st.exterior) return m;
+  Object.assign(m, st.exterior);
+  if (m.gable && m.gable !== 'glass' && m.gable !== 'ext') m.gable = 'ext';
+  return m;
+}
 
 function applyStyleGlass(st) {
   const g = st && st.glass;
@@ -1082,7 +1169,7 @@ function refreshItems() {
   if (!itemsGroup) return;
   if (floorCtx && JSON.stringify({ holes: stairHoles().map(h => h.map(v => +v.toFixed(2))), fills: loftFills().map(h => h.map(v => +v.toFixed(2))) }) !== floorSig) buildFloors();
   while (itemsGroup.children.length) itemsGroup.remove(itemsGroup.children[0]);
-  const mt = M?.materials || {};
+  const mt = styledMaterials(M?.materials, STYLES[currentStyle] || STYLES.default);
   const roofCol = mt.roof || ({ metal: '#2b2c2e', darkShingle: '#2e2f31', shingle: '#5d5952' }[mt.roofTex] || '#3a3b3d');
   const ctx = { Wx, Wz, ceiling: (M?.wallH || 9), house: { ext: mt.ext || '#e9e5dc', trim: mt.trim || (new THREE.Color(mt.ext || '#ffffff').getHSL({}).l < 0.35 ? '#1d1e20' : '#f4f2ec'), roof: roofCol, metal: mt.roofTex === 'metal' } };
   for (const rec of [...currentItems, ...(dressItems || [])]) {
@@ -2693,13 +2780,14 @@ function buildModel(model, opts = {}) {
   root = new THREE.Group(); scene.add(root);
   solids = [];
   fires = [];
-  const mats = M.materials || {};
-  const H = M.wallH || 9;
   const st = STYLES[currentStyle] || STYLES.default;
+  const mats = styledMaterials(M.materials, st);
+  const H = M.wallH || 9;
   hemi.intensity = st.hemi ?? 0.95; hemi.color.set(st.hemiColor || '#ffffff'); hemi.groundColor.set(st.groundColor || '#c9c1b2');
   amb.intensity = st.ambient ?? 0; amb.color.set(st.ambColor || '#ffffff');
   sun.intensity = st.sun ?? 1.6; sun.color.set(st.sunColor || '#fff3df');
   applyStyleGlass(st);
+  if (ground && ground.material && ground.material.color) ground.material.color.set(st.groundTint || '#ffffff');
   const bg = st.bg || '#cfe3f2'; scene.background.set(bg);
   styleBg = bg; styleFog = { color: bg, near: st.fogNear || 260, far: st.fogFar || 560 };
   if (scene.fog) { scene.fog.color.set(bg); scene.fog.near = styleFog.near; scene.fog.far = styleFog.far; }
@@ -3307,7 +3395,7 @@ function buildModel(model, opts = {}) {
       tg.setAttribute('position', new THREE.Float32BufferAttribute(flat, 3));
       tg.setAttribute('uv', new THREE.Float32BufferAttribute(pts.flatMap(v => [(along ? v.x : v.z) / 5, v.y / 5]), 2));
       tg.computeVertexNormals();
-      const mat = (gableMat[em] || extMat).clone(); mat.side = em === 'glass' ? THREE.DoubleSide : THREE.FrontSide;
+      const mat = ((st.exterior && em !== 'glass' && em !== 'int') ? extMat : (gableMat[em] || extMat)).clone(); mat.side = em === 'glass' ? THREE.DoubleSide : THREE.FrontSide;
       const tm = new THREE.Mesh(tg, mat); tm.castShadow = em !== 'glass'; roof.add(tm);
       if (em !== 'glass') roof.add(new THREE.Mesh(tg, gableInside));
     };
@@ -4055,7 +4143,7 @@ function makeSash(w, h, fm) {
 function buildWindows(WS) {
   if (winsGroup && winsGroup.parent) winsGroup.parent.remove(winsGroup);
   wins = []; winsGroup = new THREE.Group(); winsGroup.name = 'windows'; root.add(winsGroup);
-  const fm = new THREE.MeshStandardMaterial({ color: (M.materials && M.materials.winFrame) || '#2e3033', roughness: 0.5, metalness: 0.2 });
+  const fm = new THREE.MeshStandardMaterial({ color: styledMaterials(M.materials, STYLES[currentStyle] || STYLES.default).winFrame || '#2e3033', roughness: 0.5, metalness: 0.2 });
   (WS.win || []).forEach((r, idx) => {
     const horiz = (r[2] - r[0]) >= (r[3] - r[1]), w = horiz ? r[2] - r[0] : r[3] - r[1], thick = horiz ? r[3] - r[1] : r[2] - r[0];
     const sill = r[4] ?? 3, head = r[5] ?? 7, h = head - sill, cx = (r[0] + r[2]) / 2, cy = (r[1] + r[3]) / 2;
@@ -4474,7 +4562,7 @@ async function loadExample(id, opts = {}) {
   if (mode === 'walk') exitWalk();
   disposeRoot();
   clearSiteEnv();
-  currentStyle = (mod.default && mod.default.defaultStyle) || 'default';
+  currentStyle = DEFAULT_LOOK || (mod.default && mod.default.defaultStyle) || 'default';
   syncStyleUi();
   snapshotOriginal(mod.default);
   activeLayout = fresh ? null : layoutFromStorage();
@@ -4497,7 +4585,7 @@ async function loadProjectModel() {
     const mod = await entry.load();
     if (mode === 'walk') exitWalk();
     disposeRoot();
-    currentStyle = (mod.default && mod.default.defaultStyle) || 'default';
+    currentStyle = DEFAULT_LOOK || (mod.default && mod.default.defaultStyle) || 'default';
     syncStyleUi();
     snapshotOriginal(mod.default);
     activeLayout = sanitizeLayout(p.layout) || layoutFromStorage();
@@ -4686,7 +4774,7 @@ function loadJsonModel(raw, fallbackName = 'Builder home', view = 'orbit') {
   if (mode === 'walk') exitWalk();
   disposeRoot();
   if (typeof clearSiteEnv === 'function') clearSiteEnv({ restore: true });
-  currentStyle = jsonModel.defaultStyle || currentStyle || 'default';
+  currentStyle = DEFAULT_LOOK || jsonModel.defaultStyle || currentStyle || 'default';
   syncStyleUi();
   snapshotOriginal(jsonModel);
   activeLayout = null;

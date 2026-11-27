@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b1524"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.png" sizes="32x32" type="image/png"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="manifest" href="/site.webmanifest"><link rel="stylesheet" href="/css/site.css">
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#ffffff"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.png" sizes="32x32" type="image/png"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="manifest" href="/site.webmanifest"><link rel="stylesheet" href="/css/site.css">
 <title>PeakStead Designs — Design your homestead at its peak.</title>
 <meta name="description" content="PeakStead Designs: keep plans, renders and photos for homes, tiny homes, and trailer homes, and explore them in interactive 3D. Design your homestead at its peak.">
 <meta name="application-name" content="PeakStead Designs">
@@ -12,13 +12,11 @@
 <meta name="twitter:title" content="PeakStead Designs — Design your homestead at its peak.">
 <meta name="twitter:description" content="Keep plans, renders and photos for homes, tiny homes, and trailer homes, and explore them in interactive 3D.">
 <meta name="twitter:image" content="https://home-view-one.vercel.app/img/og.png">
-</head><body>
+<link rel="stylesheet" href="/css/nordic.css"></head><body>
 <section class="hero-band">
   <picture class="hero-media" aria-hidden="true">
-    <source media="(max-width: 700px)" type="image/webp" srcset="/img/hero-3d-sm.webp">
-    <source type="image/webp" srcset="/img/hero-3d.webp">
-    <source media="(max-width: 700px)" srcset="/img/hero-3d-sm.jpg">
-    <img src="/img/hero-3d.jpg" alt="" width="1280" height="720" decoding="async" fetchpriority="high">
+    <source media="(max-width: 700px)" srcset="/img/hero-nordic-sm.jpg">
+    <img src="/img/hero-nordic.jpg" alt="" width="1280" height="720" decoding="async" fetchpriority="high">
   </picture>
   <div class="hero-shade" aria-hidden="true"></div>
   <div class="hero-inner">
@@ -40,15 +38,33 @@
     </div>
   </div>
 </section>
-<main>
-  <section>
-    <div class="grid">
-      <div class="card"><h2>📐 Plans & photos</h2><p class="muted">Upload floor plans, renders and site photos to each project, for homes, tiny homes, and trailer homes. Everything is private to you by default.</p></div>
-      <div class="card"><h2>🏠 Interactive 3D</h2><p class="muted">3D overview, top-down plan, roof on/off, cutaway walls and a first-person walk-through, on desktop or phone.</p></div>
-      <div class="card"><h2>🔗 Share a link</h2><p class="muted">Turn on a share link to give anyone a read-only view of one project. Turn it off any time.</p></div>
+<main class="home-main">
+  <section class="home-strip" aria-label="Example homes">
+    <div class="strip-row" id="homeStrip">
+      <a class="strip-card" href="/viewer?ex=aframe-01"><img src="/img/aframe-01.jpg" alt="Fernhollow A-Frame in 3D" loading="lazy"><span>Fernhollow A-Frame</span></a>
+      <a class="strip-card" href="/viewer?ex=smith-12"><img src="/img/smith-12.jpg" alt="Twin Porch Homestead in 3D" loading="lazy"><span>Twin Porch Homestead</span></a>
+      <a class="strip-card" href="/viewer?ex=tiny-02"><img src="/img/tiny-02.jpg" alt="Duskfen Loft in 3D" loading="lazy"><span>Duskfen Loft</span></a>
+      <a class="strip-card" href="/viewer?ex=smith-09"><img src="/img/smith-09.jpg" alt="The Prairie Lantern in 3D" loading="lazy"><span>The Prairie Lantern</span></a>
+      <a class="strip-card" href="/viewer?ex=aframe-03"><img src="/img/aframe-03.jpg" alt="Whitepine Homestead in 3D" loading="lazy"><span>Whitepine Homestead</span></a>
     </div>
   </section>
+  <section class="statement">
+    <p><span class="dim">Plan it,</span> see it<span class="dim">, and</span> walk through it<span class="dim">,</span><br><span class="dim">long before the first board is cut.</span></p>
+    <p class="statement-2">Your plans, your photos, your home. <strong>All in one place.</strong></p>
+  </section>
 </main>
+<section class="features-band">
+  <div class="features-inner">
+    <h2 class="section-h">Everything for your homestead</h2>
+    <p class="section-sub">Simple tools, clear views, nothing in the way.</p>
+    <div class="grid feature-grid">
+      <div class="card"><h3>Plans &amp; photos</h3><p class="muted">Upload floor plans, renders and site photos to each project, for homes, tiny homes, and trailer homes. Everything is private to you by default.</p></div>
+      <div class="card"><h3>Interactive 3D</h3><p class="muted">3D overview, top-down plan, roof on/off, cutaway walls and a first-person walk-through, on desktop or phone.</p></div>
+      <div class="card"><h3>Share a link</h3><p class="muted">Turn on a share link to give anyone a read-only view of one project. Turn it off any time.</p></div>
+    </div>
+    <div class="row" style="justify-content:center;margin-top:34px"><a class="btn primary" href="/examples">Explore the examples</a><a class="btn" href="/builder">Open the Builder</a></div>
+  </div>
+</section>
 <footer class="site-foot">PeakStead Designs · <a href="/examples">Examples</a> · <a href="/builder">Builder</a> · <a href="/advertise">Advertise with PeakStead Designs</a></footer>
 <script type="module">
 import { $, api, me, header } from '/js/common.js';
@@ -66,7 +82,7 @@ function setTab(t) {
   $('#authErr').textContent = '';
 }
 document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', e => { e.preventDefault(); setTab(b.dataset.tab); $('#email').focus(); }));
-const fromHash = () => { if (location.hash === '#signup') setTab('signup'); else if (location.hash === '#login') setTab('login'); };
+const fromHash = () => { if (location.hash === '#signup') setTab('signup'); else if (location.hash === '#login') setTab('login'); else return; $('#auth').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
 addEventListener('hashchange', fromHash); fromHash();
 $('#authForm').addEventListener('submit', async (e) => {
   e.preventDefault();

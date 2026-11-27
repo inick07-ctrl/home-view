@@ -31,7 +31,7 @@ MODELS = [
     "aframe-01", "aframe-02", "aframe-03", "single-wide-01", "double-wide-01",
 ]
 
-STYLES = ["default", "modern", "scandinavian", "warm-luxury", "english-country"]
+STYLES = ["default", "modern", "scandinavian", "warm-luxury", "english-country", "nordic-modern"]
 
 CHROME_ARGS = [
     "--use-gl=angle",
